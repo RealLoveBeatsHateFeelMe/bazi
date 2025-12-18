@@ -275,6 +275,99 @@ def run_cli() -> None:
                     f"        运年相冲：大运支 {ev['dayun_branch']}（{dg_ss}） 与 "
                     f"流年支 {ev['liunian_branch']}（{lg_ss}） 相冲"
                 )
+            
+            # 打印危险系数（按新顺序）
+            total_risk = ln.get("total_risk_percent", 0.0)
+            risk_from_gan = ln.get("risk_from_gan", 0.0)
+            risk_from_zhi = ln.get("risk_from_zhi", 0.0)
+            print(f"        总危险系数：{total_risk:.1f}%")
+            print(f"        上半年危险系数（天干引起）：{risk_from_gan:.1f}%")
+            
+            # 打印上半年事件（天干相关）
+            all_events = ln.get("all_events", [])
+            gan_events = []
+            zhi_events = []
+            static_events = []
+            
+            for ev in all_events:
+                ev_type = ev.get("type", "")
+                if ev_type in ("static_clash_activation", "static_punish_activation", "pattern_static_activation"):
+                    static_events.append(ev)
+                elif ev_type == "pattern":
+                    kind = ev.get("kind", "")
+                    if kind == "gan":
+                        gan_events.append(ev)
+                    elif kind == "zhi":
+                        zhi_events.append(ev)
+                elif ev_type == "lineyun_bonus":
+                    lineyun_bonus_gan = ev.get("lineyun_bonus_gan", 0.0)
+                    if lineyun_bonus_gan > 0.0:
+                        gan_events.append(ev)
+                elif ev_type in ("branch_clash", "dayun_liunian_branch_clash", "punishment"):
+                    zhi_events.append(ev)
+            
+            # 打印上半年事件（天干相关）
+            if gan_events or any(ev.get("type") == "pattern_static_activation" and ev.get("risk_from_gan", 0.0) > 0.0 for ev in static_events):
+                print("        上半年事件（天干）：")
+                for ev in gan_events:
+                    ev_type = ev.get("type", "")
+                    risk = ev.get("risk_percent", 0.0)
+                    if ev_type == "pattern":
+                        pattern_type = ev.get("pattern_type", "")
+                        pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
+                        print(f"          模式（天干层）：{pattern_name}，风险 {risk:.1f}%")
+                    elif ev_type == "lineyun_bonus":
+                        lineyun_bonus_gan = ev.get("lineyun_bonus_gan", 0.0)
+                        if lineyun_bonus_gan > 0.0:
+                            print(f"          线运加成（天干）：{lineyun_bonus_gan:.1f}%")
+                
+                # 打印静态模式激活的天干部分
+                for ev in static_events:
+                    if ev.get("type") == "pattern_static_activation":
+                        risk_from_gan_static = ev.get("risk_from_gan", 0.0)
+                        if risk_from_gan_static > 0.0:
+                            pattern_type = ev.get("pattern_type", "")
+                            pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
+                            print(f"          静态模式激活（天干）：{pattern_name}，风险 {risk_from_gan_static:.1f}%")
+            
+            print(f"        下半年危险系数（地支引起）：{risk_from_zhi:.1f}%")
+            
+            # 打印下半年事件（地支相关）
+            if zhi_events or any(ev.get("type") in ("static_clash_activation", "static_punish_activation") or (ev.get("type") == "pattern_static_activation" and ev.get("risk_from_zhi", 0.0) > 0.0) for ev in static_events):
+                print("        下半年事件（地支）：")
+                for ev in zhi_events:
+                    ev_type = ev.get("type", "")
+                    risk = ev.get("risk_percent", 0.0)
+                    if ev_type == "branch_clash":
+                        print(f"          冲：{ev.get('flow_branch')}{ev.get('target_branch')}，风险 {risk:.1f}%")
+                    elif ev_type == "dayun_liunian_branch_clash":
+                        print(f"          运年相冲：{ev.get('dayun_branch')}{ev.get('liunian_branch')}，风险 {risk:.1f}%")
+                    elif ev_type == "punishment":
+                        print(f"          刑：{ev.get('flow_branch')}{ev.get('target_branch')}，风险 {risk:.1f}%")
+                    elif ev_type == "pattern":
+                        pattern_type = ev.get("pattern_type", "")
+                        pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
+                        print(f"          模式（地支层）：{pattern_name}，风险 {risk:.1f}%")
+                    elif ev_type == "lineyun_bonus":
+                        lineyun_bonus_zhi = ev.get("lineyun_bonus_zhi", 0.0)
+                        if lineyun_bonus_zhi > 0.0:
+                            print(f"          线运加成（地支）：{lineyun_bonus_zhi:.1f}%")
+                
+                # 打印静态激活事件（地支相关）
+                for ev in static_events:
+                    ev_type = ev.get("type", "")
+                    if ev_type == "static_clash_activation":
+                        risk = ev.get("risk_percent", 0.0)
+                        print(f"          静态冲激活：风险 {risk:.1f}%")
+                    elif ev_type == "static_punish_activation":
+                        risk = ev.get("risk_percent", 0.0)
+                        print(f"          静态刑激活：风险 {risk:.1f}%")
+                    elif ev_type == "pattern_static_activation":
+                        risk_from_zhi_static = ev.get("risk_from_zhi", 0.0)
+                        if risk_from_zhi_static > 0.0:
+                            pattern_type = ev.get("pattern_type", "")
+                            pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
+                            print(f"          静态模式激活（地支）：{pattern_name}，风险 {risk_from_zhi_static:.1f}%")
 
 
         print("")  # 每个大运分隔一行

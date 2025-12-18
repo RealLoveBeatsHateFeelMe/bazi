@@ -676,8 +676,12 @@ def analyze_luck(
                     # 静态天克地冲：如果大运静态冲有天克地冲，则静态天克地冲也被激活
                     static_tkdc_bonus = clash_dy_natal.get("tkdc_bonus_percent", 0.0)
                     if static_tkdc_bonus > 0.0:
+                        # 静态天克地冲激活：每个柱的天克地冲10%的一半 = 5%
+                        # 其中天克（天干）5%，冲（地支）0%（因为冲的部分已经包含在静态冲激活中）
                         static_tkdc_activation_risk_total = static_tkdc_bonus * 0.5
-                        static_tkdc_activation_risk_zhi = static_tkdc_activation_risk_total
+                        # 拆分：天克（天干）全部，冲（地支）0%
+                        static_tkdc_activation_risk_gan += static_tkdc_activation_risk_total
+                        static_tkdc_activation_risk_zhi += 0.0  # 冲的部分已经包含在static_clash_activation_risk中
             
             # 检查静态刑激活：有三种触发方式
             # 1. 流年地支与命局地支相刑，且大运与命局之间也有静态刑（涉及相同的命局地支）
@@ -941,38 +945,83 @@ def analyze_luck(
             lineyun_bonus_gan = lineyun_event.get("lineyun_bonus_gan", 0.0) if lineyun_event else 0.0
             lineyun_bonus_zhi = lineyun_event.get("lineyun_bonus_zhi", 0.0) if lineyun_event else 0.0
 
-            # ===== 计算年度总风险 =====
-            # 直接累加所有事件的风险（不拆分天干地支）
-            total_risk_percent = 0.0
+            # ===== §6.1 风险拆分：天干算天干的，地支算地支的 =====
+            # risk_from_zhi：流年地支引起的风险
+            risk_from_zhi = 0.0
+            # risk_from_gan：流年天干引起的风险
+            risk_from_gan = 0.0
             
-            # 冲的风险
+            # 流年与命局相冲
             if clash_ln_natal:
-                total_risk_percent += clash_ln_natal.get("risk_percent", 0.0)
+                # 冲的基础部分（base_power + grave_bonus）计入 risk_from_zhi
+                base_power = clash_ln_natal.get("base_power_percent", 0.0)
+                grave_bonus = clash_ln_natal.get("grave_bonus_percent", 0.0)
+                pattern_bonus = clash_ln_natal.get("pattern_bonus_percent", 0.0)  # 模式重叠+10%
+                risk_from_zhi += base_power + grave_bonus + pattern_bonus
+                
+                # 天克地冲的"天克"部分（天干）计入 risk_from_gan
+                # 天克地冲的"冲"部分（地支）已经包含在base_power+grave_bonus中，计入 risk_from_zhi
+                tkdc_bonus = clash_ln_natal.get("tkdc_bonus_percent", 0.0)
+                if tkdc_bonus > 0.0:
+                    # 每个柱的天克地冲是10%，其中天克（天干）10%，冲（地支）已经包含在base_power中
+                    # tkdc_bonus是每个满足天克地冲的柱都加10%的累加，全部计入天干
+                    risk_from_gan += tkdc_bonus
+            
             # 运年相冲的风险
             if clash_dayun_liunian:
-                total_risk_percent += clash_dayun_liunian.get("risk_percent", 0.0)
-            # 静态冲激活风险
-            total_risk_percent += static_clash_activation_risk
-            # 静态天克地冲风险
-            total_risk_percent += static_tkdc_activation_risk_zhi + static_tkdc_activation_risk_gan
-            # 静态刑激活风险
-            total_risk_percent += static_punish_activation_risk
-            # 刑的风险
+                # 运年相冲的基础部分（base_risk + grave_bonus）计入 risk_from_zhi
+                base_risk = clash_dayun_liunian.get("base_risk_percent", 0.0)
+                grave_bonus = clash_dayun_liunian.get("grave_bonus_percent", 0.0)
+                risk_from_zhi += base_risk + grave_bonus
+                
+                # 运年天克地冲的"天克"部分（天干）计入 risk_from_gan
+                tkdc_bonus = clash_dayun_liunian.get("tkdc_bonus_percent", 0.0)
+                if tkdc_bonus > 0.0:
+                    # 运年天克地冲：基础天克地冲10% + 运年天克地冲额外10% = 20%
+                    # 其中天克（天干）20%，冲（地支）已经包含在base_risk+grave_bonus中
+                    risk_from_gan += tkdc_bonus
+            
+            # 静态冲激活风险（base_power的一半）计入 risk_from_zhi
+            risk_from_zhi += static_clash_activation_risk
+            
+            # 静态天克地冲风险拆分
+            # 静态天克地冲的"天克"部分（天干）计入 risk_from_gan
+            risk_from_gan += static_tkdc_activation_risk_gan
+            # 静态天克地冲的"冲"部分（地支）计入 risk_from_zhi
+            risk_from_zhi += static_tkdc_activation_risk_zhi
+            
+            # 静态刑激活风险计入 risk_from_zhi
+            risk_from_zhi += static_punish_activation_risk
+            
+            # 刑的风险全部计入 risk_from_zhi
             for punish_ev in punishments_ln:
                 # 过滤掉既冲又刑的情况
                 if clash_ln_natal:
                     clash_target = clash_ln_natal.get("target_branch")
                     if punish_ev.get("target_branch") == clash_target:
                         continue
-                total_risk_percent += punish_ev.get("risk_percent", 0.0)
-            # 模式风险
+                risk_from_zhi += punish_ev.get("risk_percent", 0.0)
+            
+            # 地支层模式风险计入 risk_from_zhi（不包括与冲重叠的，因为已经加到冲上了）
+            # 天干层模式风险计入 risk_from_gan
             for pat_ev in pattern_events_filtered:
-                total_risk_percent += pat_ev.get("risk_percent", 0.0)
-            # 静态模式激活风险
+                if pat_ev.get("kind") == "zhi":
+                    risk_from_zhi += pat_ev.get("risk_percent", 0.0)
+                elif pat_ev.get("kind") == "gan":
+                    risk_from_gan += pat_ev.get("risk_percent", 0.0)
+            
+            # 静态模式激活风险（§9.5）
             for static_ev in static_activation_events:
-                total_risk_percent += static_ev.get("risk_percent", 0.0)
-            # 线运加成
-            total_risk_percent += lineyun_bonus
+                # 静态模式激活事件包含 risk_from_gan 和 risk_from_zhi 字段
+                risk_from_gan += static_ev.get("risk_from_gan", 0.0)
+                risk_from_zhi += static_ev.get("risk_from_zhi", 0.0)
+            
+            # 线运加成（天干侧和地支侧分开）
+            risk_from_gan += lineyun_bonus_gan
+            risk_from_zhi += lineyun_bonus_zhi
+
+            # 年度总风险 = risk_from_gan + risk_from_zhi（不封顶，可>100）
+            total_risk_percent = risk_from_gan + risk_from_zhi
             
             # ===== §4.4 流年好运判断（简单规则：用神+风险≤15%） =====
             # 如果天干或地支的五行中至少有一个落在用神列表中，且 total_risk_percent ≤ 15，则标记为"好运"
@@ -1030,6 +1079,8 @@ def analyze_luck(
                 "first_half_good": first_half_good,  # 保留兼容字段（是否用神）
                 "second_half_good": second_half_good,  # 保留兼容字段（是否用神）
                 "is_good": is_good_ln,  # §4.4 流年好运判断（用神+风险≤15%）
+                "risk_from_gan": risk_from_gan,  # §6.1 天干引起的风险
+                "risk_from_zhi": risk_from_zhi,  # §6.1 地支引起的风险
                 "clashes_natal": [clash_ln_natal] if clash_ln_natal else [],
                 "clashes_dayun": clashes_dayun,
                 "punishments_natal": punishments_ln,  # 流年支 与 命局地支 的刑
