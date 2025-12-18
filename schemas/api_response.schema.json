@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "APIResponse",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "basic": {
+              "$ref": "analyze_basic.schema.json#"
+            },
+            "luck": {
+              "type": "object",
+              "description": "analyze_luck 返回的完整结构（可选）"
+            }
+          },
+          "required": ["basic"]
+        },
+        { "type": "null" }
+      ]
+    },
+    "error": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "INVALID_INPUT",
+                "INTERNAL_ERROR",
+                "VALIDATION_ERROR"
+              ]
+            },
+            "message": {
+              "type": "string"
+            },
+            "details": {
+              "type": "object",
+              "description": "可选的调试信息，结构不固定"
+            }
+          },
+          "required": ["code", "message"]
+        },
+        { "type": "null" }
+      ]
+    }
+  },
+  "required": ["ok", "data", "error"],
+  "if": {
+    "properties": {
+      "ok": { "const": true }
+    }
+  },
+  "then": {
+    "properties": {
+      "data": { "not": { "type": "null" } },
+      "error": { "type": "null" }
+    }
+  },
+  "else": {
+    "properties": {
+      "data": { "type": "null" },
+      "error": { "not": { "type": "null" } }
+    }
+  }
+}

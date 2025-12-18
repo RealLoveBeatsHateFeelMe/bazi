@@ -1,0 +1,280 @@
+{
+  "bazi": {
+    "year": {
+      "gan": "丙",
+      "zhi": "戌"
+    },
+    "month": {
+      "gan": "辛",
+      "zhi": "丑"
+    },
+    "day": {
+      "gan": "壬",
+      "zhi": "戌"
+    },
+    "hour": {
+      "gan": "丙",
+      "zhi": "午"
+    }
+  },
+  "day_master_element": "水",
+  "strength_percent": 10.000000000000004,
+  "strength_score_raw": -0.7999999999999999,
+  "support_percent": 10.0,
+  "drain_percent": 90.0,
+  "global_element_percentages": {
+    "木": 0.0,
+    "火": 37.5,
+    "土": 37.5,
+    "金": 12.5,
+    "水": 12.5
+  },
+  "yongshen_elements": [
+    "金",
+    "水",
+    "木"
+  ],
+  "yongshen_detail": {
+    "day_gan": "壬",
+    "day_element": "水",
+    "strength_percent": 10.000000000000004,
+    "global_distribution": {
+      "木": 0.0,
+      "火": 37.5,
+      "土": 37.5,
+      "金": 12.5,
+      "水": 12.5
+    },
+    "yongshen_elements": [
+      "金",
+      "水"
+    ],
+    "water_percent": 12.5,
+    "base_yongshen_elements": [
+      "金",
+      "水"
+    ],
+    "final_yongshen_elements": [
+      "金",
+      "水",
+      "木"
+    ]
+  },
+  "yongshen_shishen": [
+    {
+      "element": "金",
+      "shishens": [
+        "正印"
+      ],
+      "categories": [
+        "印星"
+      ]
+    },
+    {
+      "element": "水",
+      "shishens": [
+        "劫财",
+        "比肩"
+      ],
+      "categories": [
+        "比劫"
+      ]
+    },
+    {
+      "element": "木",
+      "shishens": [
+        "伤官",
+        "食神"
+      ],
+      "categories": [
+        "食伤"
+      ]
+    }
+  ],
+  "yongshen_tokens": [
+    {
+      "element": "金",
+      "positions": [
+        {
+          "pillar": "month",
+          "kind": "gan",
+          "char": "辛",
+          "element": "金",
+          "shishen": "正印"
+        }
+      ]
+    },
+    {
+      "element": "水",
+      "positions": []
+    },
+    {
+      "element": "木",
+      "positions": []
+    }
+  ],
+  "shishen_category_percentages": {
+    "比劫": 0.0,
+    "财星": 35.0,
+    "食伤": 0.0,
+    "官杀": 55.00000000000001,
+    "印星": 10.000000000000002
+  },
+  "stem_pattern_summary": [
+    {
+      "category": "财星",
+      "members": [
+        {
+          "pillar": "year",
+          "gan": "丙",
+          "shishen": "偏财"
+        },
+        {
+          "pillar": "hour",
+          "gan": "丙",
+          "shishen": "偏财"
+        }
+      ]
+    }
+  ],
+  "dominant_traits": [
+    {
+      "group": "官杀",
+      "total_percent": 55.0,
+      "mix_label": "官杀混杂",
+      "detail": [
+        {
+          "name": "正官",
+          "percent": 35.0,
+          "stems_visible_count": 0,
+          "breakdown": {
+            "stems_percent": 0.0,
+            "branches_percent": 35.0
+          }
+        },
+        {
+          "name": "七杀",
+          "percent": 20.0,
+          "stems_visible_count": 0,
+          "breakdown": {
+            "stems_percent": 0.0,
+            "branches_percent": 20.0
+          }
+        }
+      ]
+    },
+    {
+      "group": "财",
+      "total_percent": 35.0,
+      "mix_label": "正偏财混杂",
+      "detail": [
+        {
+          "name": "正财",
+          "percent": 15.0,
+          "stems_visible_count": 0,
+          "breakdown": {
+            "stems_percent": 0.0,
+            "branches_percent": 15.0
+          }
+        },
+        {
+          "name": "偏财",
+          "percent": 20.0,
+          "stems_visible_count": 2,
+          "breakdown": {
+            "stems_percent": 20.0,
+            "branches_percent": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "group": "印",
+      "total_percent": 10.0,
+      "mix_label": "纯正印",
+      "detail": [
+        {
+          "name": "正印",
+          "percent": 10.0,
+          "stems_visible_count": 1,
+          "breakdown": {
+            "stems_percent": 10.0,
+            "branches_percent": 0.0
+          }
+        },
+        {
+          "name": "偏印",
+          "percent": 0.0,
+          "stems_visible_count": 0,
+          "breakdown": {
+            "stems_percent": 0.0,
+            "branches_percent": 0.0
+          }
+        }
+      ]
+    }
+  ],
+  "natal_patterns": [],
+  "natal_conflicts": {
+    "clashes": [],
+    "punishments": []
+  },
+  "natal_harmonies": [
+    {
+      "type": "branch_harmony",
+      "subtype": "sanhe",
+      "role": "explain",
+      "risk_percent": 0.0,
+      "flow_type": "natal",
+      "group": "火局",
+      "members": [
+        "寅",
+        "午",
+        "戌"
+      ],
+      "matched_branches": [
+        "戌",
+        "戌",
+        "午"
+      ],
+      "targets": [
+        {
+          "pillar": "year",
+          "palace": "根基宫",
+          "target_branch": "戌",
+          "position_weight": 0.1,
+          "branch_gan": "丙",
+          "branch_shishen": {
+            "gan": "戊",
+            "shishen": "七杀"
+          }
+        },
+        {
+          "pillar": "day",
+          "palace": "夫妻宫",
+          "target_branch": "戌",
+          "position_weight": 0.1,
+          "branch_gan": "壬",
+          "branch_shishen": {
+            "gan": "戊",
+            "shishen": "七杀"
+          }
+        },
+        {
+          "pillar": "hour",
+          "palace": "事业家庭宫",
+          "target_branch": "午",
+          "position_weight": 0.15,
+          "branch_gan": "丙",
+          "branch_shishen": {
+            "gan": "丁",
+            "shishen": "正财"
+          }
+        }
+      ]
+    }
+  ],
+  "special_rules": [
+    "weak_water_heavy_guansha_add_wood"
+  ]
+}

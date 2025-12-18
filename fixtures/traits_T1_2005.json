@@ -1,0 +1,313 @@
+{
+  "bazi": {
+    "year": {
+      "gan": "乙",
+      "zhi": "酉"
+    },
+    "month": {
+      "gan": "乙",
+      "zhi": "酉"
+    },
+    "day": {
+      "gan": "丁",
+      "zhi": "未"
+    },
+    "hour": {
+      "gan": "乙",
+      "zhi": "巳"
+    }
+  },
+  "day_master_element": "火",
+  "strength_percent": 45.0,
+  "strength_score_raw": -0.09999999999999998,
+  "support_percent": 45.00000000000001,
+  "drain_percent": 54.99999999999999,
+  "global_element_percentages": {
+    "木": 37.5,
+    "火": 25.0,
+    "土": 12.5,
+    "金": 25.0,
+    "水": 0.0
+  },
+  "yongshen_elements": [
+    "木",
+    "火"
+  ],
+  "yongshen_detail": {
+    "day_gan": "丁",
+    "day_element": "火",
+    "strength_percent": 45.0,
+    "global_distribution": {
+      "木": 37.5,
+      "火": 25.0,
+      "土": 12.5,
+      "金": 25.0,
+      "水": 0.0
+    },
+    "yongshen_elements": [
+      "木",
+      "火"
+    ],
+    "water_percent": 0.0,
+    "base_yongshen_elements": [
+      "木",
+      "火"
+    ],
+    "final_yongshen_elements": [
+      "木",
+      "火"
+    ]
+  },
+  "yongshen_shishen": [
+    {
+      "element": "木",
+      "shishens": [
+        "偏印"
+      ],
+      "categories": [
+        "印星"
+      ]
+    },
+    {
+      "element": "火",
+      "shishens": [
+        "劫财"
+      ],
+      "categories": [
+        "比劫"
+      ]
+    }
+  ],
+  "yongshen_tokens": [
+    {
+      "element": "木",
+      "positions": [
+        {
+          "pillar": "year",
+          "kind": "gan",
+          "char": "乙",
+          "element": "木",
+          "shishen": "偏印"
+        },
+        {
+          "pillar": "month",
+          "kind": "gan",
+          "char": "乙",
+          "element": "木",
+          "shishen": "偏印"
+        },
+        {
+          "pillar": "hour",
+          "kind": "gan",
+          "char": "乙",
+          "element": "木",
+          "shishen": "偏印"
+        }
+      ]
+    },
+    {
+      "element": "火",
+      "positions": [
+        {
+          "pillar": "hour",
+          "kind": "zhi",
+          "char": "巳",
+          "element": "火",
+          "shishen": "劫财"
+        }
+      ]
+    }
+  ],
+  "shishen_category_percentages": {
+    "比劫": 15.0,
+    "财星": 44.99999999999999,
+    "食伤": 10.0,
+    "官杀": 0.0,
+    "印星": 30.000000000000004
+  },
+  "stem_pattern_summary": [
+    {
+      "category": "印星",
+      "members": [
+        {
+          "pillar": "year",
+          "gan": "乙",
+          "shishen": "偏印"
+        },
+        {
+          "pillar": "month",
+          "gan": "乙",
+          "shishen": "偏印"
+        },
+        {
+          "pillar": "hour",
+          "gan": "乙",
+          "shishen": "偏印"
+        }
+      ]
+    }
+  ],
+  "dominant_traits": [
+    {
+      "group": "财",
+      "total_percent": 45.0,
+      "mix_label": "纯偏财",
+      "detail": [
+        {
+          "name": "正财",
+          "percent": 0.0,
+          "stems_visible_count": 0,
+          "breakdown": {
+            "stems_percent": 0.0,
+            "branches_percent": 0.0
+          }
+        },
+        {
+          "name": "偏财",
+          "percent": 45.0,
+          "stems_visible_count": 0,
+          "breakdown": {
+            "stems_percent": 0.0,
+            "branches_percent": 45.0
+          }
+        }
+      ]
+    },
+    {
+      "group": "印",
+      "total_percent": 30.0,
+      "mix_label": "纯偏印",
+      "detail": [
+        {
+          "name": "正印",
+          "percent": 0.0,
+          "stems_visible_count": 0,
+          "breakdown": {
+            "stems_percent": 0.0,
+            "branches_percent": 0.0
+          }
+        },
+        {
+          "name": "偏印",
+          "percent": 30.0,
+          "stems_visible_count": 3,
+          "breakdown": {
+            "stems_percent": 30.0,
+            "branches_percent": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "group": "比劫",
+      "total_percent": 15.0,
+      "mix_label": "纯劫财",
+      "detail": [
+        {
+          "name": "比肩",
+          "percent": 0.0,
+          "stems_visible_count": 0,
+          "breakdown": {
+            "stems_percent": 0.0,
+            "branches_percent": 0.0
+          }
+        },
+        {
+          "name": "劫财",
+          "percent": 15.0,
+          "stems_visible_count": 0,
+          "breakdown": {
+            "stems_percent": 0.0,
+            "branches_percent": 15.0
+          }
+        }
+      ]
+    },
+    {
+      "group": "食伤",
+      "total_percent": 10.0,
+      "mix_label": "纯食神",
+      "detail": [
+        {
+          "name": "食神",
+          "percent": 10.0,
+          "stems_visible_count": 0,
+          "breakdown": {
+            "stems_percent": 0.0,
+            "branches_percent": 10.0
+          }
+        },
+        {
+          "name": "伤官",
+          "percent": 0.0,
+          "stems_visible_count": 0,
+          "breakdown": {
+            "stems_percent": 0.0,
+            "branches_percent": 0.0
+          }
+        }
+      ]
+    }
+  ],
+  "natal_patterns": [],
+  "natal_conflicts": {
+    "clashes": [],
+    "punishments": []
+  },
+  "natal_harmonies": [
+    {
+      "type": "branch_harmony",
+      "subtype": "sanhe",
+      "role": "explain",
+      "risk_percent": 0.0,
+      "flow_type": "natal",
+      "group": "金局",
+      "members": [
+        "巳",
+        "酉",
+        "丑"
+      ],
+      "matched_branches": [
+        "酉",
+        "酉",
+        "巳"
+      ],
+      "targets": [
+        {
+          "pillar": "year",
+          "palace": "根基宫",
+          "target_branch": "酉",
+          "position_weight": 0.1,
+          "branch_gan": "乙",
+          "branch_shishen": {
+            "gan": "辛",
+            "shishen": "偏财"
+          }
+        },
+        {
+          "pillar": "month",
+          "palace": "婚姻宫",
+          "target_branch": "酉",
+          "position_weight": 0.35,
+          "branch_gan": "乙",
+          "branch_shishen": {
+            "gan": "辛",
+            "shishen": "偏财"
+          }
+        },
+        {
+          "pillar": "hour",
+          "palace": "事业家庭宫",
+          "target_branch": "巳",
+          "position_weight": 0.15,
+          "branch_gan": "乙",
+          "branch_shishen": {
+            "gan": "丙",
+            "shishen": "劫财"
+          }
+        }
+      ]
+    }
+  ],
+  "special_rules": []
+}

@@ -1,0 +1,12 @@
+[PASS] ��δ���̶���ͨ��
+[PASS] ������δ������ʱ����ͨ��
+[PASS] traits T-1 ����ͨ��
+[PASS] traits T-2 ����ͨ��
+[PASS] ����ľ�ع�ͨ��
+[PASS] ���񲹻�ع�ͨ��
+[PASS] ���� case A �ع�ͨ��
+[PASS] ���� case B �ع�ͨ��
+[PASS] �����¼� 2005-09-20 �ع�ͨ��
+[PASS] �����¼� 2007-01-28 �ع�ͨ��
+ALL REGRESSION TESTS PASS
+

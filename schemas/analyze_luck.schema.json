@@ -1,0 +1,154 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AnalyzeLuckResponse",
+  "type": "object",
+  "properties": {
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dayun": {
+            "type": "object",
+            "properties": {
+              "index": { "type": "integer" },
+              "gan": { "type": "string" },
+              "zhi": { "type": "string" },
+              "gan_element": { "type": "string" },
+              "zhi_element": { "type": "string" },
+              "start_year": { "type": "integer" },
+              "start_age": { "type": "integer" },
+              "gan_good": { "type": "boolean" },
+              "zhi_good": { "type": "boolean" },
+              "is_good": { "type": "boolean" },
+              "clashes_natal": {
+                "type": "array",
+                "items": { "type": "object" }
+              },
+              "harmonies_natal": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": { "type": "string", "enum": ["branch_harmony"] },
+                    "subtype": { "type": "string", "enum": ["liuhe", "sanhe", "banhe", "sanhui"] },
+                    "role": { "type": "string", "enum": ["explain"] },
+                    "risk_percent": { "type": "number", "const": 0.0 },
+                    "flow_type": { "type": "string", "enum": ["dayun"] },
+                    "flow_year": { "type": "integer" },
+                    "flow_label": { "type": "string" },
+                    "flow_branch": { "type": "string" },
+                    "group": { "type": "string" },
+                    "members": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "matched_branches": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    },
+                    "targets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "pillar": { "type": "string", "enum": ["year", "month", "day", "hour"] },
+                          "palace": { "type": "string" },
+                          "target_branch": { "type": "string" },
+                          "position_weight": { "type": "number" },
+                          "branch_gan": { "type": "string" },
+                          "branch_shishen": { "type": "object" }
+                        },
+                        "required": ["pillar", "palace", "target_branch"]
+                      }
+                    }
+                  },
+                  "required": ["type", "subtype", "role", "risk_percent", "flow_type", "members", "matched_branches", "targets"]
+                }
+              }
+            },
+            "required": ["index", "gan", "zhi", "start_year", "start_age", "gan_good", "zhi_good", "is_good", "clashes_natal", "harmonies_natal"]
+          },
+          "liunian": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "year": { "type": "integer" },
+                "age": { "type": "integer" },
+                "gan": { "type": "string" },
+                "zhi": { "type": "string" },
+                "gan_element": { "type": "string" },
+                "zhi_element": { "type": "string" },
+                "first_half_good": { "type": "boolean" },
+                "second_half_good": { "type": "boolean" },
+                "clashes_natal": {
+                  "type": "array",
+                  "items": { "type": "object" }
+                },
+                "clashes_dayun": {
+                  "type": "array",
+                  "items": { "type": "object" }
+                },
+                "harmonies_natal": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "type": { "type": "string", "enum": ["branch_harmony"] },
+                      "subtype": { "type": "string", "enum": ["liuhe", "sanhe", "banhe", "sanhui"] },
+                      "role": { "type": "string", "enum": ["explain"] },
+                      "risk_percent": { "type": "number", "const": 0.0 },
+                      "flow_type": { "type": "string", "enum": ["liunian"] },
+                      "flow_year": { "type": "integer" },
+                      "flow_label": { "type": "string" },
+                      "flow_branch": { "type": "string" },
+                      "group": { "type": "string" },
+                      "members": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      },
+                      "matched_branches": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      },
+                      "targets": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "pillar": { "type": "string", "enum": ["year", "month", "day", "hour"] },
+                            "palace": { "type": "string" },
+                            "target_branch": { "type": "string" },
+                            "position_weight": { "type": "number" },
+                            "branch_gan": { "type": "string" },
+                            "branch_shishen": { "type": "object" }
+                          },
+                          "required": ["pillar", "palace", "target_branch"]
+                        }
+                      }
+                    },
+                    "required": ["type", "subtype", "role", "risk_percent", "flow_type", "members", "matched_branches", "targets"]
+                  }
+                },
+                "harmonies_dayun": {
+                  "type": "array",
+                  "items": { "type": "object" }
+                },
+                "lineyun_bonus": { "type": "number" },
+                "total_risk_percent": { "type": "number" },
+                "all_events": {
+                  "type": "array",
+                  "items": { "type": "object" }
+                }
+              },
+              "required": ["year", "age", "gan", "zhi", "first_half_good", "second_half_good", "clashes_natal", "clashes_dayun", "harmonies_natal", "harmonies_dayun", "lineyun_bonus", "total_risk_percent", "all_events"]
+            }
+          }
+        },
+        "required": ["dayun", "liunian"]
+      }
+    }
+  },
+  "required": ["groups"]
+}

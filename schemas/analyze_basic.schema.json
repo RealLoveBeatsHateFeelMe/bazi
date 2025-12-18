@@ -1,0 +1,270 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AnalyzeBasicResponse",
+  "type": "object",
+  "properties": {
+    "bazi": {
+      "type": "object",
+      "properties": {
+        "year": {
+          "type": "object",
+          "properties": {
+            "gan": { "type": "string" },
+            "zhi": { "type": "string" }
+          },
+          "required": ["gan", "zhi"]
+        },
+        "month": {
+          "type": "object",
+          "properties": {
+            "gan": { "type": "string" },
+            "zhi": { "type": "string" }
+          },
+          "required": ["gan", "zhi"]
+        },
+        "day": {
+          "type": "object",
+          "properties": {
+            "gan": { "type": "string" },
+            "zhi": { "type": "string" }
+          },
+          "required": ["gan", "zhi"]
+        },
+        "hour": {
+          "type": "object",
+          "properties": {
+            "gan": { "type": "string" },
+            "zhi": { "type": "string" }
+          },
+          "required": ["gan", "zhi"]
+        }
+      },
+      "required": ["year", "month", "day", "hour"]
+    },
+    "day_master_element": { "type": "string" },
+    "strength_percent": { "type": "number" },
+    "strength_score_raw": { "type": "number" },
+    "support_percent": { "type": "number" },
+    "drain_percent": { "type": "number" },
+    "global_element_percentages": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "yongshen_elements": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "yongshen_detail": {
+      "type": "object",
+      "properties": {
+        "day_gan": { "type": "string" },
+        "day_element": { "type": "string" },
+        "strength_percent": { "type": "number" },
+        "global_distribution": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "base_yongshen_elements": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "final_yongshen_elements": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "water_percent": { "type": "number" }
+      },
+      "required": ["base_yongshen_elements", "final_yongshen_elements"]
+    },
+    "yongshen_shishen": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "element": { "type": "string" },
+          "categories": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "shishens": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["element"]
+      }
+    },
+    "yongshen_tokens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "element": { "type": "string" },
+          "positions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pillar": {
+                  "type": "string",
+                  "enum": ["year", "month", "day", "hour"]
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": ["gan", "zhi"]
+                },
+                "char": { "type": "string" },
+                "element": { "type": "string" },
+                "shishen": { "type": "string" }
+              },
+              "required": ["pillar", "kind", "char"]
+            }
+          }
+        },
+        "required": ["element", "positions"]
+      }
+    },
+    "dominant_traits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "group": { "type": "string" },
+          "total_percent": { "type": "number" },
+          "mix_label": { "type": "string" },
+          "detail": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "percent": { "type": "number" },
+                "stems_visible_count": { "type": "integer" },
+                "breakdown": {
+                  "type": "object",
+                  "properties": {
+                    "stems_percent": { "type": "number" },
+                    "branches_percent": { "type": "number" }
+                  }
+                }
+              },
+              "required": ["name", "percent"]
+            }
+          }
+        },
+        "required": ["group", "total_percent", "mix_label", "detail"]
+      }
+    },
+    "shishen_category_percentages": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
+    "stem_pattern_summary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category": { "type": "string" },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pillar": {
+                  "type": "string",
+                  "enum": ["year", "month", "day", "hour"]
+                },
+                "gan": { "type": "string" },
+                "shishen": { "type": "string" }
+              },
+              "required": ["pillar", "gan", "shishen"]
+            }
+          }
+        },
+        "required": ["category", "members"]
+      }
+    },
+    "natal_patterns": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "natal_conflicts": {
+      "type": "object",
+      "properties": {
+        "clashes": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "punishments": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      },
+      "required": ["clashes", "punishments"]
+    },
+    "natal_harmonies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string", "enum": ["branch_harmony"] },
+          "subtype": { "type": "string", "enum": ["liuhe", "sanhe", "banhe", "sanhui"] },
+          "role": { "type": "string", "enum": ["explain"] },
+          "risk_percent": { "type": "number", "const": 0.0 },
+          "flow_type": { "type": "string", "enum": ["natal"] },
+          "group": { "type": "string" },
+          "members": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "matched_branches": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "pillar": { "type": "string", "enum": ["year", "month", "day", "hour"] },
+                "palace": { "type": "string" },
+                "target_branch": { "type": "string" },
+                "position_weight": { "type": "number" },
+                "branch_gan": { "type": "string" },
+                "branch_shishen": { "type": "object" }
+              },
+              "required": ["pillar", "palace", "target_branch"]
+            }
+          }
+        },
+        "required": ["type", "subtype", "role", "risk_percent", "flow_type", "members", "matched_branches", "targets"]
+      }
+    },
+    "special_rules": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "required": [
+    "bazi",
+    "day_master_element",
+    "strength_percent",
+    "strength_score_raw",
+    "support_percent",
+    "drain_percent",
+    "global_element_percentages",
+    "yongshen_elements",
+    "yongshen_detail",
+    "yongshen_shishen",
+    "yongshen_tokens",
+    "shishen_category_percentages",
+    "stem_pattern_summary",
+    "dominant_traits",
+    "natal_patterns",
+    "natal_conflicts",
+    "natal_harmonies",
+    "special_rules"
+  ]
+}
+
+
