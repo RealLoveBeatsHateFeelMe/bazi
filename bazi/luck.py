@@ -47,28 +47,34 @@ def _compute_lineyun_bonus(
     age: int,
     base_events: List[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
-    """计算线运加成。
+    """计算线运加成（§11.3：天干侧和地支侧分开计算）。
 
     规则：
     - 根据 age 确定 active_pillar
-    - 扫描所有 role="base" 的事件
-    - 判定触发：存在至少一条 base 事件满足：
-      1. 该事件命中 active_pillar（targets 里有 pillar==active_pillar）
-      2. 且该事件 risk_percent >= 10.0
-    - 触发后：lineyun_bonus = 6.0（全年最多一次）
+    - 分别扫描天干侧和地支侧的事件
+    - 天干侧事件（天干层模式）命中 active_pillar 且 risk >= 10 → 天干侧线运加成 +6%
+    - 地支侧事件（冲、刑、地支层模式）命中 active_pillar 且 risk >= 10 → 地支侧线运加成 +6%
+    - 如果同一根柱既有天干侧事件又有地支侧事件，可能分别获得天干侧和地支侧的线运加成（各+6%）
 
     返回：
     {
       "type": "lineyun_bonus",
       "role": "lineyun",
-      "risk_percent": 6.0,
+      "risk_percent": 6.0 | 12.0,  # 天干侧+地支侧的总加成
+      "lineyun_bonus_gan": 6.0 | 0.0,  # 天干侧加成
+      "lineyun_bonus_zhi": 6.0 | 0.0,  # 地支侧加成
       "active_pillar": "year"/"month"/"day"/"hour",
-      "trigger_events": [<触发来源事件的简化引用>]
+      "trigger_events_gan": [...],  # 天干侧触发事件
+      "trigger_events_zhi": [...],  # 地支侧触发事件
     }
     或 None（未触发）
     """
     active_pillar = _get_active_pillar(age)
-    trigger_events: List[Dict[str, Any]] = []
+    trigger_events_gan: List[Dict[str, Any]] = []
+    trigger_events_zhi: List[Dict[str, Any]] = []
+    
+    lineyun_bonus_gan = 0.0
+    lineyun_bonus_zhi = 0.0
 
     for ev in base_events:
         if ev.get("role") != "base":
@@ -79,28 +85,74 @@ def _compute_lineyun_bonus(
         if risk_percent < 10.0:
             continue
 
+        # 判断事件是天干侧还是地支侧
+        event_type = ev.get("type", "")
+        kind = ev.get("kind")  # 模式事件有 kind 字段
+        
+        is_gan_side = False
+        is_zhi_side = False
+        
+        if event_type == "pattern":
+            # 模式事件：根据 kind 判断
+            if kind == "gan":
+                is_gan_side = True
+            elif kind == "zhi":
+                is_zhi_side = True
+        elif event_type in ("branch_clash", "punishment"):
+            # 冲和刑都是地支侧
+            is_zhi_side = True
+        # 其他事件类型默认为地支侧（保守处理）
+        else:
+            is_zhi_side = True
+
         # 检查是否命中 active_pillar
         targets = ev.get("targets", [])
+        hit_active = False
         for target in targets:
             if target.get("pillar") == active_pillar:
-                # 触发条件满足
-                trigger_events.append({
+                hit_active = True
+                break
+        
+        if not hit_active:
+            continue
+
+        # 根据事件侧别，分别记录触发事件和计算加成
+        if is_gan_side:
+            if lineyun_bonus_gan == 0.0:  # 天干侧只加一次
+                lineyun_bonus_gan = 6.0
+                trigger_events_gan.append({
                     "type": ev.get("type"),
                     "flow_year": ev.get("flow_year"),
                     "flow_label": ev.get("flow_label"),
                     "target_pillar": active_pillar,
                     "risk_percent": risk_percent,
                 })
-                # 只要有一条满足就触发，全年只加一次
-                return {
-                    "type": "lineyun_bonus",
-                    "role": "lineyun",
-                    "risk_percent": 6.0,
-                    "active_pillar": active_pillar,
-                    "trigger_events": trigger_events,
-                }
+        elif is_zhi_side:
+            if lineyun_bonus_zhi == 0.0:  # 地支侧只加一次
+                lineyun_bonus_zhi = 6.0
+                trigger_events_zhi.append({
+                    "type": ev.get("type"),
+                    "flow_year": ev.get("flow_year"),
+                    "flow_label": ev.get("flow_label"),
+                    "target_pillar": active_pillar,
+                    "risk_percent": risk_percent,
+                })
 
-    return None
+    # 如果没有任何加成，返回 None
+    total_bonus = lineyun_bonus_gan + lineyun_bonus_zhi
+    if total_bonus == 0.0:
+        return None
+
+    return {
+        "type": "lineyun_bonus",
+        "role": "lineyun",
+        "risk_percent": total_bonus,  # 总加成（可能是 6.0 或 12.0）
+        "lineyun_bonus_gan": lineyun_bonus_gan,  # 天干侧加成
+        "lineyun_bonus_zhi": lineyun_bonus_zhi,  # 地支侧加成
+        "active_pillar": active_pillar,
+        "trigger_events_gan": trigger_events_gan,
+        "trigger_events_zhi": trigger_events_zhi,
+    }
 
 
 def calc_first_half_label(risk_from_gan: float, is_gan_yongshen: bool) -> str:
@@ -268,6 +320,10 @@ def analyze_luck(
     }
     
     day_gan = bazi["day"]["gan"]  # 用于模式检测
+    
+    # 原局静态模式（用于 §9 静态模式激活检测）
+    from .patterns import detect_natal_patterns
+    natal_patterns = detect_natal_patterns(bazi, day_gan)
 
     # sex 参数：以 lunar 官方 demo 习惯，1=男, 0=女
     yun = ec.getYun(1 if is_male else 0)
@@ -288,16 +344,18 @@ def analyze_luck(
         gan_good_dy = bool(gan_el_dy and gan_el_dy in yongshen_elements)
         zhi_good_dy = bool(zhi_el_dy and zhi_el_dy in yongshen_elements)
 
-        # 你的规则：以地支为主判断好运/坏运
+        # 旧规则（保留以兼容）：以地支为主判断好运/坏运
+        # 新规则（§8）会在后面根据 risk_dayun_total 和用神情况计算 dayun_label
         if zhi_good_dy and (not gan_good_dy):
-            is_good_dy = True
+            is_good_dy_old = True
         elif gan_good_dy and (not zhi_good_dy):
-            is_good_dy = False
+            is_good_dy_old = False
         elif zhi_good_dy and gan_good_dy:
-            is_good_dy = True
+            is_good_dy_old = True
         else:
-            is_good_dy = False
+            is_good_dy_old = False
 
+        # ===== §8.2 大运危险系数计算 =====
         # 大运支 与 命局地支 的冲
         clash_dy_natal = detect_branch_clash(
             bazi=bazi,
@@ -307,6 +365,138 @@ def analyze_luck(
             flow_label=gz_dy,
             flow_gan=gan_dy,  # 传入天干用于天克地冲检测
         )
+        
+        # 大运支 与 命局地支 的刑
+        punishments_dy = detect_branch_punishments(
+            bazi=bazi,
+            flow_branch=zhi_dy,
+            flow_type="dayun",
+            flow_year=dy.getStartYear(),
+            flow_label=gz_dy,
+        )
+        
+        # 过滤掉既冲又刑的情况（按规则只算冲）
+        punishments_dy_filtered: List[Dict[str, Any]] = []
+        if clash_dy_natal:
+            clash_target = clash_dy_natal.get("target_branch")
+            for punish_ev in punishments_dy:
+                if punish_ev.get("target_branch") != clash_target:
+                    punishments_dy_filtered.append(punish_ev)
+        else:
+            punishments_dy_filtered = punishments_dy
+        
+        # 大运干/支 与 命局干/支 的模式（静态，用于展示和风险计算）
+        from .patterns import detect_dayun_patterns
+        dayun_patterns = detect_dayun_patterns(bazi, day_gan, gan_dy, zhi_dy)
+        
+        # 计算大运模式事件的风险（只计算大运 vs 命局的结构性模式）
+        # 注意：这里需要检测大运干/支与命局干/支的模式，但不包括流年
+        # 由于 detect_dayun_patterns 只返回静态模式列表，我们需要计算风险
+        # 实际上，大运层的模式是静态的，不直接计分，但我们需要检测是否有模式重叠在冲上
+        
+        # 检查大运模式是否与冲重叠（类似流年的逻辑）
+        dayun_pattern_events: List[Dict[str, Any]] = []
+        clash_pattern_bonus_dy = 0.0
+        
+        # 遍历大运模式，检查是否有地支层模式与冲重叠
+        for pattern_group in dayun_patterns:
+            pattern_type = pattern_group.get("pattern_type")
+            pairs = pattern_group.get("pairs", [])
+            for pair in pairs:
+                pos1 = pair.get("pos1", {})
+                pos2 = pair.get("pos2", {})
+                kind = pos1.get("kind")
+                
+                # 只处理地支层模式（天干层模式单独计算）
+                if kind == "zhi" and clash_dy_natal:
+                    clash_target_branch = clash_dy_natal.get("target_branch")
+                    clash_flow_branch = clash_dy_natal.get("flow_branch")
+                    
+                    # 检查是否与冲重叠
+                    dayun_char = pos1.get("char") if pos1.get("source") == "dayun" else pos2.get("char")
+                    other_char = pos2.get("char") if pos1.get("source") == "dayun" else pos1.get("char")
+                    other_pillar = pos2.get("pillar") if pos1.get("source") == "dayun" else pos1.get("pillar")
+                    
+                    if (dayun_char == clash_flow_branch and 
+                        other_char == clash_target_branch and
+                        other_pillar in ("year", "month", "day", "hour")):
+                        # 重叠！在冲上+10%
+                        clash_pattern_bonus_dy = 10.0
+                        old_risk = clash_dy_natal.get("risk_percent", 0.0)
+                        clash_dy_natal["risk_percent"] = old_risk + clash_pattern_bonus_dy
+                        clash_dy_natal["pattern_bonus_percent"] = clash_pattern_bonus_dy
+                        clash_dy_natal["is_pattern_overlap"] = True
+                        clash_dy_natal["overlap_pattern_type"] = pattern_type
+                    else:
+                        # 不重叠，单独计算模式风险
+                        risk = 15.0
+                        # 如果涉及命局月支，则风险为25%
+                        other_pos = pos2 if pos1.get("source") == "dayun" else pos1
+                        if (other_pos.get("source") == "natal" and 
+                            other_pillar == "month" and 
+                            other_pos.get("kind") == "zhi"):
+                            risk = 25.0
+                        dayun_pattern_events.append({
+                            "type": "pattern",
+                            "pattern_type": pattern_type,
+                            "kind": "zhi",
+                            "risk_percent": risk,
+                            "pos1": pos1,
+                            "pos2": pos2,
+                        })
+                elif kind == "gan":
+                    # 天干层模式，单独计算
+                    risk = 15.0
+                    dayun_pattern_events.append({
+                        "type": "pattern",
+                        "pattern_type": pattern_type,
+                        "kind": "gan",
+                        "risk_percent": risk,
+                        "pos1": pos1,
+                        "pos2": pos2,
+                    })
+        
+        # 计算 risk_dayun_zhi（大运地支参与的事件）
+        risk_dayun_zhi = 0.0
+        if clash_dy_natal:
+            risk_dayun_zhi += clash_dy_natal.get("risk_percent", 0.0)
+        for punish_ev in punishments_dy_filtered:
+            risk_dayun_zhi += punish_ev.get("risk_percent", 0.0)
+        for pat_ev in dayun_pattern_events:
+            if pat_ev.get("kind") == "zhi":
+                risk_dayun_zhi += pat_ev.get("risk_percent", 0.0)
+        
+        # 计算 risk_dayun_gan（大运天干参与的事件）
+        risk_dayun_gan = 0.0
+        for pat_ev in dayun_pattern_events:
+            if pat_ev.get("kind") == "gan":
+                risk_dayun_gan += pat_ev.get("risk_percent", 0.0)
+        
+        # 计算 risk_dayun_total
+        risk_dayun_total = risk_dayun_zhi + risk_dayun_gan
+        
+        # ===== §8.4 大运好坏判定逻辑 =====
+        is_dayun_zhi_yongshen = zhi_good_dy
+        is_dayun_gan_yongshen = gan_good_dy
+        
+        if is_dayun_zhi_yongshen:
+            if risk_dayun_total < 30.0:
+                dayun_label = "好运"
+            else:
+                dayun_label = "坏运（用神过旺/变动过大）"
+            
+            # 检查是否"非常好运"
+            is_very_good = False
+            if is_dayun_zhi_yongshen and is_dayun_gan_yongshen and risk_dayun_total < 30.0:
+                is_very_good = True
+        else:
+            if risk_dayun_total <= 15.0:
+                dayun_label = "一般"
+            elif risk_dayun_total <= 30.0:
+                dayun_label = "一般（有变动）"
+            else:
+                dayun_label = "坏运"
+            is_very_good = False
 
         # 大运支与原局的六合/三合（只解释，不计分）
         harmonies_dy = detect_flow_harmonies(
@@ -327,7 +517,7 @@ def analyze_luck(
             start_age=dy.getStartAge(),
             gan_good=gan_good_dy,
             zhi_good=zhi_good_dy,
-            is_good=is_good_dy,
+            is_good=is_good_dy_old,  # 保留旧字段以兼容（会在后面根据 §4.4 更新）
             clashes_natal=[clash_dy_natal] if clash_dy_natal else [],
         )
 
@@ -464,9 +654,140 @@ def analyze_luck(
             # 模式事件也是基础事件（已过滤掉与冲重叠的）
             base_events.extend(pattern_events_filtered)
 
-            # 计算线运加成
+            # ===== §9 静态模式被流年激活检测 =====
+            from .config import PATTERN_GAN_RISK_STATIC, PATTERN_ZHI_RISK_STATIC
+            
+            # 按模式类型分组流年模式事件
+            liunian_patterns_by_type: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+            for pat_ev in pattern_events_filtered:
+                pattern_type = pat_ev.get("pattern_type")
+                kind = pat_ev.get("kind")
+                if pattern_type not in liunian_patterns_by_type:
+                    liunian_patterns_by_type[pattern_type] = {"gan": [], "zhi": []}
+                liunian_patterns_by_type[pattern_type][kind].append(pat_ev)
+            
+            # 按模式类型分组原局静态模式
+            natal_patterns_by_type: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+            for pattern_group in natal_patterns:
+                pattern_type = pattern_group.get("pattern_type")
+                pairs = pattern_group.get("pairs", [])
+                if pattern_type not in natal_patterns_by_type:
+                    natal_patterns_by_type[pattern_type] = {"gan": [], "zhi": []}
+                for pair in pairs:
+                    pos1 = pair.get("pos1", {})
+                    kind = pos1.get("kind")
+                    natal_patterns_by_type[pattern_type][kind].append(pair)
+            
+            # 按模式类型分组大运静态模式
+            dayun_patterns_by_type: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+            for pattern_group in dayun_patterns:
+                pattern_type = pattern_group.get("pattern_type")
+                pairs = pattern_group.get("pairs", [])
+                if pattern_type not in dayun_patterns_by_type:
+                    dayun_patterns_by_type[pattern_type] = {"gan": [], "zhi": []}
+                for pair in pairs:
+                    pos1 = pair.get("pos1", {})
+                    kind = pos1.get("kind")
+                    dayun_patterns_by_type[pattern_type][kind].append(pair)
+            
+            # 检测静态模式激活并计算风险
+            static_activation_events: List[Dict[str, Any]] = []
+            
+            for pattern_type in ["hurt_officer", "pianyin_eatgod"]:
+                liunian_gan_pairs = liunian_patterns_by_type.get(pattern_type, {}).get("gan", [])
+                liunian_zhi_pairs = liunian_patterns_by_type.get(pattern_type, {}).get("zhi", [])
+                natal_gan_pairs = natal_patterns_by_type.get(pattern_type, {}).get("gan", [])
+                natal_zhi_pairs = natal_patterns_by_type.get(pattern_type, {}).get("zhi", [])
+                dayun_gan_pairs = dayun_patterns_by_type.get(pattern_type, {}).get("gan", [])
+                dayun_zhi_pairs = dayun_patterns_by_type.get(pattern_type, {}).get("zhi", [])
+                
+                # 天干层激活检测
+                activated_natal_gan_pairs: List[Dict[str, Any]] = []
+                activated_dayun_gan_pairs: List[Dict[str, Any]] = []
+                
+                if len(liunian_gan_pairs) > 0:
+                    # 对每个流年天干 pair，检查是否激活静态 pair
+                    for liunian_pair in liunian_gan_pairs:
+                        liunian_chars = {liunian_pair["pos1"]["char"], liunian_pair["pos2"]["char"]}
+                        
+                        # 检查原局静态 pair
+                        for natal_pair in natal_gan_pairs:
+                            natal_chars = {natal_pair["pos1"]["char"], natal_pair["pos2"]["char"]}
+                            if natal_chars == liunian_chars:
+                                # 激活！只记录一次
+                                if natal_pair not in activated_natal_gan_pairs:
+                                    activated_natal_gan_pairs.append(natal_pair)
+                        
+                        # 检查大运静态 pair
+                        for dayun_pair in dayun_gan_pairs:
+                            dayun_chars = {dayun_pair["pos1"]["char"], dayun_pair["pos2"]["char"]}
+                            if dayun_chars == liunian_chars:
+                                # 激活！只记录一次
+                                if dayun_pair not in activated_dayun_gan_pairs:
+                                    activated_dayun_gan_pairs.append(dayun_pair)
+                
+                # 地支层激活检测
+                activated_natal_zhi_pairs: List[Dict[str, Any]] = []
+                activated_dayun_zhi_pairs: List[Dict[str, Any]] = []
+                
+                if len(liunian_zhi_pairs) > 0:
+                    # 对每个流年地支 pair，检查是否激活静态 pair
+                    for liunian_pair in liunian_zhi_pairs:
+                        liunian_chars = {liunian_pair["pos1"]["char"], liunian_pair["pos2"]["char"]}
+                        
+                        # 检查原局静态 pair
+                        for natal_pair in natal_zhi_pairs:
+                            natal_chars = {natal_pair["pos1"]["char"], natal_pair["pos2"]["char"]}
+                            if natal_chars == liunian_chars:
+                                # 激活！只记录一次
+                                if natal_pair not in activated_natal_zhi_pairs:
+                                    activated_natal_zhi_pairs.append(natal_pair)
+                        
+                        # 检查大运静态 pair
+                        for dayun_pair in dayun_zhi_pairs:
+                            dayun_chars = {dayun_pair["pos1"]["char"], dayun_pair["pos2"]["char"]}
+                            if dayun_chars == liunian_chars:
+                                # 激活！只记录一次
+                                if dayun_pair not in activated_dayun_zhi_pairs:
+                                    activated_dayun_zhi_pairs.append(dayun_pair)
+                
+                # 计算静态激活风险
+                static_risk_gan = PATTERN_GAN_RISK_STATIC * (len(activated_natal_gan_pairs) + len(activated_dayun_gan_pairs))
+                
+                static_risk_zhi = 0.0
+                for pair in activated_natal_zhi_pairs + activated_dayun_zhi_pairs:
+                    # 检查是否涉及命局月支
+                    pos1 = pair.get("pos1", {})
+                    pos2 = pair.get("pos2", {})
+                    if ((pos1.get("source") == "natal" and pos1.get("pillar") == "month" and pos1.get("kind") == "zhi") or
+                        (pos2.get("source") == "natal" and pos2.get("pillar") == "month" and pos2.get("kind") == "zhi")):
+                        static_risk_zhi += 25.0
+                    else:
+                        static_risk_zhi += PATTERN_ZHI_RISK_STATIC
+                
+                # 如果有激活的静态模式，生成汇总事件
+                if static_risk_gan > 0.0 or static_risk_zhi > 0.0:
+                    static_activation_events.append({
+                        "type": "pattern_static_activation",
+                        "pattern_type": pattern_type,
+                        "risk_percent": static_risk_gan + static_risk_zhi,
+                        "risk_from_gan": static_risk_gan,
+                        "risk_from_zhi": static_risk_zhi,
+                        "activated_natal_gan_pairs": activated_natal_gan_pairs,
+                        "activated_dayun_gan_pairs": activated_dayun_gan_pairs,
+                        "activated_natal_zhi_pairs": activated_natal_zhi_pairs,
+                        "activated_dayun_zhi_pairs": activated_dayun_zhi_pairs,
+                        "liunian_pairs_trigger_gan": liunian_gan_pairs,
+                        "liunian_pairs_trigger_zhi": liunian_zhi_pairs,
+                        "flow_year": ln.getYear(),
+                        "flow_label": gz_ln,
+                    })
+
+            # 计算线运加成（§11.3：天干侧和地支侧分开计算）
             lineyun_event = _compute_lineyun_bonus(ln.getAge(), base_events)
             lineyun_bonus = lineyun_event.get("risk_percent", 0.0) if lineyun_event else 0.0
+            lineyun_bonus_gan = lineyun_event.get("lineyun_bonus_gan", 0.0) if lineyun_event else 0.0
+            lineyun_bonus_zhi = lineyun_event.get("lineyun_bonus_zhi", 0.0) if lineyun_event else 0.0
 
             # ===== §6.1 风险拆分：天干算天干的，地支算地支的 =====
             # risk_from_zhi：流年地支引起的风险
@@ -486,10 +807,8 @@ def analyze_luck(
             for pat_ev in pattern_events_filtered:
                 if pat_ev.get("kind") == "zhi":
                     risk_from_zhi += pat_ev.get("risk_percent", 0.0)
-            # 线运加成：如果线运事件命中的是地支侧（冲/刑），则加到 risk_from_zhi
-            # 目前线运只基于 base_events（冲和刑都是地支侧），所以线运加成加到 risk_from_zhi
-            if lineyun_event:
-                risk_from_zhi += lineyun_bonus
+            # 线运加成（地支侧）：加到 risk_from_zhi
+            risk_from_zhi += lineyun_bonus_zhi
 
             # risk_from_gan：流年天干引起的风险
             risk_from_gan = 0.0
@@ -497,6 +816,14 @@ def analyze_luck(
             for pat_ev in pattern_events_filtered:
                 if pat_ev.get("kind") == "gan":
                     risk_from_gan += pat_ev.get("risk_percent", 0.0)
+            
+            # 静态模式激活风险（§9.5）
+            for static_ev in static_activation_events:
+                risk_from_gan += static_ev.get("risk_from_gan", 0.0)
+                risk_from_zhi += static_ev.get("risk_from_zhi", 0.0)
+            
+            # 线运加成（天干侧）：加到 risk_from_gan
+            risk_from_gan += lineyun_bonus_gan
 
             # 年度总风险 = risk_from_gan + risk_from_zhi（不封顶，可>100）
             total_risk_percent = risk_from_gan + risk_from_zhi
@@ -505,6 +832,12 @@ def analyze_luck(
             first_half_label = calc_first_half_label(risk_from_gan, gan_good_ln)
             second_half_label = calc_second_half_label(risk_from_zhi, zhi_good_ln)
             year_label = calc_year_label(first_half_label, second_half_label)
+            
+            # ===== §4.4 流年好运判断（简单规则：用神+风险≤15%） =====
+            # 如果天干或地支的五行中至少有一个落在用神列表中，且 total_risk_percent ≤ 15，则标记为"好运"
+            is_good_ln = False
+            if (gan_good_ln or zhi_good_ln) and total_risk_percent <= 15.0:
+                is_good_ln = True
 
             # 构建年度事件列表
             all_events: List[Dict[str, Any]] = []
@@ -519,6 +852,8 @@ def analyze_luck(
                 all_events.append(punish_ev)
             # 添加模式事件（已过滤掉与冲重叠的）
             all_events.extend(pattern_events_filtered)
+            # 添加静态模式激活事件
+            all_events.extend(static_activation_events)
             if lineyun_event:
                 all_events.append(lineyun_event)
 
@@ -531,6 +866,7 @@ def analyze_luck(
                 "zhi_element": zhi_el_ln,
                 "first_half_good": first_half_good,  # 保留兼容字段（是否用神）
                 "second_half_good": second_half_good,  # 保留兼容字段（是否用神）
+                "is_good": is_good_ln,  # §4.4 流年好运判断（用神+风险≤15%）
                 "risk_from_gan": risk_from_gan,  # §6.1 天干引起的风险
                 "risk_from_zhi": risk_from_zhi,  # §6.1 地支引起的风险
                 "first_half_label": first_half_label,  # §6.3 上半年标签（好运/一般/坏运等）
@@ -540,9 +876,12 @@ def analyze_luck(
                 "clashes_dayun": clashes_dayun,
                 "punishments_natal": punishments_ln,  # 流年支 与 命局地支 的刑
                 "patterns_liunian": pattern_events_filtered,  # 流年模式事件（已过滤掉与冲重叠的）
+                "patterns_static_activation": static_activation_events,  # §9 静态模式被流年激活的事件
                 "harmonies_natal": harmonies_ln,  # 流年与原局的六合/三合/半合/三会（只解释，不计分）
                 "harmonies_dayun": [],  # 流年与大运的合类（目前为空，后续可扩展）
-                "lineyun_bonus": lineyun_bonus,
+                "lineyun_bonus": lineyun_bonus,  # 总加成（天干侧+地支侧）
+                "lineyun_bonus_gan": lineyun_bonus_gan,  # §11.3 天干侧线运加成
+                "lineyun_bonus_zhi": lineyun_bonus_zhi,  # §11.3 地支侧线运加成
                 "total_risk_percent": total_risk_percent,
                 "all_events": all_events,
             }
@@ -552,6 +891,31 @@ def analyze_luck(
         # 一个大运 + 对应的十个流年
         dayun_dict = asdict(dayun_luck)
         dayun_dict["harmonies_natal"] = harmonies_dy  # 大运与原局的六合/三合/半合/三会（只解释，不计分）
+        
+        # ===== §4.4 大运好运判断（简单规则：用神+平均风险≤15%） =====
+        # 计算该步大运下所有流年的平均风险
+        total_risk_sum = 0.0
+        risk_count = 0
+        for liunian_dict in liunian_list:
+            total_risk_sum += liunian_dict.get("total_risk_percent", 0.0)
+            risk_count += 1
+        total_risk_average = total_risk_sum / risk_count if risk_count > 0 else 0.0
+        
+        # 如果天干或地支的五行中至少有一个落在用神列表中，且平均风险 ≤ 15%，则标记为"好运"
+        is_good_dy_simple = False
+        if (gan_good_dy or zhi_good_dy) and total_risk_average <= 15.0:
+            is_good_dy_simple = True
+        
+        # ===== §8 大运风险与好坏判定字段 =====
+        dayun_dict["risk_dayun_zhi"] = risk_dayun_zhi
+        dayun_dict["risk_dayun_gan"] = risk_dayun_gan
+        dayun_dict["risk_dayun_total"] = risk_dayun_total
+        dayun_dict["total_risk_average"] = total_risk_average  # §4.4 该步大运下所有流年的平均风险
+        dayun_dict["is_good"] = is_good_dy_simple  # §4.4 大运好运判断（用神+平均风险≤15%）
+        dayun_dict["dayun_label"] = dayun_label  # §8 "好运" | "坏运" | "一般" | "一般（有变动）" | "坏运（用神过旺/变动过大）"
+        dayun_dict["is_very_good"] = is_very_good  # 是否"非常好运"（干支皆用神且风险<30%）
+        dayun_dict["punishments_natal"] = punishments_dy_filtered  # 大运支 与 命局地支 的刑
+        dayun_dict["patterns_dayun"] = dayun_pattern_events  # 大运干/支 与 命局干/支 的模式事件
 
         groups.append(
             {
