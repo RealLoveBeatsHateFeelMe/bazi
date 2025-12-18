@@ -172,7 +172,7 @@ def detect_branch_clash(
     #   - if 有天克地冲: extra_bonus += X
     #   - if 有“枭神夺食”: extra_bonus += Y
     #   - if 有“伤官见官”: extra_bonus += Z
-    # 4. 天克地冲检测（在冲的基础上额外 +10%）
+    # 4. 天克地冲检测（在冲的基础上额外 +10%，每个满足的柱都加一次）
     tkdc_bonus_percent = 0.0
     tkdc_targets: List[Dict[str, Any]] = []
     
@@ -183,15 +183,14 @@ def detect_branch_clash(
             target_gan = bazi[target_pillar]["gan"]
             
             if _check_tian_ke_di_chong(flow_gan, flow_branch, target_gan, target_branch):
-                tkdc_bonus_percent = TIAN_KE_DI_CHONG_EXTRA_RISK
+                # 每个满足天克地冲的柱都加一次 +10%（累加）
+                tkdc_bonus_percent += TIAN_KE_DI_CHONG_EXTRA_RISK
                 tkdc_targets.append({
                     "pillar": target_pillar,
                     "palace": target.get("palace"),
                     "target_gan": target_gan,
                     "flow_gan": flow_gan,
                 })
-                # 只要有一个柱满足天克地冲，就加一次 +10%（不叠加）
-                break
     
     extra_bonus_percent = grave_bonus_percent + tkdc_bonus_percent
 
@@ -219,6 +218,8 @@ def detect_branch_clash(
         "base_power": base_power,
         "base_power_percent": base_power_percent,
         "grave_bonus_percent": grave_bonus_percent,
+        "tkdc_bonus_percent": tkdc_bonus_percent,  # 天克地冲总加成（包含多个柱的累加）
+        "tkdc_targets": tkdc_targets,  # 满足天克地冲的柱列表
         "risk_percent": risk_percent,
 
         "impact_level": impact_level,

@@ -19,21 +19,33 @@ NORMAL_PUNISH_PAIRS: Set[Tuple[str, str]] = {
     ("寅", "申"),
 }
 
-# 墓库刑的组合（辰戌、丑未）
+# 墓库刑的组合（丑戌未三刑）
 # 注意：辰未不刑，所以不包含 ("辰","未") 和 ("未","辰")
+# 丑戌未三刑：丑-戌、戌-未、未-丑
 GRAVE_PUNISH_PAIRS: Set[Tuple[str, str]] = {
-    ("辰", "戌"),
-    ("戌", "辰"),
-    ("丑", "未"),
+    ("丑", "戌"),
+    ("戌", "丑"),
+    ("戌", "未"),
+    ("未", "戌"),
     ("未", "丑"),
+    ("丑", "未"),
+}
+
+# 自刑的组合（辰辰、午午、酉酉、亥亥）
+SELF_PUNISH_PAIRS: Set[Tuple[str, str]] = {
+    ("辰", "辰"),
+    ("午", "午"),
+    ("酉", "酉"),
+    ("亥", "亥"),
 }
 
 # 所有刑的组合
-ALL_PUNISH_PAIRS = NORMAL_PUNISH_PAIRS | GRAVE_PUNISH_PAIRS
+ALL_PUNISH_PAIRS = NORMAL_PUNISH_PAIRS | GRAVE_PUNISH_PAIRS | SELF_PUNISH_PAIRS
 
 # 刑的风险系数
 PUNISHMENT_NORMAL_RISK = 5.0  # 普通刑
-PUNISHMENT_GRAVE_RISK = 6.0   # 墓库刑
+PUNISHMENT_GRAVE_RISK = 6.0   # 墓库刑（丑戌未三刑）
+PUNISHMENT_SELF_RISK = 5.0    # 自刑（辰辰、午午、酉酉、亥亥）
 
 # 静态刑的风险（原基础风险的一半）
 STATIC_PUNISH_NORMAL_RISK = PUNISHMENT_NORMAL_RISK * 0.5  # 2.5
@@ -89,31 +101,14 @@ def detect_branch_punishments(
     events = []
 
     for target_branch in punish_targets:
-        targets: List[Dict[str, Any]] = []
-        base_total = 0.0
-
-        # 找命局里所有"被刑的那个支"出现在哪里 + 权重
+        # 找命局里所有"被刑的那个支"出现在哪里
+        target_pillars = []
         for pillar in ("year", "month", "day", "hour"):
             if bazi[pillar]["zhi"] == target_branch:
-                key = f"{pillar}_zhi"
-                w = POSITION_WEIGHTS.get(key, 0.0)
-                base_total += w
-
-                # 该柱地支代表的十神
-                tg = get_branch_shishen(bazi, target_branch)
-
-                targets.append(
-                    {
-                        "pillar": pillar,
-                        "palace": PILLAR_PALACE.get(pillar, ""),
-                        "position_weight": w,
-                        "branch_gan": tg["gan"] if tg else None,
-                        "branch_shishen": tg["shishen"] if tg else None,
-                    }
-                )
+                target_pillars.append(pillar)
 
         # 命局里根本没有这个被刑的支，跳过
-        if not targets:
+        if not target_pillars:
             continue
 
         # 检查是否同时满足"冲"（如果既冲又刑，应该被过滤掉，但这里先检测）
@@ -123,38 +118,58 @@ def detect_branch_punishments(
             # 这里仍然生成事件，但上层会过滤
             pass
 
-        # 基础力量（仅展示用，不参与 risk_percent 计算）
-        base_power_percent = base_total * 100.0
-
-        # 判断是否墓库刑（基于 GRAVE_PUNISH_PAIRS）
+        # 判断刑的类型
         is_grave = _is_grave_punishment(flow_branch, target_branch)
-
+        is_self = (flow_branch, target_branch) in SELF_PUNISH_PAIRS
+        
         # 风险系数（固定值，不按命中柱位数倍增）
-        risk_percent = PUNISHMENT_GRAVE_RISK if is_grave else PUNISHMENT_NORMAL_RISK
+        if is_grave:
+            risk_percent = PUNISHMENT_GRAVE_RISK  # 6%
+        elif is_self:
+            risk_percent = PUNISHMENT_SELF_RISK   # 5%
+        else:
+            risk_percent = PUNISHMENT_NORMAL_RISK  # 5%
 
-        # 流年 / 大运这一边的十神
-        flow_tg = get_branch_shishen(bazi, flow_branch)
-        target_tg = get_branch_shishen(bazi, target_branch)
+        # 为命局中每个被刑的柱生成一个独立的刑事件
+        for pillar in target_pillars:
+            key = f"{pillar}_zhi"
+            w = POSITION_WEIGHTS.get(key, 0.0)
+            base_power_percent = w * 100.0  # 单个柱的权重
 
-        events.append(
-            {
-                "type": "punishment",
-                "flow_type": flow_type,
-                "flow_year": flow_year,
-                "flow_label": flow_label,
-                "flow_branch": flow_branch,
-                "target_branch": target_branch,
-                "role": "punisher",
-                "base_power_percent": base_power_percent,
-                "risk_percent": risk_percent,
-                "is_grave": is_grave,
-                "targets": targets,
-                "shishens": {
-                    "flow_branch": flow_tg,
-                    "target_branch": target_tg,
-                },
-            }
-        )
+            # 该柱地支代表的十神
+            tg = get_branch_shishen(bazi, target_branch)
+
+            targets = [{
+                "pillar": pillar,
+                "palace": PILLAR_PALACE.get(pillar, ""),
+                "position_weight": w,
+                "branch_gan": tg["gan"] if tg else None,
+                "branch_shishen": tg["shishen"] if tg else None,
+            }]
+
+            # 流年 / 大运这一边的十神
+            flow_tg = get_branch_shishen(bazi, flow_branch)
+            target_tg = get_branch_shishen(bazi, target_branch)
+
+            events.append(
+                {
+                    "type": "punishment",
+                    "flow_type": flow_type,
+                    "flow_year": flow_year,
+                    "flow_label": flow_label,
+                    "flow_branch": flow_branch,
+                    "target_branch": target_branch,
+                    "role": "punisher",
+                    "base_power_percent": base_power_percent,
+                    "risk_percent": risk_percent,
+                    "is_grave": is_grave,
+                    "targets": targets,
+                    "shishens": {
+                        "flow_branch": flow_tg,
+                        "target_branch": target_tg,
+                    },
+                }
+            )
 
     return events
 
@@ -200,13 +215,42 @@ def detect_natal_clashes_and_punishments(
                 if clash_target == zhi2:
                     continue  # 跳过，只算冲
 
-                punish_evs = detect_branch_punishments(
-                    bazi, zhi1, "natal", None, f"{pillar1}-{pillar2}"
-                )
-                # 过滤出目标支是 zhi2 的事件
-                for ev in punish_evs:
-                    if ev["target_branch"] == zhi2:
-                        punishments.append(ev)
+                # 直接生成一个刑事件，不调用 detect_branch_punishments（避免重复）
+                # 判断刑的类型
+                is_grave = _is_grave_punishment(zhi1, zhi2)
+                is_self = (zhi1, zhi2) in SELF_PUNISH_PAIRS
+                
+                if is_grave:
+                    risk_percent = PUNISHMENT_GRAVE_RISK  # 6%
+                elif is_self:
+                    risk_percent = PUNISHMENT_SELF_RISK   # 5%
+                else:
+                    risk_percent = PUNISHMENT_NORMAL_RISK  # 5%
+                
+                # 计算权重（仅展示用）
+                key1 = f"{pillar1}_zhi"
+                key2 = f"{pillar2}_zhi"
+                w1 = POSITION_WEIGHTS.get(key1, 0.0)
+                w2 = POSITION_WEIGHTS.get(key2, 0.0)
+                base_power_percent = (w1 + w2) * 100.0
+                
+                punishments.append({
+                    "type": "punishment",
+                    "flow_type": "natal",
+                    "flow_branch": zhi1,
+                    "target_branch": zhi2,
+                    "role": "punisher",
+                    "base_power_percent": base_power_percent,
+                    "risk_percent": risk_percent,
+                    "is_grave": is_grave,
+                    "targets": [
+                        {
+                            "pillar": pillar2,
+                            "palace": PILLAR_PALACE.get(pillar2, ""),
+                            "position_weight": w2,
+                        }
+                    ],
+                })
 
     return {
         "clashes": clashes,

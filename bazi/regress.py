@@ -377,6 +377,108 @@ def main():
         sys.exit(1)
 
 
+def test_golden_case_B_2021():
+    """黄金回归用例B：2007-01-28 12:00 男，2021年
+    
+    期望：core_total=43（伤官见官15+静态10=25；丑戌刑两次12+静态刑6=18）
+    """
+    dt = datetime(2007, 1, 28, 12, 0)
+    basic = analyze_basic(dt)
+    yongshen_elements = basic.get("yongshen_elements", [])
+    luck = analyze_luck(dt, is_male=True, yongshen_elements=yongshen_elements)
+    
+    # 查找2021年的流年
+    liunian_2021 = None
+    for group in luck.get("groups", []):
+        for liunian in group.get("liunian", []):
+            if liunian.get("year") == 2021:
+                liunian_2021 = liunian
+                break
+        if liunian_2021:
+            break
+    
+    assert liunian_2021 is not None, "应找到2021年的流年数据"
+    
+    total_risk = liunian_2021.get("total_risk_percent", 0.0)
+    
+    # 详细计算步骤
+    all_events = liunian_2021.get("all_events", [])
+    punishment_risk = sum(ev.get("risk_percent", 0.0) for ev in all_events if ev.get("type") == "punishment")
+    pattern_risk = sum(ev.get("risk_percent", 0.0) for ev in all_events if ev.get("type") == "pattern")
+    pattern_static_risk = sum(ev.get("risk_percent", 0.0) for ev in all_events if ev.get("type") == "pattern_static_activation")
+    static_punish_risk = sum(ev.get("risk_percent", 0.0) for ev in all_events if ev.get("type") == "static_punish_activation")
+    
+    print(f"[REGRESS] 例B 2021年详细计算:")
+    print(f"  刑风险: {punishment_risk} (期望12: 丑戌刑两次)")
+    print(f"  模式风险: {pattern_risk} (期望15: 伤官见官)")
+    print(f"  静态模式风险: {pattern_static_risk} (期望10: 静态激活)")
+    print(f"  静态刑风险: {static_punish_risk} (期望6: 原局内部两个丑戌相刑激活)")
+    print(f"  总计: {total_risk} (期望43)")
+    
+    _assert_close(total_risk, 43.0, tol=0.5)
+    _assert_close(punishment_risk, 12.0, tol=0.5)
+    _assert_close(pattern_risk, 15.0, tol=0.5)
+    _assert_close(pattern_static_risk, 10.0, tol=0.5)
+    _assert_close(static_punish_risk, 6.0, tol=0.5)
+    print("[PASS] 例B 2021年回归测试通过")
+
+
+def test_golden_case_B_2030():
+    """黄金回归用例B：2007-01-28 12:00 男，2030年
+    
+    期望：core_total=67%（除去线运）（丑戌刑6+静态刑6=12；辰戌冲15+静态冲15+TKDC10=40，运年天克地冲再加10% = 50%）
+    """
+    dt = datetime(2007, 1, 28, 12, 0)
+    basic = analyze_basic(dt)
+    yongshen_elements = basic.get("yongshen_elements", [])
+    luck = analyze_luck(dt, is_male=True, yongshen_elements=yongshen_elements)
+    
+    # 查找2030年的流年
+    liunian_2030 = None
+    for group in luck.get("groups", []):
+        for liunian in group.get("liunian", []):
+            if liunian.get("year") == 2030:
+                liunian_2030 = liunian
+                break
+        if liunian_2030:
+            break
+    
+    assert liunian_2030 is not None, "应找到2030年的流年数据"
+    
+    total_risk = liunian_2030.get("total_risk_percent", 0.0)
+    
+    # 详细计算步骤
+    all_events = liunian_2030.get("all_events", [])
+    punishment_risk = sum(ev.get("risk_percent", 0.0) for ev in all_events if ev.get("type") == "punishment")
+    pattern_risk = sum(ev.get("risk_percent", 0.0) for ev in all_events if ev.get("type") == "pattern")
+    static_clash_risk = sum(ev.get("risk_percent", 0.0) for ev in all_events if ev.get("type") == "static_clash_activation")
+    static_punish_risk = sum(ev.get("risk_percent", 0.0) for ev in all_events if ev.get("type") == "static_punish_activation")
+    
+    clashes_dayun = liunian_2030.get("clashes_dayun", [])
+    dayun_liunian_clash_risk = sum(ev.get("risk_percent", 0.0) for ev in clashes_dayun)
+    
+    print(f"[REGRESS] 例B 2030年详细计算:")
+    print(f"  刑风险: {punishment_risk} (期望6: 丑戌刑)")
+    print(f"  模式风险: {pattern_risk} (期望15: 伤官见官)")
+    print(f"  静态冲风险: {static_clash_risk} (期望15: 大运静态冲激活)")
+    print(f"  静态刑风险: {static_punish_risk} (期望6: 原局内部静态刑激活)")
+    print(f"  运年相冲风险: {dayun_liunian_clash_risk} (期望35: 辰戌冲15+天克地冲10+运年天克地冲额外10)")
+    print(f"  总计: {total_risk} (期望77，除去线运)")
+    
+    _assert_close(total_risk, 77.0, tol=1.0)
+    _assert_close(punishment_risk, 6.0, tol=0.5)
+    _assert_close(pattern_risk, 15.0, tol=0.5)
+    _assert_close(static_clash_risk, 15.0, tol=0.5)
+    _assert_close(static_punish_risk, 6.0, tol=0.5)
+    _assert_close(dayun_liunian_clash_risk, 35.0, tol=0.5)
+    print("[PASS] 例B 2030年回归测试通过")
+
+
 if __name__ == "__main__":
     main()
+    print("\n" + "=" * 60)
+    print("运行黄金回归用例")
+    print("=" * 60)
+    test_golden_case_B_2021()
+    test_golden_case_B_2030()
 

@@ -46,14 +46,15 @@ def _get_active_pillar(age: int) -> str:
 def _compute_lineyun_bonus(
     age: int,
     base_events: List[Dict[str, Any]],
+    static_activation_events: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """计算线运加成（§11.3：天干侧和地支侧分开计算）。
+    """计算线运加成（§11.3：天干侧和地支侧分开计算，考虑静态影响）。
 
     规则：
     - 根据 age 确定 active_pillar
     - 分别扫描天干侧和地支侧的事件
-    - 天干侧事件（天干层模式）命中 active_pillar 且 risk >= 10 → 天干侧线运加成 +6%
-    - 地支侧事件（冲、刑、地支层模式）命中 active_pillar 且 risk >= 10 → 地支侧线运加成 +6%
+    - 对于每个侧别，计算命中 active_pillar 的所有事件的风险总和（包括动态和静态）
+    - 如果单柱的总风险（动态+静态）>= 10.0，才触发该侧别的线运加成 +6%
     - 如果同一根柱既有天干侧事件又有地支侧事件，可能分别获得天干侧和地支侧的线运加成（各+6%）
 
     返回：
@@ -69,20 +70,20 @@ def _compute_lineyun_bonus(
     }
     或 None（未触发）
     """
+    if static_activation_events is None:
+        static_activation_events = []
+    
     active_pillar = _get_active_pillar(age)
     trigger_events_gan: List[Dict[str, Any]] = []
     trigger_events_zhi: List[Dict[str, Any]] = []
     
-    lineyun_bonus_gan = 0.0
-    lineyun_bonus_zhi = 0.0
-
+    # 计算命中 active_pillar 的天干侧和地支侧风险总和
+    total_risk_gan = 0.0
+    total_risk_zhi = 0.0
+    
+    # 扫描基础事件（动态事件）
     for ev in base_events:
         if ev.get("role") != "base":
-            continue
-
-        # 检查事件 risk_percent
-        risk_percent = ev.get("risk_percent", 0.0)
-        if risk_percent < 10.0:
             continue
 
         # 判断事件是天干侧还是地支侧
@@ -98,7 +99,7 @@ def _compute_lineyun_bonus(
                 is_gan_side = True
             elif kind == "zhi":
                 is_zhi_side = True
-        elif event_type in ("branch_clash", "punishment"):
+        elif event_type in ("branch_clash", "punishment", "dayun_liunian_branch_clash"):
             # 冲和刑都是地支侧
             is_zhi_side = True
         # 其他事件类型默认为地支侧（保守处理）
@@ -106,37 +107,55 @@ def _compute_lineyun_bonus(
             is_zhi_side = True
 
         # 检查是否命中 active_pillar
-        targets = ev.get("targets", [])
         hit_active = False
-        for target in targets:
-            if target.get("pillar") == active_pillar:
+        
+        # 对于有targets字段的事件（如冲、刑），检查targets
+        targets = ev.get("targets", [])
+        if targets:
+            for target in targets:
+                if target.get("pillar") == active_pillar:
+                    hit_active = True
+                    break
+        else:
+            # 对于模式事件，检查pos1和pos2中的pillar
+            pos1 = ev.get("pos1", {})
+            pos2 = ev.get("pos2", {})
+            if pos1.get("pillar") == active_pillar or pos2.get("pillar") == active_pillar:
                 hit_active = True
-                break
         
         if not hit_active:
             continue
 
-        # 根据事件侧别，分别记录触发事件和计算加成
+        # 累加风险
+        risk_percent = ev.get("risk_percent", 0.0)
         if is_gan_side:
-            if lineyun_bonus_gan == 0.0:  # 天干侧只加一次
-                lineyun_bonus_gan = 6.0
-                trigger_events_gan.append({
-                    "type": ev.get("type"),
-                    "flow_year": ev.get("flow_year"),
-                    "flow_label": ev.get("flow_label"),
-                    "target_pillar": active_pillar,
-                    "risk_percent": risk_percent,
-                })
+            total_risk_gan += risk_percent
         elif is_zhi_side:
-            if lineyun_bonus_zhi == 0.0:  # 地支侧只加一次
-                lineyun_bonus_zhi = 6.0
-                trigger_events_zhi.append({
-                    "type": ev.get("type"),
-                    "flow_year": ev.get("flow_year"),
-                    "flow_label": ev.get("flow_label"),
-                    "target_pillar": active_pillar,
-                    "risk_percent": risk_percent,
-                })
+            total_risk_zhi += risk_percent
+    
+    # 扫描静态激活事件（线运不算静态激活的风险）
+    # 根据用户要求：线运以后不算静态的危险系数，因为静态危险系数没法归类到哪一柱
+    # 所以这里不再扫描静态激活事件
+    
+    # 判断是否触发线运加成（单柱总风险 >= 10.0）
+    lineyun_bonus_gan = 0.0
+    lineyun_bonus_zhi = 0.0
+    
+    if total_risk_gan >= 10.0:
+        lineyun_bonus_gan = 6.0
+        trigger_events_gan.append({
+            "type": "lineyun_trigger",
+            "target_pillar": active_pillar,
+            "total_risk_gan": total_risk_gan,
+        })
+    
+    if total_risk_zhi >= 10.0:
+        lineyun_bonus_zhi = 6.0
+        trigger_events_zhi.append({
+            "type": "lineyun_trigger",
+            "target_pillar": active_pillar,
+            "total_risk_zhi": total_risk_zhi,
+        })
 
     # 如果没有任何加成，返回 None
     total_bonus = lineyun_bonus_gan + lineyun_bonus_zhi
@@ -155,7 +174,10 @@ def _compute_lineyun_bonus(
     }
 
 
-def calc_first_half_label(risk_from_gan: float, is_gan_yongshen: bool) -> str:
+# 已删除：calc_first_half_label, calc_second_half_label, calc_year_label, calc_year_label_old
+# 这些函数用于计算上半年/下半年/年度标签，但用户要求删除天干地支分开的影响
+
+def _deleted_calc_first_half_label(risk_from_gan: float, is_gan_yongshen: bool) -> str:
     """根据流年天干风险和是否用神，计算上半年标签。
     
     规则（§6.3）：
@@ -184,7 +206,7 @@ def calc_first_half_label(risk_from_gan: float, is_gan_yongshen: bool) -> str:
             return "坏运"
 
 
-def calc_second_half_label(risk_from_zhi: float, is_zhi_yongshen: bool) -> str:
+def _deleted_calc_second_half_label(risk_from_zhi: float, is_zhi_yongshen: bool) -> str:
     """根据流年地支风险和是否用神，计算下半年标签。
     
     规则（§6.4）：
@@ -213,7 +235,7 @@ def calc_second_half_label(risk_from_zhi: float, is_zhi_yongshen: bool) -> str:
             return "坏运"
 
 
-def calc_year_label(first_half_label: str, second_half_label: str) -> str:
+def _deleted_calc_year_label(first_half_label: str, second_half_label: str) -> str:
     """根据上半年和下半年标签，计算年度整体标签。
     
     规则（§6.5）：
@@ -229,7 +251,7 @@ def calc_year_label(first_half_label: str, second_half_label: str) -> str:
         return "一般/混合"
 
 
-def calc_year_label_old(total_risk_percent: float) -> str:
+def _deleted_calc_year_label_old(total_risk_percent: float) -> str:
     """根据全年 total_risk_percent 计算年度整体标签 year_label。
 
     仅影响 year_label，不改动 ledger / total / core 等内部计算：
@@ -560,18 +582,155 @@ def analyze_luck(
                 flow_label=gz_ln,
             )
 
-            # 大运支 与 流年支 之间的冲（不牵涉宫位，但要标清楚是什么十神在冲）
-            clashes_dayun: List[Dict[str, Any]] = []
+            # 大运支 与 流年支 之间的冲（需要计算风险）
+            clash_dayun_liunian = None
             if ZHI_CHONG.get(zhi_ln) == zhi_dy:
-                clashes_dayun.append(
-                    {
-                        "type": "dayun_liunian_branch_clash",
-                        "dayun_branch": zhi_dy,
-                        "liunian_branch": zhi_ln,
-                        "dayun_shishen": get_branch_shishen(bazi, zhi_dy),
-                        "liunian_shishen": get_branch_shishen(bazi, zhi_ln),
-                    }
-                )
+                # 运年相冲：基础风险为 10%（固定值，不涉及宫位）
+                base_risk = 10.0
+                
+                # 检查是否为墓库冲（辰戌、丑未）
+                from .clash import _is_grave_clash
+                is_grave_clash = _is_grave_clash(zhi_dy, zhi_ln)
+                grave_bonus = 0.0
+                if is_grave_clash:
+                    # 墓库加成：+5%
+                    grave_bonus = 5.0
+                
+                # 检测运年天克地冲（大运天干与流年天干互克，且地支互冲）
+                from .clash import _check_tian_ke_di_chong
+                tkdc_bonus = 0.0
+                is_tkdc = False
+                if _check_tian_ke_di_chong(gan_dy, zhi_dy, gan_ln, zhi_ln):
+                    # 运年天克地冲：在天克地冲的基础上额外+10%
+                    # 即：基础天克地冲+10%，运年天克地冲再+10%，总共+20%
+                    tkdc_bonus = 20.0  # 10%（天克地冲）+ 10%（运年天克地冲额外）
+                    is_tkdc = True
+                
+                total_risk = base_risk + grave_bonus + tkdc_bonus
+                
+                clash_dayun_liunian = {
+                    "type": "dayun_liunian_branch_clash",
+                    "role": "base",  # 标记为基础事件，用于线运计算
+                    "dayun_branch": zhi_dy,
+                    "liunian_branch": zhi_ln,
+                    "dayun_gan": gan_dy,
+                    "liunian_gan": gan_ln,
+                    "dayun_shishen": get_branch_shishen(bazi, zhi_dy),
+                    "liunian_shishen": get_branch_shishen(bazi, zhi_ln),
+                    "base_risk_percent": base_risk,
+                    "grave_bonus_percent": grave_bonus,
+                    "tkdc_bonus_percent": tkdc_bonus,
+                    "is_tian_ke_di_chong": is_tkdc,
+                    "risk_percent": total_risk,
+                    "flow_year": ln.getYear(),
+                    "flow_label": gz_ln,
+                    # 注意：运年相冲不涉及命局宫位，所以 targets 为空
+                    "targets": [],
+                }
+            
+            clashes_dayun: List[Dict[str, Any]] = [clash_dayun_liunian] if clash_dayun_liunian else []
+            
+            # ===== 静态冲/刑激活检测 =====
+            # 当流年与命局相冲/刑时，如果大运与命局之间也有静态冲/刑（且涉及相同的命局地支），则静态冲/刑被激活
+            static_clash_activation_risk = 0.0  # 静态冲的地支部分（base_power的一半）
+            static_tkdc_activation_risk_zhi = 0.0  # 静态天克地冲的地支部分（tkdc的一半）
+            static_tkdc_activation_risk_gan = 0.0  # 静态天克地冲的天干部分（天克的一半）
+            static_punish_activation_risk = 0.0
+            
+            # 检查静态冲激活：有两种触发方式
+            # 1. 流年地支与命局地支相冲，且大运与命局之间也有静态冲（涉及相同的命局地支）
+            # 2. 流年地支与大运地支相冲，且大运与命局之间也有静态冲（激活大运静态冲）
+            if clash_dy_natal:
+                should_activate_clash = False
+                
+                # 情况1：流年与命局相冲，且涉及相同的命局地支
+                if clash_ln_natal:
+                    clash_ln_target = clash_ln_natal.get("target_branch")
+                    clash_dy_target = clash_dy_natal.get("target_branch")
+                    if clash_ln_target == clash_dy_target:
+                        should_activate_clash = True
+                
+                # 情况2：流年与大运相冲，激活大运与命局之间的静态冲
+                if clash_dayun_liunian:
+                    should_activate_clash = True
+                
+                if should_activate_clash:
+                    # 静态冲被激活：每个被冲的柱都算一半
+                    # 根据用户说明：墓库冲的力量是15%每次（base_power 10% + grave_bonus 5%）
+                    # 如果有两个柱，就是两次，激活时每个算一半，所以是 15% * 0.5 * 2 = 15%
+                    targets = clash_dy_natal.get("targets", [])
+                    base_power_percent = clash_dy_natal.get("base_power_percent", 0.0)
+                    grave_bonus_percent = clash_dy_natal.get("grave_bonus_percent", 0.0)
+                    
+                    # 计算每个柱的完整风险（base_power + grave_bonus）
+                    # base_power_percent 是所有柱的权重累加，需要按柱数分配
+                    if len(targets) > 0:
+                        # 每个柱的base_power（平均分配）
+                        pillar_base_power = base_power_percent / len(targets)
+                        # 每个柱的完整风险 = base_power + grave_bonus
+                        pillar_full_risk = pillar_base_power + grave_bonus_percent
+                        # 每个柱的激活风险 = 完整风险的一半
+                        for target in targets:
+                            static_clash_activation_risk += pillar_full_risk * 0.5
+                    
+                    # 静态天克地冲：如果大运静态冲有天克地冲，则静态天克地冲也被激活
+                    static_tkdc_bonus = clash_dy_natal.get("tkdc_bonus_percent", 0.0)
+                    if static_tkdc_bonus > 0.0:
+                        static_tkdc_activation_risk_total = static_tkdc_bonus * 0.5
+                        static_tkdc_activation_risk_zhi = static_tkdc_activation_risk_total
+            
+            # 检查静态刑激活：有三种触发方式
+            # 1. 流年地支与命局地支相刑，且大运与命局之间也有静态刑（涉及相同的命局地支）
+            # 2. 流年地支与大运地支相刑，且大运与命局之间也有静态刑（激活大运静态刑）
+            # 3. 流年地支与命局地支相刑，且原局内部也有静态刑（激活原局内部静态刑）
+            
+            # 检测原局内部的静态刑
+            from .punishment import detect_natal_clashes_and_punishments
+            natal_static = detect_natal_clashes_and_punishments(bazi)
+            natal_punishments = natal_static.get("punishments", [])
+            
+            should_activate_punish = False
+            activated_punish_evs = []
+            
+            # 情况1：流年与命局相刑，且大运与命局之间也有静态刑（涉及相同的命局地支）
+            if punishments_dy_filtered and punishments_ln:
+                ln_punish_targets = {ev.get("target_branch") for ev in punishments_ln}
+                for punish_ev in punishments_dy_filtered:
+                    dy_punish_target = punish_ev.get("target_branch")
+                    if dy_punish_target in ln_punish_targets:
+                        should_activate_punish = True
+                        activated_punish_evs.append(punish_ev)
+            
+            # 情况2：流年与大运相刑，激活大运与命局之间的静态刑
+            if punishments_dy_filtered:
+                from .punishment import _get_punish_targets
+                liunian_punish_targets = _get_punish_targets(zhi_ln)
+                if zhi_dy in liunian_punish_targets:
+                    should_activate_punish = True
+                    # 激活所有大运静态刑
+                    for punish_ev in punishments_dy_filtered:
+                        if punish_ev not in activated_punish_evs:
+                            activated_punish_evs.append(punish_ev)
+            
+            # 情况3：流年与命局相刑，且原局内部也有静态刑（激活原局内部静态刑）
+            if punishments_ln and natal_punishments:
+                # 检查流年刑是否与原局内部刑相同
+                ln_punish_pairs = {(ev.get("flow_branch"), ev.get("target_branch")) for ev in punishments_ln}
+                for natal_punish_ev in natal_punishments:
+                    # 原局内部刑的格式：flow_branch 和 target_branch 是原局的两个柱
+                    natal_flow = natal_punish_ev.get("flow_branch")
+                    natal_target = natal_punish_ev.get("target_branch")
+                    # 检查是否与流年刑相同（流年地支与原局内部刑的其中一个地支相同）
+                    if (zhi_ln == natal_flow and natal_target in {ev.get("target_branch") for ev in punishments_ln}) or \
+                       (zhi_ln == natal_target and natal_flow in {ev.get("target_branch") for ev in punishments_ln}):
+                        should_activate_punish = True
+                        activated_punish_evs.append(natal_punish_ev)
+            
+            if should_activate_punish:
+                # 静态刑被激活，风险为原风险的一半
+                for punish_ev in activated_punish_evs:
+                    static_punish_risk = punish_ev.get("risk_percent", 0.0) * 0.5
+                    static_punish_activation_risk += static_punish_risk
 
             # 流年支与原局的六合/三合（只解释，不计分）
             harmonies_ln = detect_flow_harmonies(
@@ -642,6 +801,9 @@ def analyze_luck(
             base_events: List[Dict[str, Any]] = []
             if clash_ln_natal:
                 base_events.append(clash_ln_natal)
+            # 运年相冲也是基础事件
+            if clash_dayun_liunian:
+                base_events.append(clash_dayun_liunian)
             # 刑事件也是基础事件
             for punish_ev in punishments_ln:
                 # 过滤掉既冲又刑的情况（按规则只算冲）
@@ -751,19 +913,9 @@ def analyze_luck(
                                 if dayun_pair not in activated_dayun_zhi_pairs:
                                     activated_dayun_zhi_pairs.append(dayun_pair)
                 
-                # 计算静态激活风险
+                # 计算静态激活风险（只加10%，不管是否涉及月支）
                 static_risk_gan = PATTERN_GAN_RISK_STATIC * (len(activated_natal_gan_pairs) + len(activated_dayun_gan_pairs))
-                
-                static_risk_zhi = 0.0
-                for pair in activated_natal_zhi_pairs + activated_dayun_zhi_pairs:
-                    # 检查是否涉及命局月支
-                    pos1 = pair.get("pos1", {})
-                    pos2 = pair.get("pos2", {})
-                    if ((pos1.get("source") == "natal" and pos1.get("pillar") == "month" and pos1.get("kind") == "zhi") or
-                        (pos2.get("source") == "natal" and pos2.get("pillar") == "month" and pos2.get("kind") == "zhi")):
-                        static_risk_zhi += 25.0
-                    else:
-                        static_risk_zhi += PATTERN_ZHI_RISK_STATIC
+                static_risk_zhi = PATTERN_ZHI_RISK_STATIC * (len(activated_natal_zhi_pairs) + len(activated_dayun_zhi_pairs))
                 
                 # 如果有激活的静态模式，生成汇总事件
                 if static_risk_gan > 0.0 or static_risk_zhi > 0.0:
@@ -783,61 +935,53 @@ def analyze_luck(
                         "flow_label": gz_ln,
                     })
 
-            # 计算线运加成（§11.3：天干侧和地支侧分开计算）
-            lineyun_event = _compute_lineyun_bonus(ln.getAge(), base_events)
+            # 计算线运加成（§11.3：天干侧和地支侧分开计算，考虑静态影响）
+            lineyun_event = _compute_lineyun_bonus(ln.getAge(), base_events, static_activation_events)
             lineyun_bonus = lineyun_event.get("risk_percent", 0.0) if lineyun_event else 0.0
             lineyun_bonus_gan = lineyun_event.get("lineyun_bonus_gan", 0.0) if lineyun_event else 0.0
             lineyun_bonus_zhi = lineyun_event.get("lineyun_bonus_zhi", 0.0) if lineyun_event else 0.0
 
-            # ===== §6.1 风险拆分：天干算天干的，地支算地支的 =====
-            # risk_from_zhi：流年地支引起的风险
-            risk_from_zhi = 0.0
+            # ===== 计算年度总风险 =====
+            # 直接累加所有事件的风险（不拆分天干地支）
+            total_risk_percent = 0.0
+            
+            # 冲的风险
             if clash_ln_natal:
-                # 冲的风险全部计入 risk_from_zhi（包括基础冲、墓库加成、天克地冲、模式重叠+10%等）
-                risk_from_zhi += clash_ln_natal.get("risk_percent", 0.0)
-            # 刑的风险全部计入 risk_from_zhi
+                total_risk_percent += clash_ln_natal.get("risk_percent", 0.0)
+            # 运年相冲的风险
+            if clash_dayun_liunian:
+                total_risk_percent += clash_dayun_liunian.get("risk_percent", 0.0)
+            # 静态冲激活风险
+            total_risk_percent += static_clash_activation_risk
+            # 静态天克地冲风险
+            total_risk_percent += static_tkdc_activation_risk_zhi + static_tkdc_activation_risk_gan
+            # 静态刑激活风险
+            total_risk_percent += static_punish_activation_risk
+            # 刑的风险
             for punish_ev in punishments_ln:
                 # 过滤掉既冲又刑的情况
                 if clash_ln_natal:
                     clash_target = clash_ln_natal.get("target_branch")
                     if punish_ev.get("target_branch") == clash_target:
                         continue
-                risk_from_zhi += punish_ev.get("risk_percent", 0.0)
-            # 地支层模式风险计入 risk_from_zhi（不包括与冲重叠的，因为已经加到冲上了）
+                total_risk_percent += punish_ev.get("risk_percent", 0.0)
+            # 模式风险
             for pat_ev in pattern_events_filtered:
-                if pat_ev.get("kind") == "zhi":
-                    risk_from_zhi += pat_ev.get("risk_percent", 0.0)
-            # 线运加成（地支侧）：加到 risk_from_zhi
-            risk_from_zhi += lineyun_bonus_zhi
-
-            # risk_from_gan：流年天干引起的风险
-            risk_from_gan = 0.0
-            # 天干层模式风险计入 risk_from_gan
-            for pat_ev in pattern_events_filtered:
-                if pat_ev.get("kind") == "gan":
-                    risk_from_gan += pat_ev.get("risk_percent", 0.0)
-            
-            # 静态模式激活风险（§9.5）
+                total_risk_percent += pat_ev.get("risk_percent", 0.0)
+            # 静态模式激活风险
             for static_ev in static_activation_events:
-                risk_from_gan += static_ev.get("risk_from_gan", 0.0)
-                risk_from_zhi += static_ev.get("risk_from_zhi", 0.0)
-            
-            # 线运加成（天干侧）：加到 risk_from_gan
-            risk_from_gan += lineyun_bonus_gan
-
-            # 年度总风险 = risk_from_gan + risk_from_zhi（不封顶，可>100）
-            total_risk_percent = risk_from_gan + risk_from_zhi
-
-            # ===== §6.3-6.5 计算上半年/下半年/年度标签 =====
-            first_half_label = calc_first_half_label(risk_from_gan, gan_good_ln)
-            second_half_label = calc_second_half_label(risk_from_zhi, zhi_good_ln)
-            year_label = calc_year_label(first_half_label, second_half_label)
+                total_risk_percent += static_ev.get("risk_percent", 0.0)
+            # 线运加成
+            total_risk_percent += lineyun_bonus
             
             # ===== §4.4 流年好运判断（简单规则：用神+风险≤15%） =====
             # 如果天干或地支的五行中至少有一个落在用神列表中，且 total_risk_percent ≤ 15，则标记为"好运"
             is_good_ln = False
             if (gan_good_ln or zhi_good_ln) and total_risk_percent <= 15.0:
                 is_good_ln = True
+            
+            # 删除不再使用的标签计算函数调用
+            # first_half_label, second_half_label, year_label 已删除
 
             # 构建年度事件列表
             all_events: List[Dict[str, Any]] = []
@@ -854,6 +998,25 @@ def analyze_luck(
             all_events.extend(pattern_events_filtered)
             # 添加静态模式激活事件
             all_events.extend(static_activation_events)
+            # 添加静态冲/刑激活事件（如果有）
+            if static_clash_activation_risk > 0.0:
+                all_events.append({
+                    "type": "static_clash_activation",
+                    "role": "base",
+                    "risk_percent": static_clash_activation_risk,
+                    "flow_year": ln.getYear(),
+                    "flow_label": gz_ln,
+                    "source": "dayun_natal_clash",
+                })
+            if static_punish_activation_risk > 0.0:
+                all_events.append({
+                    "type": "static_punish_activation",
+                    "role": "base",
+                    "risk_percent": static_punish_activation_risk,
+                    "flow_year": ln.getYear(),
+                    "flow_label": gz_ln,
+                    "source": "dayun_natal_punish",
+                })
             if lineyun_event:
                 all_events.append(lineyun_event)
 
@@ -867,11 +1030,6 @@ def analyze_luck(
                 "first_half_good": first_half_good,  # 保留兼容字段（是否用神）
                 "second_half_good": second_half_good,  # 保留兼容字段（是否用神）
                 "is_good": is_good_ln,  # §4.4 流年好运判断（用神+风险≤15%）
-                "risk_from_gan": risk_from_gan,  # §6.1 天干引起的风险
-                "risk_from_zhi": risk_from_zhi,  # §6.1 地支引起的风险
-                "first_half_label": first_half_label,  # §6.3 上半年标签（好运/一般/坏运等）
-                "second_half_label": second_half_label,  # §6.4 下半年标签（好运/一般/坏运等）
-                "year_label": year_label,  # §6.5 年度整体标签（好运/坏运/一般/混合）
                 "clashes_natal": [clash_ln_natal] if clash_ln_natal else [],
                 "clashes_dayun": clashes_dayun,
                 "punishments_natal": punishments_ln,  # 流年支 与 命局地支 的刑
