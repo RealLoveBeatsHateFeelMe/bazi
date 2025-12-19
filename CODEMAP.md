@@ -76,7 +76,7 @@
     - 构造命盘 `bazi`：
       - `year/month/day/hour` 各自有 `{"gan": ..., "zhi": ...}`。
     - 调用 `ec.getYun(1 if is_male else 0)` 获取大运起运信息与各步大运 `DaYun` 对象。
-    - 对每步大运构造 `DayunLuck` dataclass → `dayun_dict`。
+      - 对每步大运构造 `DayunLuck` dataclass → `dayun_dict`。
     - 对每步大运下的十个流年：
       - 生成 `liunian_list`，每个元素包含年份、虚龄、干支、用神标记、冲事件、线运加成、六合/三合等字段。
     - 返回结构：`{"groups": [{"dayun": dayun_dict, "liunian": liunian_list}, ...]}`。

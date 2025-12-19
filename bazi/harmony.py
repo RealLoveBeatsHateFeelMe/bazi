@@ -63,7 +63,7 @@ def detect_natal_harmonies(bazi: Dict[str, Dict[str, str]]) -> List[Dict[str, An
         "targets": [
           {
             "pillar": "year",
-            "palace": "根基宫",
+                        "palace": "祖上宫",
             "target_branch": "申",
             "position_weight": 0.10,
             "branch_gan": "庚",  # 可选
@@ -262,7 +262,7 @@ def detect_flow_harmonies(
         "targets": [
           {
             "pillar": "year",
-            "palace": "根基宫",
+                        "palace": "祖上宫",
             "target_branch": "申",
             "position_weight": 0.10,
             "branch_gan": "庚",

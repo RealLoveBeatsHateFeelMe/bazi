@@ -259,7 +259,7 @@ def analyze_basic(birth_dt: datetime) -> Dict[str, Any]:
 
     # 保存基础用神（原始计算出的）
     base_yongshen_elements = yongshen_elements.copy()
-
+    
     strength_percent = strength["strength_percent"]
     guansha_percent = shishen_cat.get("官杀", 0.0)
 

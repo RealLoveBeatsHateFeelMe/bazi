@@ -143,7 +143,7 @@ ZHI_CHONG: Dict[str, str] = {
 
 # 宫位映射：每一柱对应哪个"宫"
 PILLAR_PALACE: Dict[str, str] = {
-    "year":  "根基宫（家庭出身、早年环境）",
+    "year":  "祖上宫（家庭出身、早年环境）",
     "month": "婚姻宫",
     "day":   "夫妻宫",
     "hour":  "事业家庭宫（工作 / 子女 / 后期家庭）",
@@ -151,7 +151,7 @@ PILLAR_PALACE: Dict[str, str] = {
 
 # 宫位中文名称（用于显示）
 PILLAR_PALACE_CN: Dict[str, str] = {
-    "year":  "根基宫",
+    "year":  "祖上宫",
     "month": "婚姻宫",
     "day":   "夫妻宫",
     "hour":  "事业家庭宫",

@@ -147,29 +147,29 @@ def detect_branch_punishments(
                 "branch_shishen": tg["shishen"] if tg else None,
             }]
 
-            # 流年 / 大运这一边的十神
+        # 流年 / 大运这一边的十神
             flow_tg = get_branch_shishen(bazi, flow_branch)
             target_tg = get_branch_shishen(bazi, target_branch)
 
-            events.append(
-                {
-                    "type": "punishment",
-                    "flow_type": flow_type,
-                    "flow_year": flow_year,
-                    "flow_label": flow_label,
-                    "flow_branch": flow_branch,
-                    "target_branch": target_branch,
-                    "role": "punisher",
-                    "base_power_percent": base_power_percent,
-                    "risk_percent": risk_percent,
-                    "is_grave": is_grave,
-                    "targets": targets,
+        events.append(
+            {
+                "type": "punishment",
+                "flow_type": flow_type,
+                "flow_year": flow_year,
+                "flow_label": flow_label,
+                "flow_branch": flow_branch,
+                "target_branch": target_branch,
+                "role": "punisher",
+                "base_power_percent": base_power_percent,
+                "risk_percent": risk_percent,
+                "is_grave": is_grave,
+                "targets": targets,
                     "shishens": {
-                        "flow_branch": flow_tg,
-                        "target_branch": target_tg,
-                    },
-                }
-            )
+                    "flow_branch": flow_tg,
+                    "target_branch": target_tg,
+                },
+            }
+        )
 
     return events
 
@@ -205,6 +205,9 @@ def detect_natal_clashes_and_punishments(
                     clashes.append(clash_ev)
 
     # 检测命局内部的刑
+    # 对于自刑（如酉酉），只检测一次，避免重复计算
+    self_punish_processed = set()  # 记录已处理的自刑地支
+    
     for i, pillar1 in enumerate(pillars):
         for pillar2 in pillars[i + 1 :]:
             zhi1 = bazi[pillar1]["zhi"]
@@ -219,6 +222,14 @@ def detect_natal_clashes_and_punishments(
                 # 判断刑的类型
                 is_grave = _is_grave_punishment(zhi1, zhi2)
                 is_self = (zhi1, zhi2) in SELF_PUNISH_PAIRS
+                
+                # 对于自刑，如果已经处理过这个地支，跳过（只检测第一次出现的自刑）
+                if is_self:
+                    if zhi1 in self_punish_processed:
+                        continue
+                    self_punish_processed.add(zhi1)
+                    # 同时标记zhi2，因为自刑是双向的（酉酉自刑，无论是年-月还是月-年，都只算一次）
+                    self_punish_processed.add(zhi2)
                 
                 if is_grave:
                     risk_percent = PUNISHMENT_GRAVE_RISK  # 6%

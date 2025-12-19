@@ -136,16 +136,16 @@ def detect_natal_patterns(bazi: Dict[str, Dict[str, str]], day_gan: str) -> List
     """检测命局静态模式（§5.3.1）。
     
     返回模式列表，每个模式包含：
-    {
+      {
         "pattern_type": "hurt_officer" | "pianyin_eatgod",
         "layer": "natal",
         "pairs": [
             {
                 "pos1": {"source": "natal", "pillar": "year", "kind": "gan", "char": "甲", "shishen": "伤官"},
                 "pos2": {"source": "natal", "pillar": "month", "kind": "gan", "char": "辛", "shishen": "正官"},
-            },
-            ...
-        ]
+      },
+      ...
+    ]
     }
     """
     gan_positions, zhi_positions = _collect_positions(bazi, day_gan)
@@ -234,7 +234,7 @@ def detect_dayun_patterns(
                 if pattern_type not in patterns:
                     patterns[pattern_type] = {
                         "pattern_type": pattern_type,
-                        "layer": "dayun",
+        "layer": "dayun",
                         "pairs": [],
                     }
                 patterns[pattern_type]["pairs"].append({

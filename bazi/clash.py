@@ -183,14 +183,26 @@ def detect_branch_clash(
             target_gan = bazi[target_pillar]["gan"]
             
             if _check_tian_ke_di_chong(flow_gan, flow_branch, target_gan, target_branch):
-                # 每个满足天克地冲的柱都加一次 +10%（累加）
-                tkdc_bonus_percent += TIAN_KE_DI_CHONG_EXTRA_RISK
+                # 记录天克地冲（用于标注）
                 tkdc_targets.append({
                     "pillar": target_pillar,
                     "palace": target.get("palace"),
                     "target_gan": target_gan,
                     "flow_gan": flow_gan,
                 })
+                # 天克地冲的力量加成规则：
+                # - 年柱：不加成（0%）
+                # - 日柱：额外加10% + 10% = 20%（基础10% + 日柱额外10%）
+                # - 其他柱（月柱、时柱）：正常加10%
+                if target_pillar == "year":
+                    # 年柱不加成
+                    pass
+                elif target_pillar == "day":
+                    # 日柱额外加10% + 10% = 20%
+                    tkdc_bonus_percent += TIAN_KE_DI_CHONG_EXTRA_RISK * 2
+                else:
+                    # 月柱、时柱正常加10%
+                    tkdc_bonus_percent += TIAN_KE_DI_CHONG_EXTRA_RISK
     
     extra_bonus_percent = grave_bonus_percent + tkdc_bonus_percent
 
@@ -213,6 +225,7 @@ def detect_branch_clash(
         "flow_year": flow_year,
         "flow_label": flow_label,
         "flow_branch": flow_branch,
+        "flow_gan": flow_gan,  # 添加flow_gan字段，用于打印天克地冲
         "target_branch": target_branch,
 
         "base_power": base_power,
@@ -239,3 +252,68 @@ def detect_branch_clash(
         result["tkdc_targets"] = tkdc_targets
     
     return result
+
+
+def detect_natal_tian_ke_di_chong(bazi: Dict[str, Dict[str, str]]) -> List[Dict[str, Any]]:
+    """检测原局内部的天克地冲。
+    
+    返回事件列表：
+    [
+      {
+        "type": "natal_tian_ke_di_chong",
+        "pillar1": "year",
+        "pillar2": "month",
+        "gan1": "甲",
+        "zhi1": "子",
+        "gan2": "庚",
+        "zhi2": "午",
+        "palace1": "祖上宫（家庭出身、早年环境）",
+        "palace2": "婚姻宫",
+        "risk_percent": 10.0,  # 天克地冲固定10%
+      },
+      ...
+    ]
+    """
+    from .config import PILLAR_PALACE, GAN_WUXING, KE_MAP
+    
+    events = []
+    pillars = ["year", "month", "day", "hour"]
+    
+    for i, pillar1 in enumerate(pillars):
+        for pillar2 in pillars[i + 1:]:
+            gan1 = bazi[pillar1]["gan"]
+            zhi1 = bazi[pillar1]["zhi"]
+            gan2 = bazi[pillar2]["gan"]
+            zhi2 = bazi[pillar2]["zhi"]
+            
+            # 检查地支是否互冲
+            clash_target = ZHI_CHONG.get(zhi1)
+            if clash_target != zhi2:
+                continue
+            
+            # 检查天干是否互克
+            gan1_element = GAN_WUXING.get(gan1)
+            gan2_element = GAN_WUXING.get(gan2)
+            
+            if not gan1_element or not gan2_element:
+                continue
+            
+            # 检查是否互克：KE_MAP[e1] == e2 或 KE_MAP[e2] == e1
+            is_ke = (KE_MAP.get(gan1_element) == gan2_element or 
+                     KE_MAP.get(gan2_element) == gan1_element)
+            
+            if is_ke:
+                events.append({
+                    "type": "natal_tian_ke_di_chong",
+                    "pillar1": pillar1,
+                    "pillar2": pillar2,
+                    "gan1": gan1,
+                    "zhi1": zhi1,
+                    "gan2": gan2,
+                    "zhi2": zhi2,
+                    "palace1": PILLAR_PALACE.get(pillar1, ""),
+                    "palace2": PILLAR_PALACE.get(pillar2, ""),
+                    "risk_percent": 10.0,  # 天克地冲固定10%
+                })
+    
+    return events
