@@ -130,6 +130,10 @@ def detect_branch_punishments(
         else:
             risk_percent = PUNISHMENT_NORMAL_RISK  # 5%
 
+        # 流年 / 大运这一边的十神（在循环外计算，因为对所有柱都一样）
+        flow_tg = get_branch_shishen(bazi, flow_branch)
+        target_tg = get_branch_shishen(bazi, target_branch)
+
         # 为命局中每个被刑的柱生成一个独立的刑事件
         for pillar in target_pillars:
             key = f"{pillar}_zhi"
@@ -147,29 +151,25 @@ def detect_branch_punishments(
                 "branch_shishen": tg["shishen"] if tg else None,
             }]
 
-        # 流年 / 大运这一边的十神
-            flow_tg = get_branch_shishen(bazi, flow_branch)
-            target_tg = get_branch_shishen(bazi, target_branch)
-
-        events.append(
-            {
-                "type": "punishment",
-                "flow_type": flow_type,
-                "flow_year": flow_year,
-                "flow_label": flow_label,
-                "flow_branch": flow_branch,
-                "target_branch": target_branch,
-                "role": "punisher",
-                "base_power_percent": base_power_percent,
-                "risk_percent": risk_percent,
-                "is_grave": is_grave,
-                "targets": targets,
+            events.append(
+                {
+                    "type": "punishment",
+                    "flow_type": flow_type,
+                    "flow_year": flow_year,
+                    "flow_label": flow_label,
+                    "flow_branch": flow_branch,
+                    "target_branch": target_branch,
+                    "role": "punisher",
+                    "base_power_percent": base_power_percent,
+                    "risk_percent": risk_percent,
+                    "is_grave": is_grave,
+                    "targets": targets,
                     "shishens": {
-                    "flow_branch": flow_tg,
-                    "target_branch": target_tg,
-                },
-            }
-        )
+                        "flow_branch": flow_tg,
+                        "target_branch": target_tg,
+                    },
+                }
+            )
 
     return events
 
