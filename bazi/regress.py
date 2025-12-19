@@ -256,10 +256,45 @@ def test_harmonies_2005_09_20():
     """合类事件回归：2005-09-20 10:00 男，检查 2024/2025/2026 的合类事件。"""
     dt = datetime(2005, 9, 20, 10, 0)
     basic = analyze_basic(dt)
+    bazi = basic["bazi"]
     yongshen_elements = basic.get("yongshen_elements", [])
-    
+
+    # 原局半合：应有两条巳酉半合（金局），分别命中 祖上宫-事业家庭宫、婚姻宫-事业家庭宫
+    natal_harmonies = basic.get("natal_harmonies", [])
+    si_you_banhe_natal = [
+        h for h in natal_harmonies
+        if h.get("subtype") == "banhe"
+        and "巳" in h.get("matched_branches", [])
+        and "酉" in h.get("matched_branches", [])
+    ]
+    assert len(si_you_banhe_natal) == 2, f"原局应有两条巳酉半合，但实际为 {len(si_you_banhe_natal)} 条"
+    natal_pairs = {tuple(sorted(t.get("pillar") for t in h.get("targets", []))) for h in si_you_banhe_natal}
+    # 巳在事业家庭宫（hour），酉在祖上宫/婚姻宫 → 期望两条：(hour, year)、(hour, month)
+    assert natal_pairs == {("hour", "year"), ("hour", "month")}, f"原局巳酉半合应命中 祖上宫-事业家庭宫 和 婚姻宫-事业家庭宫，实际 {natal_pairs}"
+
     luck = analyze_luck(dt, is_male=True, yongshen_elements=yongshen_elements)
-    
+
+    # 大运 5（index=4，辛巳大运）：应有两条巳酉半合（金局），分别与祖上宫、婚姻宫半合
+    dayun_5 = None
+    for group in luck.get("groups", []):
+        dy = group.get("dayun", {})
+        if dy.get("index") == 4 or (dy.get("gan") == "辛" and dy.get("zhi") == "巳"):
+            dayun_5 = dy
+            break
+    assert dayun_5 is not None, "应找到第 5 步辛巳大运"
+    harmonies_dy = dayun_5.get("harmonies_natal", [])
+    dy_banhe = [
+        h for h in harmonies_dy
+        if h.get("subtype") == "banhe"
+        and "巳" in h.get("matched_branches", [])
+        and "酉" in h.get("matched_branches", [])
+    ]
+    assert len(dy_banhe) == 2, f"第 5 步辛巳大运应有 2 条巳酉半合，但实际为 {len(dy_banhe)} 条"
+    for h in dy_banhe:
+        assert h.get("risk_percent", 0.0) == 0.0, "合类事件 risk_percent 应为 0"
+    dy_pillars = {t.get("pillar") for h in dy_banhe for t in h.get("targets", [])}
+    assert "year" in dy_pillars and "month" in dy_pillars, f"辛巳大运巳酉半合应命中祖上宫和婚姻宫，实际命中 {dy_pillars}"
+
     # 查找 2024/2025/2026 的流年
     found_2024 = False
     found_2025 = False
@@ -285,14 +320,18 @@ def test_harmonies_2005_09_20():
             elif year == 2025:
                 found_2025 = True
                 harmonies = liunian.get("harmonies_natal", [])
-                # 2025：巳酉半合（banhe，金局/巳酉丑），命中 年柱=祖上宫、月柱=婚姻宫
-                si_you_banhe = None
-                for h in harmonies:
-                    if h.get("subtype") == "banhe" and "巳" in h.get("matched_branches", []) and "酉" in h.get("matched_branches", []):
-                        si_you_banhe = h
-                        break
-                assert si_you_banhe is not None, "2025 年应检测到巳酉半合"
-                assert si_you_banhe.get("risk_percent") == 0.0, "合类事件 risk_percent 应为 0"
+                # 2025：巳酉半合（banhe，金局/巳酉丑），流年巳分别与原局年柱/月柱的酉半合
+                si_you_banhe_list = [
+                    h for h in harmonies
+                    if h.get("subtype") == "banhe"
+                    and "巳" in h.get("matched_branches", [])
+                    and "酉" in h.get("matched_branches", [])
+                ]
+                assert len(si_you_banhe_list) == 2, f"2025 年应检测到 2 条巳酉半合，但实际为 {len(si_you_banhe_list)} 条"
+                for h in si_you_banhe_list:
+                    assert h.get("risk_percent") == 0.0, "合类事件 risk_percent 应为 0"
+                pillars_2025 = {t.get("pillar") for h in si_you_banhe_list for t in h.get("targets", [])}
+                assert "year" in pillars_2025 and "month" in pillars_2025, f"2025 巳酉半合应命中祖上宫和婚姻宫，实际命中 {pillars_2025}"
             elif year == 2026:
                 found_2026 = True
                 harmonies = liunian.get("harmonies_natal", [])
@@ -565,7 +604,7 @@ def test_golden_case_B_2021():
     _assert_close(pattern_static_risk, 10.0, tol=0.5)
     _assert_close(static_punish_risk, 6.0, tol=0.5)
     _assert_close(risk_from_gan, 0.0, tol=0.5)
-    _assert_close(risk_from_zhi, 37.0, tol=1.0)  # 实际值
+    _assert_close(risk_from_zhi, 43.0, tol=1.0)  # 实际值（全部来自地支）
     _assert_close(tkdc_risk, 0.0, tol=0.5)  # 无天克地冲
     print("[PASS] 例B 2021年回归测试通过")
 

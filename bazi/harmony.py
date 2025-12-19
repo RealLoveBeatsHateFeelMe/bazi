@@ -123,12 +123,14 @@ def detect_natal_harmonies(bazi: Dict[str, Dict[str, str]]) -> List[Dict[str, An
 
     # 2. 检测三合局（完整三合 + 半合）
     seen_sanhe: set = set()
-    for zhi, group in ZHI_SANHE.items():
+    for _, group in ZHI_SANHE.items():
+        # group 形如 ["申", "子", "辰"]，中间一支 = group[1]
         group_key = tuple(sorted(group))
         if group_key in seen_sanhe:
             continue
         seen_sanhe.add(group_key)
 
+        # 找出命局中属于该三合局的所有柱位（允许同一支重复出现在多宫位）
         found_pillars: List[str] = []
         found_branches: List[str] = []
         for pillar in pillars:
@@ -137,9 +139,9 @@ def detect_natal_harmonies(bazi: Dict[str, Dict[str, str]]) -> List[Dict[str, An
                 found_pillars.append(pillar)
                 found_branches.append(natal_zhi)
 
-        if len(found_branches) == 3:
-            # 完整三合局
-            element = SANHE_ELEMENT_MAP.get(found_branches[0])
+        # 2.1 完整三合局：三个不同地支都出现
+        if len(set(found_branches)) == 3:
+            element = SANHE_ELEMENT_MAP.get(group[0])
             targets = []
             for p, z in zip(found_pillars, found_branches):
                 shishen_info = get_branch_shishen(bazi, z)
@@ -158,37 +160,79 @@ def detect_natal_harmonies(bazi: Dict[str, Dict[str, str]]) -> List[Dict[str, An
                 "role": "explain",
                 "risk_percent": 0.0,
                 "flow_type": "natal",
-                "group": f"{element}局",
+                "group": f"{element}局" if element else "",
                 "members": group,
                 "matched_branches": found_branches,
                 "targets": targets,
             })
-        elif len(found_branches) == 2:
-            # 半合（同一三合局齐两支）
-            element = SANHE_ELEMENT_MAP.get(found_branches[0])
-            targets = []
-            for p, z in zip(found_pillars, found_branches):
-                shishen_info = get_branch_shishen(bazi, z)
-                targets.append({
-                    "pillar": p,
-                    "palace": PILLAR_PALACE_CN.get(p, ""),
-                    "target_branch": z,
-                    "position_weight": _get_position_weight(p, "zhi"),
-                    "branch_gan": bazi[p].get("gan"),
-                    "branch_shishen": shishen_info,
-                })
+        # 2.2 半合：只认“前两支”或“后两支”，并且必须包含中间那一支
+        center = group[1]
+        edge_left = group[0]
+        edge_right = group[2]
+        element = SANHE_ELEMENT_MAP.get(center)
 
-            events.append({
-                "type": "branch_harmony",
-                "subtype": "banhe",
-                "role": "explain",
-                "risk_percent": 0.0,
-                "flow_type": "natal",
-                "group": f"{element}局",
-                "members": group,
-                "matched_branches": found_branches,
-                "targets": targets,
-            })
+        # 统计每个地支出现在哪些柱位
+        zhi_to_pillars: Dict[str, List[str]] = {}
+        for p, z in zip(found_pillars, found_branches):
+            zhi_to_pillars.setdefault(z, []).append(p)
+
+        # 左半合（edge_left + center）
+        if edge_left in zhi_to_pillars and center in zhi_to_pillars:
+            for p1 in zhi_to_pillars[edge_left]:
+                for p2 in zhi_to_pillars[center]:
+                    if p1 == p2:
+                        continue
+                    targets = []
+                    for p, z in ((p1, edge_left), (p2, center)):
+                        shishen_info = get_branch_shishen(bazi, z)
+                        targets.append({
+                            "pillar": p,
+                            "palace": PILLAR_PALACE_CN.get(p, ""),
+                            "target_branch": z,
+                            "position_weight": _get_position_weight(p, "zhi"),
+                            "branch_gan": bazi[p].get("gan"),
+                            "branch_shishen": shishen_info,
+                        })
+                    events.append({
+                        "type": "branch_harmony",
+                        "subtype": "banhe",
+                        "role": "explain",
+                        "risk_percent": 0.0,
+                        "flow_type": "natal",
+                        "group": f"{element}局" if element else "",
+                        "members": group,
+                        "matched_branches": [edge_left, center],
+                        "targets": targets,
+                    })
+
+        # 右半合（center + edge_right）
+        if center in zhi_to_pillars and edge_right in zhi_to_pillars:
+            for p1 in zhi_to_pillars[center]:
+                for p2 in zhi_to_pillars[edge_right]:
+                    if p1 == p2:
+                        continue
+                    targets = []
+                    for p, z in ((p1, center), (p2, edge_right)):
+                        shishen_info = get_branch_shishen(bazi, z)
+                        targets.append({
+                            "pillar": p,
+                            "palace": PILLAR_PALACE_CN.get(p, ""),
+                            "target_branch": z,
+                            "position_weight": _get_position_weight(p, "zhi"),
+                            "branch_gan": bazi[p].get("gan"),
+                            "branch_shishen": shishen_info,
+                        })
+                    events.append({
+                        "type": "branch_harmony",
+                        "subtype": "banhe",
+                        "role": "explain",
+                        "risk_percent": 0.0,
+                        "flow_type": "natal",
+                        "group": f"{element}局" if element else "",
+                        "members": group,
+                        "matched_branches": [center, edge_right],
+                        "targets": targets,
+                    })
 
     # 3. 检测三会（只检测完整三会，三支齐）
     seen_sanhui: set = set()
@@ -310,19 +354,17 @@ def detect_flow_harmonies(
     # 2. 检测三合局（完整三合 + 半合）
     flow_group = ZHI_SANHE.get(flow_branch)
     if flow_group:
-        # 收集命局中属于该三合局的地支（去重，因为可能同一地支出现在多个柱）
+        # 收集命局中属于该三合局的地支（允许同一支出现在多个宫位）
         found_pillars_by_zhi: Dict[str, List[str]] = {}  # zhi -> [pillars]
         for pillar in pillars:
             natal_zhi = branches[pillar]
             if natal_zhi in flow_group and natal_zhi != flow_branch:
-                if natal_zhi not in found_pillars_by_zhi:
-                    found_pillars_by_zhi[natal_zhi] = []
-                found_pillars_by_zhi[natal_zhi].append(pillar)
+                found_pillars_by_zhi.setdefault(natal_zhi, []).append(pillar)
 
         unique_branches = list(found_pillars_by_zhi.keys())
         
+        # 2.1 完整三合：流年/大运支 + 命局两个不同地支
         if len(unique_branches) == 2:
-            # 流年/大运 + 命局两个不同地支 = 完整三合局
             element = SANHE_ELEMENT_MAP.get(flow_branch)
             all_branches = [flow_branch] + unique_branches
             targets = []
@@ -348,42 +390,64 @@ def detect_flow_harmonies(
                 "flow_year": flow_year,
                 "flow_label": flow_label,
                 "flow_branch": flow_branch,
-                "group": f"{element}局",
+                "group": f"{element}局" if element else "",
                 "members": flow_group,
                 "matched_branches": all_branches,
                 "targets": targets,
             })
-        elif len(unique_branches) == 1:
-            # 流年/大运 + 命局一个地支 = 半合
-            element = SANHE_ELEMENT_MAP.get(flow_branch)
-            zhi = unique_branches[0]
-            all_branches = [flow_branch, zhi]
-            # 取第一个出现的柱位（如果有多个，取第一个）
-            pillar = found_pillars_by_zhi[zhi][0]
-            shishen_info = get_branch_shishen(bazi, zhi)
-            targets = [{
-                "pillar": pillar,
-                "palace": PILLAR_PALACE_CN.get(pillar, ""),
-                "target_branch": zhi,
-                "position_weight": _get_position_weight(pillar, "zhi"),
-                "branch_gan": bazi[pillar].get("gan"),
-                "branch_shishen": shishen_info,
-            }]
+        # 2.2 半合：必须包含三合局的“中间那一支”，否则不算半合
+        center = flow_group[1]
+        element = SANHE_ELEMENT_MAP.get(center)
 
-            events.append({
-                "type": "branch_harmony",
-                "subtype": "banhe",
-                "role": "explain",
-                "risk_percent": 0.0,
-                "flow_type": flow_type,
-                "flow_year": flow_year,
-                "flow_label": flow_label,
-                "flow_branch": flow_branch,
-                "group": f"{element}局",
-                "members": flow_group,
-                "matched_branches": all_branches,
-                "targets": targets,
-            })
+        # 左半合：左支 + 中间支
+        left = flow_group[0]
+        right = flow_group[2]
+
+        # 流年/大运支作为其中一支，命局提供另一支
+        def _emit_banhe(other_zhi: str):
+            """内部辅助：根据 other_zhi（另一支）发出半合事件。
+
+            注意：如果命局中同一地支出现在多个宫位（例如酉在年支和月支），
+            需要为每个宫位各生成一条半合事件，以便在输出时分别标注不同宫位。
+            """
+            # 命局中所有匹配的柱位
+            other_pillars = found_pillars_by_zhi.get(other_zhi, [])
+            if not other_pillars:
+                return
+            for pillar in other_pillars:
+                shishen_info = get_branch_shishen(bazi, other_zhi)
+                targets = [{
+                    "pillar": pillar,
+                    "palace": PILLAR_PALACE_CN.get(pillar, ""),
+                    "target_branch": other_zhi,
+                    "position_weight": _get_position_weight(pillar, "zhi"),
+                    "branch_gan": bazi[pillar].get("gan"),
+                    "branch_shishen": shishen_info,
+                }]
+                events.append({
+                    "type": "branch_harmony",
+                    "subtype": "banhe",
+                    "role": "explain",
+                    "risk_percent": 0.0,
+                    "flow_type": flow_type,
+                    "flow_year": flow_year,
+                    "flow_label": flow_label,
+                    "flow_branch": flow_branch,
+                    "group": f"{element}局" if element else "",
+                    "members": flow_group,
+                    "matched_branches": [flow_branch, other_zhi],
+                    "targets": targets,
+                })
+
+        # 根据 flow_branch 所在位置，决定合法的半合对
+        if flow_branch == left and center in found_pillars_by_zhi:
+            _emit_banhe(center)
+        elif flow_branch == center and left in found_pillars_by_zhi:
+            _emit_banhe(left)
+        elif flow_branch == center and right in found_pillars_by_zhi:
+            _emit_banhe(right)
+        elif flow_branch == right and center in found_pillars_by_zhi:
+            _emit_banhe(center)
 
     # 3. 检测三会（流年/大运 + 命局两个地支 = 完整三会）
     flow_sanhui_group = ZHI_SANHUI.get(flow_branch)

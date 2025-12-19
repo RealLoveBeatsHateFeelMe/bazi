@@ -223,9 +223,60 @@ def run_cli() -> None:
     if luodian_parts:
         print("用神落点：" + "，".join(luodian_parts))
     
+    # ===== 原局六合（只解释，不计分） =====
+    from .config import PILLAR_PALACE_CN
+    natal_harmonies = result.get("natal_harmonies", []) or []
+    # 原局六合
+    natal_liuhe_lines = []
+    for ev in natal_harmonies:
+        if ev.get("type") != "branch_harmony":
+            continue
+        if ev.get("subtype") != "liuhe":
+            continue
+        targets = ev.get("targets", [])
+        if len(targets) < 2:
+            continue
+        t1, t2 = targets[0], targets[1]
+        palace1 = t1.get("palace", "")
+        palace2 = t2.get("palace", "")
+        members = ev.get("members") or ev.get("matched_branches") or []
+        if len(members) >= 2:
+            pair_str = f"{members[0]}{members[1]}合"
+        else:
+            pair_str = f"{t1.get('target_branch', '')}{t2.get('target_branch', '')}合"
+        if palace1 and palace2:
+            natal_liuhe_lines.append(f"{palace1}和{palace2}合（{pair_str}）")
+    if natal_liuhe_lines:
+        # 只去掉完全重复的，同一宫位组合要保留
+        uniq_lines = sorted(set(natal_liuhe_lines))
+        print("原局六合：" + "，".join(uniq_lines))
+
+    # 原局半合
+    natal_banhe_lines = []
+    for ev in natal_harmonies:
+        if ev.get("type") != "branch_harmony":
+            continue
+        if ev.get("subtype") != "banhe":
+            continue
+        targets = ev.get("targets", [])
+        if len(targets) < 2:
+            continue
+        t1, t2 = targets[0], targets[1]
+        palace1 = t1.get("palace", "")
+        palace2 = t2.get("palace", "")
+        matched = ev.get("matched_branches", [])
+        if len(matched) >= 2:
+            pair_str = f"{matched[0]}{matched[1]}半合"
+        else:
+            pair_str = f"{t1.get('target_branch', '')}{t2.get('target_branch', '')}半合"
+        if palace1 and palace2:
+            natal_banhe_lines.append(f"{palace1} 与 {palace2} 半合（{pair_str}）")
+    if natal_banhe_lines:
+        uniq_banhe = sorted(set(natal_banhe_lines))
+        print("原局半合：" + "，".join(uniq_banhe))
+    
     # 原局问题打印
     from .clash import detect_natal_tian_ke_di_chong
-    from .config import PILLAR_PALACE_CN
     
     natal_conflicts = result.get("natal_conflicts", {})
     natal_clashes = natal_conflicts.get("clashes", [])
@@ -329,7 +380,37 @@ def run_cli() -> None:
             f"[干 {dy['gan_element'] or '-'} {gan_flag} / "
             f"支 {dy['zhi_element'] or '-'} {zhi_flag}]"
         )
-
+        
+        # 大运六合（只解释，不计分）
+        dayun_liuhe_lines = []
+        dayun_banhe_lines = []
+        for ev in dy.get("harmonies_natal", []) or []:
+            if ev.get("type") != "branch_harmony":
+                continue
+            subtype = ev.get("subtype")
+            flow_branch = ev.get("flow_branch", dy.get("zhi", ""))
+            if subtype not in ("liuhe", "banhe"):
+                continue
+            for t in ev.get("targets", []):
+                palace = t.get("palace", "")
+                target_branch = t.get("target_branch", "")
+                if not palace or not target_branch:
+                    continue
+                if subtype == "liuhe":
+                    # 例如：大运和夫妻宫合（午未合）
+                    line = f"    大运和{palace}合（{flow_branch}{target_branch}合）"
+                    dayun_liuhe_lines.append(line)
+                elif subtype == "banhe":
+                    # 例如：大运 与 夫妻宫 半合（巳酉半合）
+                    line = f"    大运 与 {palace} 半合（{flow_branch}{target_branch}半合）"
+                    dayun_banhe_lines.append(line)
+        if dayun_liuhe_lines:
+            for line in sorted(set(dayun_liuhe_lines)):
+                print(line)
+        if dayun_banhe_lines:
+            for line in sorted(set(dayun_banhe_lines)):
+                print(line)
+        
         # 大运本身与命局的冲
         for ev in dy.get("clashes_natal", []):
             if not ev:
@@ -359,6 +440,37 @@ def run_cli() -> None:
                 f"    {ln['year']} 年 {ln['gan']}{ln['zhi']}（虚龄 {ln['age']} 岁）："
                 f"上半年 {first_label}，下半年 {second_label}"
             )
+            
+            # 流年六合 / 半合（只解释，不计分）：流年支与原局四宫位
+            liunian_lines = []
+            for ev in ln.get("harmonies_natal", []) or []:
+                if ev.get("type") != "branch_harmony":
+                    continue
+                subtype = ev.get("subtype")
+                if subtype not in ("liuhe", "banhe"):
+                    continue
+                flow_branch = ev.get("flow_branch", ln.get("zhi", ""))
+                for t in ev.get("targets", []):
+                    palace = t.get("palace", "")
+                    target_branch = t.get("target_branch", "")
+                    if not palace or not target_branch:
+                        continue
+                    if subtype == "liuhe":
+                        # 例如：流年和婚姻宫合（辰酉合）
+                        pair_str = f"{flow_branch}{target_branch}合"
+                        line = f"        流年和{palace}合（{pair_str}）"
+                    else:
+                        # 例如：流年 与 祖上宫 半合（巳酉半合）
+                        matched = ev.get("matched_branches", [])
+                        if len(matched) >= 2:
+                            pair_str = f"{matched[0]}{matched[1]}半合"
+                        else:
+                            pair_str = f"{flow_branch}{target_branch}半合"
+                        line = f"        流年 与 {palace} 半合（{pair_str}）"
+                    liunian_lines.append(line)
+            if liunian_lines:
+                for line in sorted(set(liunian_lines)):
+                    print(line)
             
             # 先打印危险系数
             total_risk = ln.get("total_risk_percent", 0.0)
