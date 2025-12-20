@@ -395,6 +395,194 @@ def test_harmonies_2007_01_28():
     print("[PASS] 合类事件 2007-01-28 回归通过")
 
 
+def test_sanhe_complete_2007_01_28():
+    """完整三合局检测回归：2007-01-28 12:00 男，检查大运2和2022年的三合局。"""
+    dt = datetime(2007, 1, 28, 12, 0)
+    basic = analyze_basic(dt)
+    yongshen_elements = basic.get("yongshen_elements", [])
+    
+    luck = analyze_luck(dt, is_male=True, yongshen_elements=yongshen_elements)
+    
+    # 查找大运2（index=1，壬寅大运）
+    found_dayun_2 = False
+    for group in luck.get("groups", []):
+        dy = group.get("dayun", {})
+        if dy.get("index") == 1:  # 大运2（index从0开始）
+            found_dayun_2 = True
+            sanhe_dy = dy.get("sanhe_complete", [])
+            # 应检测到寅午戌三合火局
+            yin_wu_xu_sanhe = None
+            for ev in sanhe_dy:
+                if ev.get("subtype") == "sanhe":
+                    matched = ev.get("matched_branches", [])
+                    if set(matched) == {"寅", "午", "戌"}:
+                        yin_wu_xu_sanhe = ev
+                        break
+            assert yin_wu_xu_sanhe is not None, "大运2应检测到寅午戌三合火局"
+            assert yin_wu_xu_sanhe.get("risk_percent") == 0.0, "三合局 risk_percent 应为 0"
+            sources = yin_wu_xu_sanhe.get("sources", [])
+            # 应包含：大运寅、时柱午、年柱戌、日柱戌
+            has_dayun_yin = any(s.get("source_type") == "dayun" and s.get("zhi") == "寅" for s in sources)
+            has_hour_wu = any(s.get("source_type") == "natal" and s.get("pillar") == "hour" and s.get("zhi") == "午" for s in sources)
+            has_year_xu = any(s.get("source_type") == "natal" and s.get("pillar") == "year" and s.get("zhi") == "戌" for s in sources)
+            has_day_xu = any(s.get("source_type") == "natal" and s.get("pillar") == "day" and s.get("zhi") == "戌" for s in sources)
+            assert has_dayun_yin, "应包含大运寅"
+            assert has_hour_wu, "应包含时柱午"
+            assert has_year_xu, "应包含年柱戌"
+            assert has_day_xu, "应包含日柱戌"
+            
+            # 查找2022年流年（在大运3组中）
+            liunian_2022 = None
+            for g in luck.get("groups", []):
+                for ln in g.get("liunian", []):
+                    if ln.get("year") == 2022:
+                        liunian_2022 = ln
+                        break
+                if liunian_2022:
+                    break
+            assert liunian_2022 is not None, "应找到2022年流年"
+            sanhe_ln = liunian_2022.get("sanhe_complete", [])
+            # 应检测到寅午戌三合火局（流年寅+时柱午+年柱戌+日柱戌）
+            yin_wu_xu_sanhe_ln = None
+            for ev in sanhe_ln:
+                if ev.get("subtype") == "sanhe":
+                    matched = ev.get("matched_branches", [])
+                    if set(matched) == {"寅", "午", "戌"}:
+                        yin_wu_xu_sanhe_ln = ev
+                        break
+            assert yin_wu_xu_sanhe_ln is not None, "2022年应检测到寅午戌三合火局"
+            sources_ln = yin_wu_xu_sanhe_ln.get("sources", [])
+            # 应包含：流年寅、时柱午、年柱戌、日柱戌
+            has_liunian_yin = any(s.get("source_type") == "liunian" and s.get("zhi") == "寅" for s in sources_ln)
+            has_hour_wu_ln = any(s.get("source_type") == "natal" and s.get("pillar") == "hour" and s.get("zhi") == "午" for s in sources_ln)
+            has_year_xu_ln = any(s.get("source_type") == "natal" and s.get("pillar") == "year" and s.get("zhi") == "戌" for s in sources_ln)
+            has_day_xu_ln = any(s.get("source_type") == "natal" and s.get("pillar") == "day" and s.get("zhi") == "戌" for s in sources_ln)
+            assert has_liunian_yin, "应包含流年寅"
+            assert has_hour_wu_ln, "应包含时柱午"
+            assert has_year_xu_ln, "应包含年柱戌"
+            assert has_day_xu_ln, "应包含日柱戌"
+            
+            # 查找2010年（流年寅+大运寅同时存在，在大运2组中）
+            liunian_2010 = None
+            for g in luck.get("groups", []):
+                for ln in g.get("liunian", []):
+                    if ln.get("year") == 2010:
+                        liunian_2010 = ln
+                        break
+                if liunian_2010:
+                    break
+            assert liunian_2010 is not None, "应找到2010年流年"
+            sanhe_2010 = liunian_2010.get("sanhe_complete", [])
+            yin_wu_xu_sanhe_2010 = None
+            for ev in sanhe_2010:
+                if ev.get("subtype") == "sanhe":
+                    matched = ev.get("matched_branches", [])
+                    if set(matched) == {"寅", "午", "戌"}:
+                        yin_wu_xu_sanhe_2010 = ev
+                        break
+            assert yin_wu_xu_sanhe_2010 is not None, "2010年应检测到寅午戌三合火局"
+            sources_2010 = yin_wu_xu_sanhe_2010.get("sources", [])
+            # 应同时包含流年寅和大运寅
+            has_liunian_yin_2010 = any(s.get("source_type") == "liunian" and s.get("zhi") == "寅" for s in sources_2010)
+            has_dayun_yin_2010 = any(s.get("source_type") == "dayun" and s.get("zhi") == "寅" for s in sources_2010)
+            assert has_liunian_yin_2010, "2010年应包含流年寅"
+            assert has_dayun_yin_2010, "2010年应包含大运寅"
+    
+    assert found_dayun_2, "应找到大运2"
+    
+    print("[PASS] 完整三合局 2007-01-28 回归通过")
+
+
+def test_sanhui_complete_2005_09_20():
+    """完整三会局检测回归：2005-09-20 10:00 男，检查大运4、2026年、2038年的三会局。"""
+    dt = datetime(2005, 9, 20, 10, 0)
+    basic = analyze_basic(dt)
+    yongshen_elements = basic.get("yongshen_elements", [])
+    
+    luck = analyze_luck(dt, is_male=True, yongshen_elements=yongshen_elements)
+    
+    # 查找大运4（index=3，壬午大运）
+    found_dayun_4 = False
+    for group in luck.get("groups", []):
+        dy = group.get("dayun", {})
+        if dy.get("index") == 3:  # 大运4（index从0开始，所以index=3是大运4）
+            found_dayun_4 = True
+            sanhui_dy = dy.get("sanhui_complete", [])
+            # 应检测到巳午未三会火局
+            si_wu_wei_sanhui = None
+            for ev in sanhui_dy:
+                if ev.get("subtype") == "sanhui":
+                    matched = ev.get("matched_branches", [])
+                    if set(matched) == {"巳", "午", "未"}:
+                        si_wu_wei_sanhui = ev
+                        break
+            assert si_wu_wei_sanhui is not None, "大运4应检测到巳午未三会火局"
+            assert si_wu_wei_sanhui.get("risk_percent") == 0.0, "三会局 risk_percent 应为 0"
+            sources = si_wu_wei_sanhui.get("sources", [])
+            # 应包含：大运午、时柱巳、日柱未
+            has_dayun_wu = any(s.get("source_type") == "dayun" and s.get("zhi") == "午" for s in sources)
+            has_hour_si = any(s.get("source_type") == "natal" and s.get("pillar") == "hour" and s.get("zhi") == "巳" for s in sources)
+            has_day_wei = any(s.get("source_type") == "natal" and s.get("pillar") == "day" and s.get("zhi") == "未" for s in sources)
+            assert has_dayun_wu, "应包含大运午"
+            assert has_hour_si, "应包含时柱巳"
+            assert has_day_wei, "应包含日柱未"
+            
+            # 查找2038年（在大运4组中，同时有大运午和流年午）
+            liunian_2038 = None
+            for ln in group.get("liunian", []):
+                if ln.get("year") == 2038:
+                    liunian_2038 = ln
+                    break
+            assert liunian_2038 is not None, "应找到2038年流年"
+            sanhui_2038 = liunian_2038.get("sanhui_complete", [])
+            si_wu_wei_sanhui_2038 = None
+            for ev in sanhui_2038:
+                if ev.get("subtype") == "sanhui":
+                    matched = ev.get("matched_branches", [])
+                    if set(matched) == {"巳", "午", "未"}:
+                        si_wu_wei_sanhui_2038 = ev
+                        break
+            assert si_wu_wei_sanhui_2038 is not None, "2038年应检测到巳午未三会火局"
+            sources_2038 = si_wu_wei_sanhui_2038.get("sources", [])
+            # 应同时包含大运午和流年午
+            has_dayun_wu_2038 = any(s.get("source_type") == "dayun" and s.get("zhi") == "午" for s in sources_2038)
+            has_liunian_wu_2038 = any(s.get("source_type") == "liunian" and s.get("zhi") == "午" for s in sources_2038)
+            assert has_dayun_wu_2038, "2038年应包含大运午"
+            assert has_liunian_wu_2038, "2038年应包含流年午"
+    
+    assert found_dayun_4, "应找到大运4"
+    
+    # 查找2026年（可能在其他大运组中）
+    liunian_2026 = None
+    for group in luck.get("groups", []):
+        for ln in group.get("liunian", []):
+            if ln.get("year") == 2026:
+                liunian_2026 = ln
+                break
+        if liunian_2026:
+            break
+    assert liunian_2026 is not None, "应找到2026年流年"
+    sanhui_2026 = liunian_2026.get("sanhui_complete", [])
+    si_wu_wei_sanhui_2026 = None
+    for ev in sanhui_2026:
+        if ev.get("subtype") == "sanhui":
+            matched = ev.get("matched_branches", [])
+            if set(matched) == {"巳", "午", "未"}:
+                si_wu_wei_sanhui_2026 = ev
+                break
+    assert si_wu_wei_sanhui_2026 is not None, "2026年应检测到巳午未三会火局"
+    sources_2026 = si_wu_wei_sanhui_2026.get("sources", [])
+    # 应包含：流年午、时柱巳、日柱未
+    has_liunian_wu_2026 = any(s.get("source_type") == "liunian" and s.get("zhi") == "午" for s in sources_2026)
+    has_hour_si_2026 = any(s.get("source_type") == "natal" and s.get("pillar") == "hour" and s.get("zhi") == "巳" for s in sources_2026)
+    has_day_wei_2026 = any(s.get("source_type") == "natal" and s.get("pillar") == "day" and s.get("zhi") == "未" for s in sources_2026)
+    assert has_liunian_wu_2026, "2026年应包含流年午"
+    assert has_hour_si_2026, "2026年应包含时柱巳"
+    assert has_day_wei_2026, "2026年应包含日柱未"
+    
+    print("[PASS] 完整三会局 2005-09-20 回归通过")
+
+
 def main():
     try:
         test_chenwei_not_punishment()
@@ -407,6 +595,8 @@ def main():
         test_lineyun_case_b()
         test_harmonies_2005_09_20()
         test_harmonies_2007_01_28()
+        test_sanhe_complete_2007_01_28()
+        test_sanhui_complete_2005_09_20()
         print("ALL REGRESSION TESTS PASS")
     except AssertionError as e:
         print(f"REGRESSION FAILED: {e}", file=sys.stderr)

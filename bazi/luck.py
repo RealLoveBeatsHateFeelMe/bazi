@@ -10,7 +10,7 @@ from lunar_python import Solar  # 依赖：pip install lunar_python
 from .config import GAN_WUXING, ZHI_WUXING, ZHI_CHONG, POSITION_WEIGHTS
 from .clash import detect_branch_clash
 from .shishen import get_branch_shishen
-from .harmony import detect_flow_harmonies
+from .harmony import detect_flow_harmonies, detect_sanhe_complete, detect_sanhui_complete
 from .punishment import detect_branch_punishments
 from .patterns import detect_liunian_patterns
 
@@ -528,6 +528,22 @@ def analyze_luck(
             flow_year=dy.getStartYear(),
             flow_label=gz_dy,
         )
+        
+        # 检测大运+原局的完整三合局
+        sanhe_dy = detect_sanhe_complete(
+            bazi=bazi,
+            dayun_branch=zhi_dy,
+            dayun_label=gz_dy,
+            dayun_index=idx,
+        )
+        
+        # 检测大运+原局的完整三会局
+        sanhui_dy = detect_sanhui_complete(
+            bazi=bazi,
+            dayun_branch=zhi_dy,
+            dayun_label=gz_dy,
+            dayun_index=idx,
+        )
 
         dayun_luck = DayunLuck(
             index=idx,
@@ -743,6 +759,28 @@ def analyze_luck(
                 flow_type="liunian",
                 flow_year=ln.getYear(),
                 flow_label=gz_ln,
+            )
+            
+            # 检测流年+原局的完整三合局，以及大运+流年+原局的完整三合局
+            sanhe_ln = detect_sanhe_complete(
+                bazi=bazi,
+                dayun_branch=zhi_dy,
+                dayun_label=gz_dy,
+                dayun_index=idx,
+                liunian_branch=zhi_ln,
+                liunian_year=ln.getYear(),
+                liunian_label=gz_ln,
+            )
+            
+            # 检测流年+原局的完整三会局，以及大运+流年+原局的完整三会局
+            sanhui_ln = detect_sanhui_complete(
+                bazi=bazi,
+                dayun_branch=zhi_dy,
+                dayun_label=gz_dy,
+                dayun_index=idx,
+                liunian_branch=zhi_ln,
+                liunian_year=ln.getYear(),
+                liunian_label=gz_ln,
             )
 
             # ===== §5.3.3 流年模式检测 =====
@@ -1086,6 +1124,8 @@ def analyze_luck(
                 "patterns_static_activation": static_activation_events,  # §9 静态模式被流年激活的事件
                 "harmonies_natal": harmonies_ln,  # 流年与原局的六合/三合/半合/三会（只解释，不计分）
                 "harmonies_dayun": [],  # 流年与大运的合类（目前为空，后续可扩展）
+                "sanhe_complete": sanhe_ln,  # 完整三合局（流年+原局，或大运+流年+原局）
+                "sanhui_complete": sanhui_ln,  # 完整三会局（流年+原局，或大运+流年+原局）
                 "lineyun_bonus": lineyun_bonus,  # 总加成（天干侧+地支侧）
                 "lineyun_bonus_gan": lineyun_bonus_gan,  # §11.3 天干侧线运加成
                 "lineyun_bonus_zhi": lineyun_bonus_zhi,  # §11.3 地支侧线运加成
@@ -1098,6 +1138,8 @@ def analyze_luck(
         # 一个大运 + 对应的十个流年
         dayun_dict = asdict(dayun_luck)
         dayun_dict["harmonies_natal"] = harmonies_dy  # 大运与原局的六合/三合/半合/三会（只解释，不计分）
+        dayun_dict["sanhe_complete"] = sanhe_dy  # 完整三合局（大运+原局）
+        dayun_dict["sanhui_complete"] = sanhui_dy  # 完整三会局（大运+原局）
         
         # ===== §4.4 大运好运判断（简单规则：用神+平均风险≤15%） =====
         # 计算该步大运下所有流年的平均风险

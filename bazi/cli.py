@@ -411,6 +411,101 @@ def run_cli() -> None:
             for line in sorted(set(dayun_banhe_lines)):
                 print(line)
         
+        # 大运完整三合局
+        for ev in dy.get("sanhe_complete", []) or []:
+            if ev.get("subtype") != "sanhe":
+                continue
+            sources = ev.get("sources", [])
+            if not sources:
+                continue
+            
+            # 构建输出句子
+            parts = []
+            
+            # 按三合局的顺序列出每个字的来源
+            matched_branches = ev.get("matched_branches", [])
+            for zhi in matched_branches:
+                zhi_sources = [s for s in sources if s.get("zhi") == zhi]
+                zhi_parts = []
+                for src in zhi_sources:
+                    src_type = src.get("source_type")
+                    if src_type == "dayun":
+                        zhi_parts.append(f"大运 {zhi}")
+                    elif src_type == "liunian":
+                        zhi_parts.append(f"流年 {zhi}")
+                    elif src_type == "natal":
+                        pillar_name = src.get("pillar_name", "")
+                        palace = src.get("palace", "")
+                        if pillar_name and palace:
+                            zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
+                        elif pillar_name:
+                            zhi_parts.append(f"{pillar_name}{zhi}")
+                
+                if zhi_parts:
+                    # 如果同一字在多个位置出现，用"和"连接
+                    if len(zhi_parts) > 1:
+                        parts.append("和".join(zhi_parts))
+                    else:
+                        parts.append(zhi_parts[0])
+            
+            # 结尾：三合局名称
+            group = ev.get("group", "")
+            matched_str = "".join(matched_branches)
+            parts.append(f"{matched_str}三合{group}")
+            
+            # 用逗号连接各部分
+            result = "，".join(parts)
+            print(f"    {result}。")
+        
+        # 大运完整三会局
+        for ev in dy.get("sanhui_complete", []) or []:
+            if ev.get("subtype") != "sanhui":
+                continue
+            sources = ev.get("sources", [])
+            if not sources:
+                continue
+            
+            # 构建输出句子
+            parts = []
+            
+            # 开头：大运信息
+            dayun_index = ev.get("dayun_index")
+            if dayun_index is not None:
+                parts.append(f"大运{dayun_index + 1}")
+            
+            # 按三会局的顺序列出每个字的来源
+            matched_branches = ev.get("matched_branches", [])
+            for zhi in matched_branches:
+                zhi_sources = [s for s in sources if s.get("zhi") == zhi]
+                zhi_parts = []
+                for src in zhi_sources:
+                    src_type = src.get("source_type")
+                    if src_type == "dayun":
+                        zhi_parts.append(f"大运 {zhi}")
+                    elif src_type == "liunian":
+                        zhi_parts.append(f"流年 {zhi}")
+                    elif src_type == "natal":
+                        pillar_name = src.get("pillar_name", "")
+                        palace = src.get("palace", "")
+                        if pillar_name and palace:
+                            zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
+                        elif pillar_name:
+                            zhi_parts.append(f"{pillar_name}{zhi}")
+                
+                if zhi_parts:
+                    # 如果同一字在多个位置出现，分别列出（不合并）
+                    for zp in zhi_parts:
+                        parts.append(zp)
+            
+            # 结尾：三会局名称
+            group = ev.get("group", "")
+            matched_str = "".join(matched_branches)
+            parts.append(f"{matched_str}三会{group}")
+            
+            # 用空格连接各部分（按regression格式）
+            result = " ".join(parts)
+            print(f"    {result}。")
+        
         # 大运本身与命局的冲
         for ev in dy.get("clashes_natal", []):
             if not ev:
@@ -471,6 +566,99 @@ def run_cli() -> None:
             if liunian_lines:
                 for line in sorted(set(liunian_lines)):
                     print(line)
+            
+            # 流年完整三合局（包括大运+流年+原局的情况）
+            for ev in ln.get("sanhe_complete", []) or []:
+                if ev.get("subtype") != "sanhe":
+                    continue
+                sources = ev.get("sources", [])
+                if not sources:
+                    continue
+                
+                # 构建输出句子
+                parts = []
+                
+                # 按三合局的顺序列出每个字的来源
+                matched_branches = ev.get("matched_branches", [])
+                for zhi in matched_branches:
+                    zhi_sources = [s for s in sources if s.get("zhi") == zhi]
+                    zhi_parts = []
+                    for src in zhi_sources:
+                        src_type = src.get("source_type")
+                        if src_type == "dayun":
+                            zhi_parts.append(f"大运 {zhi}")
+                        elif src_type == "liunian":
+                            zhi_parts.append(f"流年 {zhi}")
+                        elif src_type == "natal":
+                            pillar_name = src.get("pillar_name", "")
+                            palace = src.get("palace", "")
+                            if pillar_name and palace:
+                                zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
+                            elif pillar_name:
+                                zhi_parts.append(f"{pillar_name}{zhi}")
+                    
+                    if zhi_parts:
+                        # 如果同一字在多个位置出现，分别列出（不合并），用逗号分隔
+                        for zp in zhi_parts:
+                            parts.append(zp)
+                
+                # 结尾：三合局名称
+                group = ev.get("group", "")
+                matched_str = "".join(matched_branches)
+                parts.append(f"{matched_str}三合{group}")
+                
+                # 用逗号连接各部分
+                result = "，".join(parts)
+                print(f"        {result}。")
+            
+            # 流年完整三会局（包括大运+流年+原局的情况）
+            for ev in ln.get("sanhui_complete", []) or []:
+                if ev.get("subtype") != "sanhui":
+                    continue
+                sources = ev.get("sources", [])
+                if not sources:
+                    continue
+                
+                # 构建输出句子
+                parts = []
+                
+                # 开头：流年信息
+                liunian_year = ev.get("liunian_year")
+                if liunian_year:
+                    parts.append(f"{liunian_year}年")
+                
+                # 按三会局的顺序列出每个字的来源
+                matched_branches = ev.get("matched_branches", [])
+                for zhi in matched_branches:
+                    zhi_sources = [s for s in sources if s.get("zhi") == zhi]
+                    zhi_parts = []
+                    for src in zhi_sources:
+                        src_type = src.get("source_type")
+                        if src_type == "dayun":
+                            zhi_parts.append(f"大运 {zhi}")
+                        elif src_type == "liunian":
+                            zhi_parts.append(f"流年 {zhi}")
+                        elif src_type == "natal":
+                            pillar_name = src.get("pillar_name", "")
+                            palace = src.get("palace", "")
+                            if pillar_name and palace:
+                                zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
+                            elif pillar_name:
+                                zhi_parts.append(f"{pillar_name}{zhi}")
+                    
+                    if zhi_parts:
+                        # 如果同一字在多个位置出现，分别列出（不合并）
+                        for zp in zhi_parts:
+                            parts.append(zp)
+                
+                # 结尾：三会局名称
+                group = ev.get("group", "")
+                matched_str = "".join(matched_branches)
+                parts.append(f"{matched_str}三会{group}")
+                
+                # 用空格连接各部分
+                result = " ".join(parts)
+                print(f"        {result}。")
             
             # 先打印危险系数
             total_risk = ln.get("total_risk_percent", 0.0)

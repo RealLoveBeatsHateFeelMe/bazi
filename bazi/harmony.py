@@ -497,3 +497,216 @@ def detect_flow_harmonies(
             })
 
     return events
+
+
+def detect_sanhe_complete(
+    bazi: Dict[str, Dict[str, str]],
+    dayun_branch: Optional[str] = None,
+    dayun_label: Optional[str] = None,
+    dayun_index: Optional[int] = None,
+    liunian_branch: Optional[str] = None,
+    liunian_year: Optional[int] = None,
+    liunian_label: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """检测完整三合局（必须三支齐全），记录每个字的来源。
+    
+    参数:
+        bazi: 命局四柱
+        dayun_branch: 大运地支（可选）
+        dayun_label: 大运标签（如"壬寅"）（可选）
+        dayun_index: 大运索引（可选）
+        liunian_branch: 流年地支（可选）
+        liunian_year: 流年年份（可选）
+        liunian_label: 流年标签（如"壬寅"）（可选）
+    
+    返回:
+        三合局事件列表，每个事件包含 sources 字段，记录每个字的来源。
+    """
+    events: List[Dict[str, Any]] = []
+    pillars = ["year", "month", "day", "hour"]
+    branches = {p: bazi[p]["zhi"] for p in pillars}
+    
+    # 柱位中文名称映射
+    PILLAR_NAME_CN = {
+        "year": "年柱",
+        "month": "月柱",
+        "day": "日柱",
+        "hour": "时柱",
+    }
+    
+    # 遍历所有三合局
+    seen_groups: set = set()
+    for _, group in ZHI_SANHE.items():
+        group_key = tuple(sorted(group))
+        if group_key in seen_groups:
+            continue
+        seen_groups.add(group_key)
+        
+        element = SANHE_ELEMENT_MAP.get(group[0])
+        group_name = f"{element}局" if element else ""
+        
+        # 收集每个字的所有来源
+        sources_by_zhi: Dict[str, List[Dict[str, Any]]] = {}
+        
+        # 1. 收集原局中的来源
+        for pillar in pillars:
+            natal_zhi = branches[pillar]
+            if natal_zhi in group:
+                sources_by_zhi.setdefault(natal_zhi, []).append({
+                    "zhi": natal_zhi,
+                    "source_type": "natal",
+                    "pillar": pillar,
+                    "palace": PILLAR_PALACE_CN.get(pillar, ""),
+                    "pillar_name": PILLAR_NAME_CN.get(pillar, ""),
+                })
+        
+        # 2. 收集大运中的来源
+        if dayun_branch and dayun_branch in group:
+            sources_by_zhi.setdefault(dayun_branch, []).append({
+                "zhi": dayun_branch,
+                "source_type": "dayun",
+                "label": dayun_label or "",
+                "index": dayun_index,
+            })
+        
+        # 3. 收集流年中的来源
+        if liunian_branch and liunian_branch in group:
+            sources_by_zhi.setdefault(liunian_branch, []).append({
+                "zhi": liunian_branch,
+                "source_type": "liunian",
+                "year": liunian_year,
+                "label": liunian_label or "",
+            })
+        
+        # 检查是否三支齐全
+        if len(sources_by_zhi) == 3:
+            # 三支齐全，生成三合局事件
+            all_sources = []
+            for zhi in group:
+                if zhi in sources_by_zhi:
+                    all_sources.extend(sources_by_zhi[zhi])
+            
+            events.append({
+                "type": "branch_harmony",
+                "subtype": "sanhe",
+                "role": "explain",
+                "risk_percent": 0.0,
+                "group": group_name,
+                "members": group,
+                "matched_branches": group,
+                "sources": all_sources,
+                "dayun_branch": dayun_branch,
+                "dayun_label": dayun_label,
+                "dayun_index": dayun_index,
+                "liunian_branch": liunian_branch,
+                "liunian_year": liunian_year,
+                "liunian_label": liunian_label,
+            })
+    
+    return events
+
+
+def detect_sanhui_complete(
+    bazi: Dict[str, Dict[str, str]],
+    dayun_branch: Optional[str] = None,
+    dayun_label: Optional[str] = None,
+    dayun_index: Optional[int] = None,
+    liunian_branch: Optional[str] = None,
+    liunian_year: Optional[int] = None,
+    liunian_label: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """检测完整三会局（必须三支齐全），记录每个字的来源。
+    
+    参数:
+        bazi: 命局四柱
+        dayun_branch: 大运地支（可选）
+        dayun_label: 大运标签（如"壬寅"）（可选）
+        dayun_index: 大运索引（可选）
+        liunian_branch: 流年地支（可选）
+        liunian_year: 流年年份（可选）
+        liunian_label: 流年标签（如"壬寅"）（可选）
+    
+    返回:
+        三会局事件列表，每个事件包含 sources 字段，记录每个字的来源。
+    """
+    events: List[Dict[str, Any]] = []
+    pillars = ["year", "month", "day", "hour"]
+    branches = {p: bazi[p]["zhi"] for p in pillars}
+    
+    # 柱位中文名称映射
+    PILLAR_NAME_CN = {
+        "year": "年柱",
+        "month": "月柱",
+        "day": "日柱",
+        "hour": "时柱",
+    }
+    
+    # 遍历所有三会局（去重，每个三会局只检测一次）
+    seen_groups: set = set()
+    for zhi, group in ZHI_SANHUI.items():
+        group_key = tuple(sorted(group))
+        if group_key in seen_groups:
+            continue
+        seen_groups.add(group_key)
+        
+        hui_name = SANHUI_NAME_MAP.get(group[0])
+        
+        # 收集每个字的所有来源
+        sources_by_zhi: Dict[str, List[Dict[str, Any]]] = {}
+        
+        # 1. 收集原局中的来源
+        for pillar in pillars:
+            natal_zhi = branches[pillar]
+            if natal_zhi in group:
+                sources_by_zhi.setdefault(natal_zhi, []).append({
+                    "zhi": natal_zhi,
+                    "source_type": "natal",
+                    "pillar": pillar,
+                    "palace": PILLAR_PALACE_CN.get(pillar, ""),
+                    "pillar_name": PILLAR_NAME_CN.get(pillar, ""),
+                })
+        
+        # 2. 收集大运中的来源
+        if dayun_branch and dayun_branch in group:
+            sources_by_zhi.setdefault(dayun_branch, []).append({
+                "zhi": dayun_branch,
+                "source_type": "dayun",
+                "label": dayun_label or "",
+                "index": dayun_index,
+            })
+        
+        # 3. 收集流年中的来源
+        if liunian_branch and liunian_branch in group:
+            sources_by_zhi.setdefault(liunian_branch, []).append({
+                "zhi": liunian_branch,
+                "source_type": "liunian",
+                "year": liunian_year,
+                "label": liunian_label or "",
+            })
+        
+        # 检查是否三支齐全
+        if len(sources_by_zhi) == 3:
+            # 三支齐全，生成三会局事件
+            all_sources = []
+            for zhi in group:
+                if zhi in sources_by_zhi:
+                    all_sources.extend(sources_by_zhi[zhi])
+            
+            events.append({
+                "type": "branch_harmony",
+                "subtype": "sanhui",
+                "role": "explain",
+                "risk_percent": 0.0,
+                "group": hui_name,
+                "members": group,
+                "matched_branches": group,
+                "sources": all_sources,
+                "dayun_branch": dayun_branch,
+                "dayun_label": dayun_label,
+                "dayun_index": dayun_index,
+                "liunian_branch": liunian_branch,
+                "liunian_year": liunian_year,
+                "liunian_label": liunian_label,
+            })
+    
+    return events
