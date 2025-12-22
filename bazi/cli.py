@@ -500,7 +500,7 @@ def run_cli() -> None:
             # 结尾：三会局名称
             group = ev.get("group", "")
             matched_str = "".join(matched_branches)
-            parts.append(f"{matched_str}三会{group}")
+            parts.append(f"{matched_str}三会{group.replace('会', '局')}")
             
             # 用空格连接各部分（按regression格式）
             result = " ".join(parts)
@@ -654,7 +654,7 @@ def run_cli() -> None:
                 # 结尾：三会局名称
                 group = ev.get("group", "")
                 matched_str = "".join(matched_branches)
-                parts.append(f"{matched_str}三会{group}")
+                parts.append(f"{matched_str}三会{group.replace('会', '局')}")
                 
                 # 用空格连接各部分
                 result = " ".join(parts)
