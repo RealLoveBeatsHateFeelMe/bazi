@@ -43,6 +43,172 @@ def _get_active_pillar(age: int) -> str:
         return "hour"
 
 
+def _detect_sanhe_sanhui_clash_bonus(
+    clash_events: List[Dict[str, Any]],
+    sanhe_events: List[Dict[str, Any]],
+    sanhui_events: List[Dict[str, Any]],
+    yongshen_elements: List[str],
+    flow_year: int,
+) -> Optional[Dict[str, Any]]:
+    """检测三合/三会逢冲额外加分规则。
+    
+    规则：
+    - 只在"当年确实发生冲"时触发
+    - 如果冲的两个字中至少有一个属于某个已成立的三合/三会：
+      - 只有一个字属于局/会：另一个单独字是用神→+35%，不是用神→+15%
+      - 两个字都属于局/会：直接+35%
+    - 15%和35%当年只能加一次，35优先于15
+    
+    参数:
+        clash_events: 当年的冲事件列表（包括流年与命局的冲、运年相冲）
+        sanhe_events: 当年的完整三合局事件列表
+        sanhui_events: 当年的完整三会局事件列表
+        yongshen_elements: 用神五行列表
+        flow_year: 流年年份
+    
+    返回:
+        额外加分事件，如果没有则返回None
+    """
+    if not clash_events:
+        return None
+    
+    # 收集所有已成立的三合/三会的成员字
+    sanhe_sanhui_members: Dict[str, Dict[str, Any]] = {}  # zhi -> {type: "sanhe"/"sanhui", group_name: "...", members: [...]}
+    
+    for ev in sanhe_events:
+        if ev.get("subtype") != "sanhe":
+            continue
+        members = ev.get("matched_branches", ev.get("members", []))
+        group_name = ev.get("group", "")
+        for zhi in members:
+            if zhi not in sanhe_sanhui_members:
+                sanhe_sanhui_members[zhi] = {
+                    "type": "sanhe",
+                    "group_name": group_name,
+                    "members": members,
+                }
+    
+    for ev in sanhui_events:
+        if ev.get("subtype") != "sanhui":
+            continue
+        members = ev.get("matched_branches", ev.get("members", []))
+        group_name = ev.get("group", "")
+        for zhi in members:
+            if zhi not in sanhe_sanhui_members:
+                sanhe_sanhui_members[zhi] = {
+                    "type": "sanhui",
+                    "group_name": group_name,
+                    "members": members,
+                }
+    
+    if not sanhe_sanhui_members:
+        return None
+    
+    # 遍历所有冲事件，找出符合条件的冲
+    candidates: List[Dict[str, Any]] = []  # 候选的额外加分事件
+    
+    for clash_ev in clash_events:
+        # 获取冲的两个字
+        flow_branch = clash_ev.get("flow_branch", "")
+        target_branch = clash_ev.get("target_branch", "")
+        
+        # 对于运年相冲，字段名不同
+        if not flow_branch:
+            flow_branch = clash_ev.get("dayun_branch", "")
+        if not target_branch:
+            target_branch = clash_ev.get("liunian_branch", "")
+        
+        if not flow_branch or not target_branch:
+            continue
+        
+        # 检查这两个字是否至少有一个属于三合/三会
+        flow_in_group = flow_branch in sanhe_sanhui_members
+        target_in_group = target_branch in sanhe_sanhui_members
+        
+        if not flow_in_group and not target_in_group:
+            continue
+        
+        # 判断单独字和局内字
+        if flow_in_group and target_in_group:
+            # 两个字都属于局/会：直接+35%
+            # 选择第一个找到的局/会作为解释（优先选择flow_branch的）
+            group_info = sanhe_sanhui_members[flow_branch]
+            candidates.append({
+                "bonus_percent": 35.0,
+                "flow_branch": flow_branch,
+                "target_branch": target_branch,
+                "flow_in_group": True,
+                "target_in_group": True,
+                "group_type": group_info["type"],
+                "group_name": group_info["group_name"],
+                "group_members": group_info["members"],
+                "standalone_zhi": None,  # 没有单独字
+                "standalone_is_yongshen": None,
+            })
+        elif flow_in_group:
+            # flow_branch属于局/会，target_branch是单独字
+            group_info = sanhe_sanhui_members[flow_branch]
+            standalone_zhi = target_branch
+            standalone_element = ZHI_WUXING.get(standalone_zhi, "")
+            standalone_is_yongshen = standalone_element in yongshen_elements
+            
+            bonus = 35.0 if standalone_is_yongshen else 15.0
+            candidates.append({
+                "bonus_percent": bonus,
+                "flow_branch": flow_branch,
+                "target_branch": target_branch,
+                "flow_in_group": True,
+                "target_in_group": False,
+                "group_type": group_info["type"],
+                "group_name": group_info["group_name"],
+                "group_members": group_info["members"],
+                "standalone_zhi": standalone_zhi,
+                "standalone_is_yongshen": standalone_is_yongshen,
+            })
+        else:  # target_in_group
+            # target_branch属于局/会，flow_branch是单独字
+            group_info = sanhe_sanhui_members[target_branch]
+            standalone_zhi = flow_branch
+            standalone_element = ZHI_WUXING.get(standalone_zhi, "")
+            standalone_is_yongshen = standalone_element in yongshen_elements
+            
+            bonus = 35.0 if standalone_is_yongshen else 15.0
+            candidates.append({
+                "bonus_percent": bonus,
+                "flow_branch": flow_branch,
+                "target_branch": target_branch,
+                "flow_in_group": False,
+                "target_in_group": True,
+                "group_type": group_info["type"],
+                "group_name": group_info["group_name"],
+                "group_members": group_info["members"],
+                "standalone_zhi": standalone_zhi,
+                "standalone_is_yongshen": standalone_is_yongshen,
+            })
+    
+    if not candidates:
+        return None
+    
+    # 选择加分最高的（35优先于15），且只加一次
+    best_candidate = max(candidates, key=lambda x: x["bonus_percent"])
+    
+    return {
+        "type": "sanhe_sanhui_clash_bonus",
+        "risk_percent": best_candidate["bonus_percent"],
+        "flow_year": flow_year,
+        "flow_branch": best_candidate["flow_branch"],
+        "target_branch": best_candidate["target_branch"],
+        "group_type": best_candidate["group_type"],  # "sanhe" or "sanhui"
+        "group_name": best_candidate["group_name"],  # 例如"火局"、"木会"
+        "group_members": best_candidate["group_members"],  # 三合/三会的三个成员字
+        "flow_in_group": best_candidate["flow_in_group"],
+        "target_in_group": best_candidate["target_in_group"],
+        "standalone_zhi": best_candidate["standalone_zhi"],
+        "standalone_is_yongshen": best_candidate["standalone_is_yongshen"],
+        "sanhe_sanhui_clash_bonus_applied": True,  # 标记本年已应用
+    }
+
+
 def _compute_lineyun_bonus(
     age: int,
     base_events: List[Dict[str, Any]],
@@ -609,7 +775,7 @@ def analyze_luck(
                 is_grave_clash = _is_grave_clash(zhi_dy, zhi_ln)
                 grave_bonus = 0.0
                 if is_grave_clash:
-                    # 墓库加成：+5%
+                    # 墓库加成：+5%（运年相冲固定5%，因为不涉及命局柱数）
                     grave_bonus = 5.0
                 
                 # 检测运年天克地冲（大运天干与流年天干互克，且地支互冲）
@@ -982,6 +1148,24 @@ def analyze_luck(
             lineyun_bonus = lineyun_event.get("risk_percent", 0.0) if lineyun_event else 0.0
             lineyun_bonus_gan = lineyun_event.get("lineyun_bonus_gan", 0.0) if lineyun_event else 0.0
             lineyun_bonus_zhi = lineyun_event.get("lineyun_bonus_zhi", 0.0) if lineyun_event else 0.0
+            
+            # ===== 三合/三会逢冲额外加分 =====
+            # 收集当年的所有冲事件
+            clash_events_for_bonus: List[Dict[str, Any]] = []
+            if clash_ln_natal:
+                clash_events_for_bonus.append(clash_ln_natal)
+            if clash_dayun_liunian:
+                clash_events_for_bonus.append(clash_dayun_liunian)
+            
+            # 检测三合/三会逢冲额外加分
+            sanhe_sanhui_clash_bonus_event = _detect_sanhe_sanhui_clash_bonus(
+                clash_events=clash_events_for_bonus,
+                sanhe_events=sanhe_ln,
+                sanhui_events=sanhui_ln,
+                yongshen_elements=yongshen_elements,
+                flow_year=ln.getYear(),
+            )
+            sanhe_sanhui_clash_bonus = sanhe_sanhui_clash_bonus_event.get("risk_percent", 0.0) if sanhe_sanhui_clash_bonus_event else 0.0
 
             # ===== §6.1 风险拆分：天干算天干的，地支算地支的 =====
             # risk_from_zhi：流年地支引起的风险
@@ -1054,8 +1238,12 @@ def analyze_luck(
             # 线运加成（天干侧和地支侧分开）
             risk_from_gan += lineyun_bonus_gan
             risk_from_zhi += lineyun_bonus_zhi
+            
+            # 三合/三会逢冲额外加分计入 risk_from_zhi（因为冲是地支事件）
+            risk_from_zhi += sanhe_sanhui_clash_bonus
 
             # 年度总风险 = risk_from_gan + risk_from_zhi + tkdc_risk（不封顶，可>100）
+            # 注意：sanhe_sanhui_clash_bonus 已经包含在 risk_from_zhi 中
             total_risk_percent = risk_from_gan + risk_from_zhi + tkdc_risk
             
             # ===== §4.4 流年好运判断（简单规则：用神+风险≤15%） =====
@@ -1103,6 +1291,8 @@ def analyze_luck(
                 })
             if lineyun_event:
                 all_events.append(lineyun_event)
+            if sanhe_sanhui_clash_bonus_event:
+                all_events.append(sanhe_sanhui_clash_bonus_event)
 
             liunian_dict = {
                 "year": ln.getYear(),
@@ -1129,6 +1319,8 @@ def analyze_luck(
                 "lineyun_bonus": lineyun_bonus,  # 总加成（天干侧+地支侧）
                 "lineyun_bonus_gan": lineyun_bonus_gan,  # §11.3 天干侧线运加成
                 "lineyun_bonus_zhi": lineyun_bonus_zhi,  # §11.3 地支侧线运加成
+                "sanhe_sanhui_clash_bonus": sanhe_sanhui_clash_bonus,  # 三合/三会逢冲额外加分
+                "sanhe_sanhui_clash_bonus_event": sanhe_sanhui_clash_bonus_event,  # 三合/三会逢冲额外加分事件详情
                 "total_risk_percent": total_risk_percent,
                 "all_events": all_events,
             }

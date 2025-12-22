@@ -163,10 +163,12 @@ def detect_branch_clash(
     base_power = base_total             # 0~1
     base_power_percent = base_power * 100.0
 
-    # 3. 额外加成：墓库对冲 +5%
+    # 3. 额外加成：墓库对冲 +5% × 被冲柱数
+    # 如果命局中有 N 个相同的目标墓库地支被冲，墓库加成 = 5% × N
     grave_bonus_percent = 0.0
     if _is_grave_clash(flow_branch, target_branch):
-        grave_bonus_percent += 5.0
+        # 每个被冲的柱都加5%
+        grave_bonus_percent = 5.0 * len(targets)
 
     # 未来在这里继续加：
     #   - if 有天克地冲: extra_bonus += X

@@ -9,6 +9,55 @@ from .lunar_engine import analyze_basic
 from .luck import analyze_luck
 
 
+def _print_sanhe_sanhui_clash_bonus(sanhe_sanhui_bonus_ev: dict) -> None:
+    """打印三合/三会逢冲额外加分信息。
+    
+    打印顺序：
+    1. 哪个字属于哪个三合/三会、哪个是单独字
+    2. 单独字是不是用神（如果有单独字）
+    3. 本规则本年额外加分是多少（+15 或 +35），并声明本年封顶已用掉
+    """
+    bonus_percent = sanhe_sanhui_bonus_ev.get("risk_percent", 0.0)
+    if bonus_percent <= 0.0:
+        return
+    
+    flow_branch = sanhe_sanhui_bonus_ev.get("flow_branch", "")
+    target_branch = sanhe_sanhui_bonus_ev.get("target_branch", "")
+    group_type = sanhe_sanhui_bonus_ev.get("group_type", "")  # "sanhe" or "sanhui"
+    group_name = sanhe_sanhui_bonus_ev.get("group_name", "")  # 例如"火局"、"木会"
+    group_members = sanhe_sanhui_bonus_ev.get("group_members", [])  # 三合/三会的三个成员字
+    flow_in_group = sanhe_sanhui_bonus_ev.get("flow_in_group", False)
+    target_in_group = sanhe_sanhui_bonus_ev.get("target_in_group", False)
+    standalone_zhi = sanhe_sanhui_bonus_ev.get("standalone_zhi")
+    standalone_is_yongshen = sanhe_sanhui_bonus_ev.get("standalone_is_yongshen")
+    
+    # 构建三合/三会名称（例如"寅午戌三合火局"或"巳午未三会火会"）
+    group_members_str = "".join(group_members)
+    if group_type == "sanhe":
+        group_full_name = f"{group_members_str}三合{group_name}"
+    else:  # sanhui
+        group_full_name = f"{group_members_str}三会{group_name}"
+    
+    # 打印：哪个字属于哪个三合/三会、哪个是单独字
+    if flow_in_group and target_in_group:
+        # 两个字都属于局/会
+        print(f"          {group_full_name}被冲到：冲对中'{flow_branch}'和'{target_branch}'都属于{group_full_name}")
+    elif flow_in_group:
+        # flow_branch属于局/会，target_branch是单独字
+        print(f"          {group_full_name}被冲到：冲对中'{flow_branch}'属于{group_full_name}；'{target_branch}'是单独字")
+    else:  # target_in_group
+        # target_branch属于局/会，flow_branch是单独字
+        print(f"          {group_full_name}被冲到：冲对中'{target_branch}'属于{group_full_name}；'{flow_branch}'是单独字")
+    
+    # 打印：单独字是不是用神（如果有单独字）
+    if standalone_zhi:
+        yongshen_status = "是用神" if standalone_is_yongshen else "不是用神"
+        print(f"          单独字{standalone_zhi}：{yongshen_status}")
+    
+    # 打印：本规则本年额外加分是多少（+15 或 +35），并声明本年封顶已用掉
+    print(f"          三合/三会逢冲额外：+{bonus_percent:.0f}%（本年只加一次）")
+
+
 def _format_clash_natal(ev: dict) -> str:
     """把命局冲的信息整理成一行文字。
     
@@ -69,30 +118,38 @@ def _format_clash_natal(ev: dict) -> str:
 
 
 
-def run_cli() -> None:
-    print("=== Hayyy 八字 · 日主强弱 + 用神 + 大运流年 MVP ===")
-    print("当前版本：")
-    print("  - 只支持【阳历】输入")
-    print("  - 时间默认按【出生地当地时间 / 北京时间】理解")
-    print("")
+def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
+    """运行CLI，可以接受参数（用于测试）或从输入获取（用于交互）。
+    
+    参数:
+        birth_dt: 出生日期时间（可选，如果不提供则从输入获取）
+        is_male: 是否为男性（可选，如果不提供则从输入获取）
+    """
+    if birth_dt is None or is_male is None:
+        # 交互模式
+        print("=== Hayyy 八字 · 日主强弱 + 用神 + 大运流年 MVP ===")
+        print("当前版本：")
+        print("  - 只支持【阳历】输入")
+        print("  - 时间默认按【出生地当地时间 / 北京时间】理解")
+        print("")
 
-    date_str = input("请输入阳历生日 (YYYY-MM-DD)：").strip()
-    time_str = input("请输入出生时间 (HH:MM，例如 09:30，未知可写 00:00)：").strip()
+        date_str = input("请输入阳历生日 (YYYY-MM-DD)：").strip()
+        time_str = input("请输入出生时间 (HH:MM，例如 09:30，未知可写 00:00)：").strip()
 
-    if not date_str:
-        print("日期不能为空。")
-        return
-    if not time_str:
-        time_str = "00:00"
+        if not date_str:
+            print("日期不能为空。")
+            return
+        if not time_str:
+            time_str = "00:00"
 
-    try:
-        birth_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
-    except ValueError:
-        print("日期或时间格式错误，请按 YYYY-MM-DD 和 HH:MM 格式输入。")
-        return
+        try:
+            birth_dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+        except ValueError:
+            print("日期或时间格式错误，请按 YYYY-MM-DD 和 HH:MM 格式输入。")
+            return
 
-    sex_str = input("请输入性别 (M/F)：").strip().upper()
-    is_male = True if sex_str != "F" else False
+        sex_str = input("请输入性别 (M/F)：").strip().upper()
+        is_male = True if sex_str != "F" else False
 
     # ===== 本命 + 用神 =====
     result = analyze_basic(birth_dt)
@@ -275,6 +332,31 @@ def run_cli() -> None:
         uniq_banhe = sorted(set(natal_banhe_lines))
         print("原局半合：" + "，".join(uniq_banhe))
     
+    # ===== 原局天干五合（只识别+打印，不影响风险） =====
+    from .gan_wuhe import GanPosition, detect_gan_wuhe, format_gan_wuhe_event
+    from .shishen import get_shishen
+    
+    day_gan = bazi["day"]["gan"]
+    natal_gan_positions = []
+    # 原局入口使用"年柱天干"格式
+    pillar_labels = {"year": "年柱天干", "month": "月柱天干", "day": "日柱天干", "hour": "时柱天干"}
+    for pillar in ["year", "month", "day", "hour"]:
+        gan = bazi[pillar]["gan"]
+        shishen = get_shishen(day_gan, gan) or "-"
+        natal_gan_positions.append(GanPosition(
+            source="natal",
+            label=pillar_labels[pillar],
+            gan=gan,
+            shishen=shishen
+        ))
+    
+    natal_wuhe_events = detect_gan_wuhe(natal_gan_positions)
+    if natal_wuhe_events:
+        for ev in natal_wuhe_events:
+            # 原局入口不再带“原局”前缀，只打印柱位+字+五合+十神关系
+            line = format_gan_wuhe_event(ev, incoming_shishen=None)
+            print(f"原局天干五合：{line}")
+    
     # 原局问题打印
     from .clash import detect_natal_tian_ke_di_chong
     
@@ -366,6 +448,11 @@ def run_cli() -> None:
 
     print("\n======== 大运 & 流年（按大运分组） ========\n")
 
+    # 获取生扶力量和身强/身弱信息（用于用神互换提示）
+    support_percent = result.get("support_percent", 0.0)
+    strength_percent = result.get("strength_percent", 50.0)
+    day_gan = bazi["day"]["gan"]
+
     for group in luck["groups"]:
         dy = group["dayun"]
         lns = group["liunian"]
@@ -380,6 +467,21 @@ def run_cli() -> None:
             f"[干 {dy['gan_element'] or '-'} {gan_flag} / "
             f"支 {dy['zhi_element'] or '-'} {zhi_flag}]"
         )
+        
+        # ===== 用神互换提示（只打印，不影响计算） =====
+        from .yongshen_swap import should_print_yongshen_swap_hint, format_yongshen_swap_hint
+        
+        dayun_zhi = dy.get("zhi", "")
+        hint_info = should_print_yongshen_swap_hint(
+            day_gan=day_gan,
+            strength_percent=strength_percent,
+            support_percent=support_percent,
+            yongshen_elements=yong,
+            dayun_zhi=dayun_zhi,
+        )
+        if hint_info:
+            hint_line = format_yongshen_swap_hint(hint_info)
+            print(f"    {hint_line}")
         
         # 大运六合（只解释，不计分）
         dayun_liuhe_lines = []
@@ -505,6 +607,38 @@ def run_cli() -> None:
             # 用空格连接各部分（按regression格式）
             result = " ".join(parts)
             print(f"    {result}。")
+        
+        # ===== 大运天干五合（只识别+打印，不影响风险） =====
+        dayun_gan = dy.get("gan", "")
+        if dayun_gan:
+            dayun_shishen = get_shishen(day_gan, dayun_gan) or "-"
+            # 大运入口使用"年干"格式（不是"年柱天干"），且本行不再重复打印“大运6，庚辰大运”
+            dayun_gan_positions = []
+            pillar_labels_dayun = {"year": "年干", "month": "月干", "day": "日干", "hour": "时干"}
+            for pillar in ["year", "month", "day", "hour"]:
+                gan = bazi[pillar]["gan"]
+                shishen = get_shishen(day_gan, gan) or "-"
+                dayun_gan_positions.append(GanPosition(
+                    source="natal",
+                    label=pillar_labels_dayun[pillar],
+                    gan=gan,
+                    shishen=shishen
+                ))
+            dayun_gan_positions.append(GanPosition(
+                source="dayun",
+                label="大运天干",
+                gan=dayun_gan,
+                shishen=dayun_shishen
+            ))
+            dayun_wuhe_events = detect_gan_wuhe(dayun_gan_positions)
+            if dayun_wuhe_events:
+                for ev in dayun_wuhe_events:
+                    # 只打印涉及大运天干的五合
+                    dayun_involved = any(pos.source == "dayun" for pos in ev["many_side"] + ev["few_side"])
+                    if dayun_involved:
+                        # 行内只保留“年干，月干，时干 乙 争合 大运天干 庚 ...”
+                        line = format_gan_wuhe_event(ev, incoming_shishen=dayun_shishen)
+                        print(f"    {line}")
         
         # 大运本身与命局的冲
         for ev in dy.get("clashes_natal", []):
@@ -660,6 +794,49 @@ def run_cli() -> None:
                 result = " ".join(parts)
                 print(f"        {result}。")
             
+            # ===== 流年天干五合（只识别+打印，不影响风险） =====
+            liunian_gan = ln.get("gan", "")
+            if liunian_gan:
+                liunian_shishen = get_shishen(day_gan, liunian_gan) or "-"
+                # 流年入口使用"年干"格式（不是"年柱天干"），本行不再重复打印“2050年”等年份
+                liunian_gan_positions = []
+                pillar_labels_liunian = {"year": "年干", "month": "月干", "day": "日干", "hour": "时干"}
+                for pillar in ["year", "month", "day", "hour"]:
+                    gan = bazi[pillar]["gan"]
+                    shishen = get_shishen(day_gan, gan) or "-"
+                    liunian_gan_positions.append(GanPosition(
+                        source="natal",
+                        label=pillar_labels_liunian[pillar],
+                        gan=gan,
+                        shishen=shishen
+                    ))
+                # 添加大运天干
+                dayun_gan = dy.get("gan", "")
+                if dayun_gan:
+                    dayun_shishen = get_shishen(day_gan, dayun_gan) or "-"
+                    liunian_gan_positions.append(GanPosition(
+                        source="dayun",
+                        label="大运天干",
+                        gan=dayun_gan,
+                        shishen=dayun_shishen
+                    ))
+                # 添加流年天干
+                liunian_gan_positions.append(GanPosition(
+                    source="liunian",
+                    label="流年天干",
+                    gan=liunian_gan,
+                    shishen=liunian_shishen
+                ))
+                liunian_wuhe_events = detect_gan_wuhe(liunian_gan_positions)
+                if liunian_wuhe_events:
+                    for ev in liunian_wuhe_events:
+                        # 只打印涉及流年天干的五合
+                        liunian_involved = any(pos.source == "liunian" for pos in ev["many_side"] + ev["few_side"])
+                        if liunian_involved:
+                            # 行内只保留“年干，月干，时干 乙 争合 流年天干，大运天干 庚 ...”
+                            line = format_gan_wuhe_event(ev, incoming_shishen=liunian_shishen)
+                            print(f"        {line}")
+            
             # 先打印危险系数
             total_risk = ln.get("total_risk_percent", 0.0)
             risk_from_gan = ln.get("risk_from_gan", 0.0)
@@ -760,6 +937,7 @@ def run_cli() -> None:
                 # 先打印所有动态冲
                 total_clash_dynamic = 0.0
                 from .config import PILLAR_PALACE
+                sanhe_sanhui_bonus_printed = False  # 标记是否已打印三合/三会逢冲额外加分
                 
                 # 流年与命局的冲
                 for ev in ln.get("clashes_natal", []):
@@ -781,6 +959,18 @@ def run_cli() -> None:
                             target_info.append(f"{pillar_name}（{palace}）")
                         target_str = "、".join(target_info)
                         print(f"          冲：流年 {flow_branch} 冲 命局{target_str} {target_branch}，风险 {clash_risk_zhi:.1f}%")
+                        
+                        # 检查这个冲是否触发三合/三会逢冲额外加分（只打印一次）
+                        if not sanhe_sanhui_bonus_printed:
+                            sanhe_sanhui_bonus_ev = ln.get("sanhe_sanhui_clash_bonus_event")
+                            if sanhe_sanhui_bonus_ev:
+                                bonus_flow = sanhe_sanhui_bonus_ev.get("flow_branch", "")
+                                bonus_target = sanhe_sanhui_bonus_ev.get("target_branch", "")
+                                # 检查是否匹配当前冲
+                                if (bonus_flow == flow_branch and bonus_target == target_branch) or \
+                                   (bonus_flow == target_branch and bonus_target == flow_branch):
+                                    _print_sanhe_sanhui_clash_bonus(sanhe_sanhui_bonus_ev)
+                                    sanhe_sanhui_bonus_printed = True
                 
                 # 运年相冲
                 for ev in ln.get("clashes_dayun", []):
@@ -798,6 +988,18 @@ def run_cli() -> None:
                         dg_ss = dg.get("shishen") or "-"
                         lg_ss = lg.get("shishen") or "-"
                         print(f"          运年相冲：大运支 {dayun_branch}（{dg_ss}） 与 流年支 {liunian_branch}（{lg_ss}） 相冲，风险 {clash_risk_zhi:.1f}%")
+                        
+                        # 检查这个冲是否触发三合/三会逢冲额外加分（只打印一次）
+                        if not sanhe_sanhui_bonus_printed:
+                            sanhe_sanhui_bonus_ev = ln.get("sanhe_sanhui_clash_bonus_event")
+                            if sanhe_sanhui_bonus_ev:
+                                bonus_flow = sanhe_sanhui_bonus_ev.get("flow_branch", "")
+                                bonus_target = sanhe_sanhui_bonus_ev.get("target_branch", "")
+                                # 检查是否匹配当前冲（运年相冲中，flow_branch可能是dayun_branch，target_branch可能是liunian_branch）
+                                if (bonus_flow == dayun_branch and bonus_target == liunian_branch) or \
+                                   (bonus_flow == liunian_branch and bonus_target == dayun_branch):
+                                    _print_sanhe_sanhui_clash_bonus(sanhe_sanhui_bonus_ev)
+                                    sanhe_sanhui_bonus_printed = True
                 
                 # 打印静态冲激活（如果有）
                 static_clash_risk = 0.0
@@ -808,10 +1010,19 @@ def run_cli() -> None:
                             print(f"          静态冲激活：风险 {static_clash_risk:.1f}%")
                             break
                 
-                # 打印冲的总和
-                if total_clash_dynamic > 0.0 or static_clash_risk > 0.0:
-                    total_clash = total_clash_dynamic + static_clash_risk
-                    print(f"          冲总影响：动态 {total_clash_dynamic:.1f}% + 静态 {static_clash_risk:.1f}% = {total_clash:.1f}%")
+                # 打印冲的总和（包含三合/三会逢冲额外加分）
+                sanhe_sanhui_bonus_for_clash = ln.get("sanhe_sanhui_clash_bonus", 0.0)
+                if total_clash_dynamic > 0.0 or static_clash_risk > 0.0 or sanhe_sanhui_bonus_for_clash > 0.0:
+                    total_clash = total_clash_dynamic + static_clash_risk + sanhe_sanhui_bonus_for_clash
+                    parts = []
+                    if total_clash_dynamic > 0.0:
+                        parts.append(f"动态 {total_clash_dynamic:.1f}%")
+                    if static_clash_risk > 0.0:
+                        parts.append(f"静态 {static_clash_risk:.1f}%")
+                    if sanhe_sanhui_bonus_for_clash > 0.0:
+                        parts.append(f"三合/三会逢冲 {sanhe_sanhui_bonus_for_clash:.1f}%")
+                    parts_str = " + ".join(parts)
+                    print(f"          冲总影响：{parts_str} = {total_clash:.1f}%")
                 
                 # 先打印所有动态刑
                 total_punish_dynamic = 0.0

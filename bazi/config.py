@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """日主强弱 + 用神 + 冲 相关配置。"""
 
-from typing import Dict
+from typing import Dict, FrozenSet
 
 # 位置权重（总和约 1.0）
 POSITION_WEIGHTS: Dict[str, float] = {
@@ -100,6 +100,16 @@ KE_MAP: Dict[str, str] = {
     "水": "火",
     "火": "金",
     "金": "木",
+}
+
+# 天干五合：使用无序对（frozenset）来判定是否为五合
+# 仅用于识别与打印，不影响任何力量/风险。
+GAN_WUHE: Dict[FrozenSet[str], str] = {
+    frozenset({"甲", "己"}): "甲己合土",
+    frozenset({"乙", "庚"}): "乙庚合金",
+    frozenset({"丙", "辛"}): "丙辛合水",
+    frozenset({"丁", "壬"}): "丁壬合木",
+    frozenset({"戊", "癸"}): "戊癸合火",
 }
 
 # ===== 风险系数常量 =====
