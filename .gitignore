@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# 临时测试和调试文件
+check_*.py
+debug_*.py
+test_*.py
+find_test_cases*.py
+verify_*.py
+analyze_*.py
+print_*.py
+
+# Schema文件保留在版本控制中（API定义）
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志和临时文件
+*.log
+*.tmp
+*.bak
+REGRESS_REPORT.txt
+
+# 虚拟环境（如果有）
+venv/
+env/
+ENV/
+
+# 打包文件
+*.zip
+partner_pack_*.zip
+
