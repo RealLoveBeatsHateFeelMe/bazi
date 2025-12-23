@@ -7,6 +7,82 @@ from datetime import datetime
 
 from .lunar_engine import analyze_basic
 from .luck import analyze_luck
+from .config import ZHI_WUXING
+
+
+def _generate_marriage_suggestion(yongshen_elements: list[str]) -> str:
+    """根据用神五行生成婚配建议。
+    
+    参数:
+        yongshen_elements: 用神五行列表，例如 ["木", "火"]
+    
+    返回:
+        婚配建议字符串，例如 "【婚配建议】推荐：虎兔蛇马；或 木，火旺的人。"
+    """
+    if not yongshen_elements:
+        return ""
+    
+    # 地支到生肖的映射
+    zhi_to_zodiac = {
+        "子": "鼠", "丑": "牛", "寅": "虎", "卯": "兔",
+        "辰": "龙", "巳": "蛇", "午": "马", "未": "羊",
+        "申": "猴", "酉": "鸡", "戌": "狗", "亥": "猪",
+    }
+    
+    # 五行到地支的映射（只用主五行）
+    element_to_zhi = {
+        "水": ["亥", "子"],
+        "金": ["申", "酉"],
+        "木": ["寅", "卯"],
+        "火": ["巳", "午"],
+        "土": ["辰", "戌", "丑", "未"],
+    }
+    
+    # 收集每个五行对应的生肖
+    zodiac_blocks = {
+        "水": [],  # 猪鼠
+        "金": [],  # 猴鸡
+        "木": [],  # 虎兔
+        "火": [],  # 蛇马
+        "土": [],  # 龙狗牛羊
+    }
+    
+    for elem in yongshen_elements:
+        if elem in element_to_zhi:
+            for zhi in element_to_zhi[elem]:
+                zodiac = zhi_to_zodiac.get(zhi, "")
+                if zodiac and zodiac not in zodiac_blocks[elem]:
+                    zodiac_blocks[elem].append(zodiac)
+    
+    # 按顺序拼接生肖块
+    result_parts = []
+    
+    # 1. 先拼 水块(猪鼠) + 金块(猴鸡)
+    if zodiac_blocks["水"]:
+        result_parts.extend(zodiac_blocks["水"])
+    if zodiac_blocks["金"]:
+        result_parts.extend(zodiac_blocks["金"])
+    
+    # 2. 再拼 木块(虎兔) + 火块(蛇马)
+    if zodiac_blocks["木"]:
+        result_parts.extend(zodiac_blocks["木"])
+    if zodiac_blocks["火"]:
+        result_parts.extend(zodiac_blocks["火"])
+    
+    # 3. 最后拼 土块(龙狗牛羊)
+    if zodiac_blocks["土"]:
+        result_parts.extend(zodiac_blocks["土"])
+    
+    # 构建推荐生肖串
+    zodiac_str = "".join(result_parts) if result_parts else ""
+    
+    # 构建"旺的人"文案：按候选五行顺序，用中文顿号分隔
+    wang_str = "，".join(yongshen_elements)
+    
+    if zodiac_str:
+        return f"【婚配建议】推荐：{zodiac_str}；或 {wang_str}旺的人。"
+    else:
+        return f"【婚配建议】推荐：或 {wang_str}旺的人。"
 
 
 def _print_sanhe_sanhui_clash_bonus(sanhe_sanhui_bonus_ev: dict) -> None:
@@ -187,6 +263,9 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             if total_percent >= 35.0 or hits >= 2:
                 major.append(t)
 
+        # 收集已经在“主要性格”里打印过的性格大类，用于“其他性格”去重
+        main_groups = {t.get("group") for t in major} if major else set()
+
         if major:
             print("\n—— 主要性格 ——")
             for trait in major:
@@ -210,6 +289,9 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         print("\n—— 其他性格 ——")
         all_groups = ["财", "印", "官杀", "食伤", "比劫"]
         for g in all_groups:
+            # 已经在“主要性格”中打印过的性格大类，这里跳过，避免重复
+            if g in main_groups:
+                continue
             trait = trait_by_group.get(g, {})
             total_percent = trait.get("total_percent", 0.0)
             mix_label = trait.get("mix_label", "无")
@@ -237,7 +319,9 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
     # 合并用神信息打印
     print("\n—— 用神信息 ——")
     yong = result["yongshen_elements"]
-    print("用神五行（候选）：", "、".join(yong))
+    yong_str = "、".join(yong)
+    marriage_suggestion = _generate_marriage_suggestion(yong)
+    print(f"用神五行（候选）： {yong_str} {marriage_suggestion}")
     
     # 用神（五行→十神）
     yong_ss = result.get("yongshen_shishen") or []
@@ -383,26 +467,56 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                 issues.append(f"{palaces_str} 冲 {risk:.1f}%")
     
     # 打印原局刑
+    # 对于自刑，需要收集所有自刑地支，然后两两组合打印
+    self_punish_processed = set()  # 记录已处理的自刑地支，避免重复打印
+    
     for punish in natal_punishments:
         targets = punish.get("targets", [])
         if targets:
-            target_palace = PILLAR_PALACE_CN.get(targets[0].get("pillar", ""), "")
             flow_branch = punish.get("flow_branch", "")
             target_branch = punish.get("target_branch", "")
-            # 找到flow_branch和target_branch对应的柱
-            flow_pillar = None
-            target_pillar = targets[0].get("pillar", "")
-            for pillar in ("year", "month", "day", "hour"):
-                if bazi[pillar]["zhi"] == flow_branch and pillar != target_pillar:
-                    flow_pillar = pillar
-                    break
-            # 如果是自刑（flow_branch == target_branch），flow_pillar就是target_pillar
-            if flow_branch == target_branch:
-                flow_pillar = target_pillar
-            flow_palace = PILLAR_PALACE_CN.get(flow_pillar, "") if flow_pillar else ""
             risk = punish.get("risk_percent", 0.0)
             if risk > 0.0:
-                issues.append(f"{flow_palace}-{target_palace} 刑 {risk:.1f}%")
+                # 如果是自刑（flow_branch == target_branch），需要找到所有包含该地支的柱，然后两两组合打印
+                if flow_branch == target_branch:
+                    # 检查是否已经处理过这个自刑地支
+                    if flow_branch in self_punish_processed:
+                        continue  # 跳过，已经处理过
+                    self_punish_processed.add(flow_branch)
+                    
+                    # 自刑：找到所有包含该地支的柱
+                    involved_pillars = []
+                    for pillar in ("year", "month", "day", "hour"):
+                        if bazi[pillar]["zhi"] == flow_branch:
+                            involved_pillars.append(pillar)
+                    
+                    # 自刑应该至少有两个柱，两两组合打印
+                    if len(involved_pillars) >= 2:
+                        # 两两组合：年-月、年-日、年-时、月-日、月-时、日-时
+                        for i in range(len(involved_pillars)):
+                            for j in range(i + 1, len(involved_pillars)):
+                                pillar1 = involved_pillars[i]
+                                pillar2 = involved_pillars[j]
+                                palace1 = PILLAR_PALACE_CN.get(pillar1, "")
+                                palace2 = PILLAR_PALACE_CN.get(pillar2, "")
+                                palaces_str = f"{palace1}和{palace2}"
+                                issues.append(f"{palaces_str}，{flow_branch}{target_branch}自刑 {risk:.1f}%")
+                    else:
+                        # 如果只找到一个柱，使用原来的逻辑
+                        target_palace = PILLAR_PALACE_CN.get(targets[0].get("pillar", ""), "")
+                        issues.append(f"{target_palace}，{flow_branch}{target_branch}自刑 {risk:.1f}%")
+                else:
+                    # 非自刑：使用原来的逻辑
+                    target_palace = PILLAR_PALACE_CN.get(targets[0].get("pillar", ""), "")
+                    # 找到flow_branch对应的柱
+                    flow_pillar = None
+                    target_pillar = targets[0].get("pillar", "")
+                    for pillar in ("year", "month", "day", "hour"):
+                        if bazi[pillar]["zhi"] == flow_branch and pillar != target_pillar:
+                            flow_pillar = pillar
+                            break
+                    flow_palace = PILLAR_PALACE_CN.get(flow_pillar, "") if flow_pillar else ""
+                    issues.append(f"{flow_palace}-{target_palace} 刑 {risk:.1f}%")
     
     # 打印原局天克地冲
     for tkdc in natal_tkdc:
