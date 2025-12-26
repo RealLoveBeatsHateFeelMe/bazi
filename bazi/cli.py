@@ -246,70 +246,406 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
 
     # 主要性格 / 其他性格
     dominant_traits = result.get("dominant_traits") or []
+    yongshen_elements = result.get("yongshen_elements", [])
+    
     if dominant_traits:
         # 辅助：按 group 索引
         trait_by_group = {t.get("group"): t for t in dominant_traits}
 
         def _stem_hits(trait: dict) -> int:
+            """计算该大类总透干次数（所有子类透干次数之和）"""
             detail = trait.get("detail") or []
             hits = sum(d.get("stems_visible_count", 0) for d in detail)
             return min(hits, 3)
+        
+        def _format_trait_line1(trait: dict, is_major_by_rule3: bool = False) -> str:
+            """格式化第1行：{大类}（{total_percent:.1f}%）：{子类标签}；{透干柱位列表}透干×{n}；{得月令字段}；{子类百分比摘要}"""
+            group = trait.get("group", "-")
+            total_percent = trait.get("total_percent", 0.0)
+            sub_label = trait.get("sub_label", trait.get("mix_label", ""))
+            detail = trait.get("detail") or []
+            de_yueling = trait.get("de_yueling")
+            
+            # 如果力量为0，显示"八字中没有{大类}星"
+            if total_percent == 0.0:
+                # 根据大类名称生成对应的星名
+                star_name_map = {
+                    "财": "财星",
+                    "印": "印星",
+                    "官杀": "官杀星",
+                    "食伤": "食伤星",
+                    "比劫": "比劫星",
+                }
+                star_name = star_name_map.get(group, f"{group}星")
+                sub_label = f"八字中没有{star_name}"
+            
+            # 收集所有透出的柱位（合并所有子类的透出柱位）
+            all_stem_pillars = []
+            total_stem_hits = 0
+            for d in detail:
+                stem_pillars = d.get("stem_pillars", [])
+                all_stem_pillars.extend(stem_pillars)
+                total_stem_hits += d.get("stems_visible_count", 0)
+            
+            # 去重并保持顺序（年柱→月柱→时柱）
+            pillar_order = ["年柱", "月柱", "时柱"]
+            seen = set()
+            ordered_pillars = []
+            for p in pillar_order:
+                if p in all_stem_pillars and p not in seen:
+                    ordered_pillars.append(p)
+                    seen.add(p)
+            
+            # 构建透干信息
+            stem_part = ""
+            if total_stem_hits >= 1:
+                pillars_str = "，".join(ordered_pillars)
+                stem_part = f"；{pillars_str}透干×{total_stem_hits}"
+                if is_major_by_rule3:
+                    stem_part += "，且为用神"
+            
+            # 得月令字段
+            de_yueling_part = ""
+            if de_yueling:
+                de_yueling_part = f"；{de_yueling}"
+            
+            # 子类百分比摘要
+            present_subs = [d for d in detail if d.get("percent", 0.0) > 0.0]
+            if len(present_subs) == 1:
+                # 纯：纯{子类}{percent:.1f}%
+                sub_name = present_subs[0].get("name", "")
+                sub_percent = present_subs[0].get("percent", 0.0)
+                subs_summary = f"纯{sub_name}{sub_percent:.1f}%"
+            elif len(present_subs) >= 2:
+                # 混：两个子类的百分比，用逗号分隔
+                # 固定顺序：正/偏、正官/七杀、食神/伤官、比肩/劫财、正印/偏印
+                sub_pairs = []
+                for d in detail:
+                    if d.get("percent", 0.0) > 0.0:
+                        sub_pairs.append((d.get("name", ""), d.get("percent", 0.0)))
+                # 按固定顺序排序（正/偏、正官/七杀等，正在前，偏/杀在后）
+                # 但用户期望输出显示"偏财20.0%，正财15.0%"，说明应该按占比降序
+                # 重新理解：用户说"固定顺序：正/偏、正官/七杀、食神/伤官、比肩/劫财、正印/偏印"
+                # 但实际期望输出是"偏财20.0%，正财15.0%"，说明应该按占比从高到低排序
+                sub_pairs.sort(key=lambda x: -x[1])  # 按占比降序排序
+                subs_summary = "，".join(f"{name}{percent:.1f}%" for name, percent in sub_pairs)
+            else:
+                subs_summary = "—"
+            
+            return f"{group}（{total_percent:.1f}%）：{sub_label}{stem_part}{de_yueling_part}；{subs_summary}"
+        
+        def _format_trait_line2(trait: dict) -> str:
+            """格式化第2行：{大类}的五行：{element}；{大类}{为/不为}用神"""
+            group = trait.get("group", "-")
+            element = trait.get("element", "")
+            # 即使 element 为 None 或空，也要显示（当力量为0时，element 应该已经通过定义计算出来了）
+            if not element:
+                element = "None"  # 如果还是没有，显示 None（但理论上不应该出现）
+            is_yongshen = element in yongshen_elements if element and element != "None" else False
+            yongshen_status = "为用神" if is_yongshen else "不为用神"
+            return f"- {group}的五行：{element}；{group}{yongshen_status}"
 
-        # 主要性格：满足 total_percent>=35 或 stem_hits>=2
+        # 主要性格：满足 total_percent>=35 或 stem_hits>=2 或 (stem_hits>=1 且为用神)
         major = []
+        major_by_rule3 = set()  # 记录因为规则3（透干>=1且为用神）而晋级的主要性格
+        
         for t in dominant_traits:
             total_percent = t.get("total_percent", 0.0)
             hits = _stem_hits(t)
+            element = t.get("element", "")
+            is_yongshen = element in yongshen_elements if element else False
+            
+            is_major = False
             if total_percent >= 35.0 or hits >= 2:
+                is_major = True
+            elif hits >= 1 and is_yongshen:
+                is_major = True
+                major_by_rule3.add(t.get("group"))
+            
+            if is_major:
                 major.append(t)
 
-        # 收集已经在“主要性格”里打印过的性格大类，用于“其他性格”去重
+        # 收集已经在"主要性格"里打印过的性格大类，用于"其他性格"去重
         main_groups = {t.get("group") for t in major} if major else set()
 
         if major:
             print("\n—— 主要性格 ——")
             for trait in major:
-                group = trait.get("group", "-")
-                total_percent = trait.get("total_percent", 0.0)
-                mix_label = trait.get("mix_label", "")
-                hits = _stem_hits(trait)
-
-                # 子类占比串
-                detail = trait.get("detail") or []
-                subs_str = "；子类占比 " + "，".join(
-                    f"{d.get('name')} {d.get('percent', 0.0):.1f}%"
-                    for d in detail
+                group = trait.get("group", "")
+                is_major_by_rule3 = group in major_by_rule3 and (
+                    trait.get("total_percent", 0.0) < 35.0 and _stem_hits(trait) < 2
                 )
-                print(
-                    f"{group}（{total_percent:.1f}%）：{mix_label}；"
-                    f"三天干命中 {hits}/3{subs_str}"
-                )
+                print(_format_trait_line1(trait, is_major_by_rule3))
+                print(_format_trait_line2(trait))
 
         # 其他性格：五大类全量（含 0%）
         print("\n—— 其他性格 ——")
         all_groups = ["财", "印", "官杀", "食伤", "比劫"]
         for g in all_groups:
-            # 已经在“主要性格”中打印过的性格大类，这里跳过，避免重复
+            # 已经在"主要性格"中打印过的性格大类，这里跳过，避免重复
             if g in main_groups:
                 continue
             trait = trait_by_group.get(g, {})
-            total_percent = trait.get("total_percent", 0.0)
-            mix_label = trait.get("mix_label", "无")
-            hits = 0
-            detail = trait.get("detail") or []
-            if detail:
-                hits = min(sum(d.get("stems_visible_count", 0) for d in detail), 3)
-                subs_str = "；子类占比 " + "，".join(
-                    f"{d.get('name')} {d.get('percent', 0.0):.1f}%"
-                    for d in detail
-                )
-            else:
-                subs_str = "；子类占比 —"
+            if not trait:
+                # 如果该大类不存在，创建一个空的
+                trait = {
+                    "group": g,
+                    "total_percent": 0.0,
+                    "sub_label": "无",
+                    "detail": [],
+                    "de_yueling": None,
+                    "element": None,
+                }
+            
+            print(_format_trait_line1(trait, False))
+            print(_format_trait_line2(trait))
 
-            print(
-                f"{g}（{total_percent:.1f}%）：{mix_label}；"
-                f"三天干命中 {hits}/3{subs_str}"
-            )
+    # 六亲助力：只输出用神十神大类
+    print("\n—— 六亲助力 ——")
+    
+    def _get_liuqin_source(group: str, detail: List[Dict[str, Any]], total_percent: float, is_male: bool) -> str:
+        """获取六亲助力的来源清单"""
+        present_subs = [d for d in detail if d.get("percent", 0.0) > 0.0]
+        
+        if group == "印":
+            if total_percent == 0:
+                # 原局没有印星：合并输出
+                return "母亲/长辈/贵人/老师，学历证书/名誉背书/正统学习/学校体系，技术型/非传统学习与灵感路径（偏印）"
+            else:
+                zhengyin_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "正印"), 0.0)
+                pianyin_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "偏印"), 0.0)
+                
+                if zhengyin_percent > 0 and pianyin_percent == 0:
+                    # 纯正印
+                    return "母亲/长辈/贵人/老师，学历证书/名誉背书/正统学习/学校体系"
+                elif pianyin_percent > 0 and zhengyin_percent == 0:
+                    # 纯偏印
+                    return "母亲/长辈/贵人/老师，技术型/非传统学习与灵感路径（偏印）"
+                else:
+                    # 混杂
+                    return "母亲/长辈/贵人/老师，学历证书/名誉背书/正统学习/学校体系 ＋ 技术型/非传统学习与灵感路径（偏印）"
+        
+        elif group == "比劫":
+            # 比肩/劫财/比劫混杂，都用统一来源（不再区分）
+            if total_percent == 0:
+                # 原局没有比劫星（去掉末尾逗号）
+                return "兄弟姐妹/同辈朋友/同学同事，自我/独立/同行合伙/同类支持"
+            else:
+                # 比肩/劫财/混杂，都用统一来源
+                return "兄弟姐妹/同辈朋友/同学同事，自我/独立/同行合伙/同类支持"
+        
+        elif group == "食伤":
+            if total_percent == 0:
+                # 原局没有食伤星：合并表达（在开头加入"技术"）
+                return "子女/晚辈/技术，享受/口福/温和表达/才艺产出/疗愈与松弛，表达欲/叛逆/创新/挑规则/锋芒与口舌是非/输出型技术，考试发挥/即兴发挥/临场表现"
+            else:
+                shishen_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "食神"), 0.0)
+                shangguan_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "伤官"), 0.0)
+                
+                if shishen_percent > 0 and shangguan_percent == 0:
+                    # 纯食神
+                    return "子女/晚辈，享受/口福/温和表达/才艺产出/疗愈与松弛"
+                elif shangguan_percent > 0 and shishen_percent == 0:
+                    # 纯伤官
+                    return "子女/晚辈，表达欲/叛逆/创新/挑规则/锋芒与口舌是非/输出型技术"
+                else:
+                    # 混杂（合并输出）
+                    return "子女/晚辈，享受/口福/温和表达/才艺产出/疗愈与松弛，表达欲/叛逆/创新/挑规则/锋芒与口舌是非/输出型技术"
+        
+        elif group == "财":
+            if total_percent == 0:
+                # 原局没有财星
+                if is_male:
+                    return "父亲/爸爸，妻子/老婆/伴侣，钱与资源/收入/项目机会/交换"
+                else:
+                    return "父亲/爸爸，钱与资源/收入/项目机会/交换"
+            else:
+                zhengcai_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "正财"), 0.0)
+                piancai_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "偏财"), 0.0)
+                
+                if zhengcai_percent > 0 and piancai_percent == 0:
+                    # 纯正财
+                    if is_male:
+                        return "父亲/爸爸，妻子/老婆/伴侣，稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报"
+                    else:
+                        return "父亲/爸爸，稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报"
+                elif piancai_percent > 0 and zhengcai_percent == 0:
+                    # 纯偏财
+                    if is_male:
+                        return "父亲/爸爸，妻子/老婆/伴侣，外财/机会财/项目/做生意/社交资源/流动性/投机"
+                    else:
+                        return "父亲/爸爸，外财/机会财/项目/做生意/社交资源/流动性/投机"
+                else:
+                    # 混杂（合并输出）
+                    if is_male:
+                        return "父亲/爸爸，妻子/老婆/伴侣，稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报，外财/机会财/项目/做生意/社交资源/流动性/投机"
+                    else:
+                        return "父亲/爸爸，稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报，外财/机会财/项目/做生意/社交资源/流动性/投机"
+        
+        elif group == "官杀":
+            if total_percent == 0:
+                # 原局没有官杀星
+                if is_male:
+                    return "领导/上司/官职/体制/规则/名气/声望"
+                else:
+                    return "老公/丈夫/男友，领导/上司/官职/体制/规则/名气/声望"
+            else:
+                zhengguan_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "正官"), 0.0)
+                qisha_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "七杀"), 0.0)
+                
+                if zhengguan_percent > 0 and qisha_percent == 0:
+                    # 纯正官
+                    if is_male:
+                        return "领导/上司/官职/职位/体制/规则/名气/声望/责任与自我约束"
+                    else:
+                        return "老公/丈夫/男友，领导/上司/官职/职位/体制/规则/名气/声望/责任与自我约束"
+                elif qisha_percent > 0 and zhengguan_percent == 0:
+                    # 纯七杀
+                    if is_male:
+                        return "领导/上司/强权压力/竞争与执行/风险与突破，官职/体制/规则/名气"
+                    else:
+                        return "老公/丈夫/男友，领导/上司/强权压力/竞争与执行/风险与突破，官职/体制/规则/名气"
+                else:
+                    # 混杂（合并输出）
+                    if is_male:
+                        return "领导/上司/强权压力/竞争与执行/风险与突破，官职/职位/体制/规则/名气/声望/责任与自我约束"
+                    else:
+                        return "老公/丈夫/男友，领导/上司/强权压力/竞争与执行/风险与突破，官职/职位/体制/规则/名气/声望/责任与自我约束"
+        
+        return ""
+    
+    def _get_liuqin_status(group: str, detail: List[Dict[str, Any]], total_percent: float) -> str:
+        """获取六亲助力的括号状态"""
+        if total_percent == 0:
+            star_name_map = {
+                "财": "财星",
+                "印": "印星",
+                "官杀": "官杀星",
+                "食伤": "食伤星",
+                "比劫": "比劫星",
+            }
+            star_name = star_name_map.get(group, f"{group}星")
+            return f"（原局没有{star_name}）"
+        
+        present_subs = [d for d in detail if d.get("percent", 0.0) > 0.0]
+        
+        if group == "印":
+            zhengyin_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "正印"), 0.0)
+            pianyin_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "偏印"), 0.0)
+            if zhengyin_percent > 0 and pianyin_percent == 0:
+                return "（正印）"
+            elif pianyin_percent > 0 and zhengyin_percent == 0:
+                return "（偏印）"
+            else:
+                return "（正偏印混杂）"
+        
+        elif group == "财":
+            zhengcai_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "正财"), 0.0)
+            piancai_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "偏财"), 0.0)
+            if zhengcai_percent > 0 and piancai_percent == 0:
+                return "（正财）"
+            elif piancai_percent > 0 and zhengcai_percent == 0:
+                return "（偏财）"
+            else:
+                return "（正偏财混杂）"
+        
+        elif group == "官杀":
+            zhengguan_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "正官"), 0.0)
+            qisha_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "七杀"), 0.0)
+            if zhengguan_percent > 0 and qisha_percent == 0:
+                return "（正官）"
+            elif qisha_percent > 0 and zhengguan_percent == 0:
+                return "（七杀）"
+            else:
+                return "（官杀混杂）"
+        
+        elif group == "食伤":
+            shishen_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "食神"), 0.0)
+            shangguan_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "伤官"), 0.0)
+            if shishen_percent > 0 and shangguan_percent == 0:
+                return "（食神）"
+            elif shangguan_percent > 0 and shishen_percent == 0:
+                return "（伤官）"
+            else:
+                return "（食伤混杂）"
+        
+        elif group == "比劫":
+            bijian_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "比肩"), 0.0)
+            jiecai_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "劫财"), 0.0)
+            if bijian_percent > 0 and jiecai_percent == 0:
+                return "（比肩）"
+            elif jiecai_percent > 0 and bijian_percent == 0:
+                return "（劫财）"
+            elif bijian_percent > 0 and jiecai_percent > 0:
+                return "（比劫混杂）"
+            else:
+                return ""
+        
+        return ""
+    
+    def _get_strength_text(total_percent: float, group: str) -> str:
+        """获取强度话术"""
+        if total_percent == 0:
+            return f"该助力有心帮助但能力一般；走到{group}运/年会有额外帮助。"
+        elif total_percent < 30:
+            return "用神有力，助力较多。"
+        else:
+            return "用神力量很大，助力非常非常大。"
+    
+    # 获取所有五大类，检查哪些是用神
+    all_categories = ["印", "财", "官杀", "食伤", "比劫"]
+    liuqin_traits = []
+    
+    for cat in all_categories:
+        trait = trait_by_group.get(cat, {})
+        if not trait:
+            # 如果该大类不存在，创建一个空的
+            trait = {
+                "group": cat,
+                "total_percent": 0.0,
+                "sub_label": "无",
+                "detail": [],
+                "de_yueling": None,
+                "element": None,
+            }
+            # 需要计算该大类的五行（通过定义）
+            from .traits import _get_category_element_by_definition
+            bazi = result.get("bazi", {})
+            day_gan = bazi.get("day", {}).get("gan", "")
+            if day_gan:
+                # 将显示名称转换为内部类别名称
+                cat_internal = "印星" if cat == "印" else "财星" if cat == "财" else cat
+                trait["element"] = _get_category_element_by_definition(cat_internal, day_gan)
+        
+        element = trait.get("element", "")
+        if element and element in yongshen_elements:
+            # 该大类是用神，加入六亲助力
+            liuqin_traits.append(trait)
+    
+    # 打印六亲助力
+    for trait in liuqin_traits:
+        group = trait.get("group", "")
+        total_percent = trait.get("total_percent", 0.0)
+        detail = trait.get("detail", [])
+        
+        # 名称字段：比劫在原局有星时显示"比肩"，否则显示"比劫"
+        display_name = group
+        if group == "比劫" and total_percent > 0:
+            # 只要原局有比劫星（total_percent > 0），就显示"比肩"
+            display_name = "比肩"
+        
+        # 括号状态
+        status = _get_liuqin_status(group, detail, total_percent)
+        
+        # 强度话术
+        strength_text = _get_strength_text(total_percent, group)
+        
+        # 第1行
+        print(f"{display_name}{status}：{strength_text}")
+        
+        # 第2行（缩进两个空格）
+        source = _get_liuqin_source(group, detail, total_percent, is_male)
+        print(f"  来源：{source}")
 
     print("\n—— 全局五行占比（八个字）——")
     global_dist = result["global_element_percentages"]

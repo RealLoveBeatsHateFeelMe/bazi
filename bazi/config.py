@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """日主强弱 + 用神 + 冲 相关配置。"""
 
-from typing import Dict, FrozenSet
+from typing import Dict, FrozenSet, List
 
 # 位置权重（总和约 1.0）
 POSITION_WEIGHTS: Dict[str, float] = {

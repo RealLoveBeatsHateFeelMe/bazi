@@ -7,12 +7,14 @@ from .config import GAN_WUXING, ZHI_WUXING, ELEMENTS
 
 
 def calc_global_element_distribution(bazi: Dict[str, Dict[str, str]]) -> Dict[str, float]:
-    """计算“全局八个字”的五行占比（木火土金水）。
+    """计算"全局八个字"的五行占比（木火土金水）。
 
-    规则：八个字（4 干 4 支）每个字权重相同，各记 1 份。
-    不区分位置权重，只算频率。
+    规则：使用位置权重（POSITION_WEIGHTS）计算，每个位置的权重不同。
+    日干（day_gan）权重为0，不参与计算。
     """
-    counts: Dict[str, float] = {e: 0.0 for e in ELEMENTS}
+    from .config import POSITION_WEIGHTS
+    
+    weights: Dict[str, float] = {e: 0.0 for e in ELEMENTS}
     total = 0.0
 
     for pillar in ("year", "month", "day", "hour"):
@@ -22,17 +24,22 @@ def calc_global_element_distribution(bazi: Dict[str, Dict[str, str]]) -> Dict[st
         wx_gan = GAN_WUXING.get(gan)
         wx_zhi = ZHI_WUXING.get(zhi)
 
-        if wx_gan in counts:
-            counts[wx_gan] += 1.0
-            total += 1.0
-        if wx_zhi in counts:
-            counts[wx_zhi] += 1.0
-            total += 1.0
+        gan_key = f"{pillar}_gan"
+        zhi_key = f"{pillar}_zhi"
+        gan_weight = POSITION_WEIGHTS.get(gan_key, 0.0)
+        zhi_weight = POSITION_WEIGHTS.get(zhi_key, 0.0)
+
+        if wx_gan and gan_weight > 0:
+            weights[wx_gan] += gan_weight
+            total += gan_weight
+        if wx_zhi and zhi_weight > 0:
+            weights[wx_zhi] += zhi_weight
+            total += zhi_weight
 
     if total == 0:
         return {e: 0.0 for e in ELEMENTS}
 
-    return {e: counts[e] / total * 100.0 for e in ELEMENTS}
+    return {e: (weights[e] / total) * 100.0 for e in ELEMENTS}
 
 
 def determine_yongshen(

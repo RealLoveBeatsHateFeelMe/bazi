@@ -583,6 +583,42 @@ def test_sanhui_complete_2005_09_20():
     print("[PASS] 完整三会局 2005-09-20 回归通过")
 
 
+def test_global_element_distribution_case_A():
+    """全局五行占比回归用例A：2005-09-20 10:00 男
+    
+    期望：木30%，火15%，土10%，金45%，水0%
+    """
+    dt = datetime(2005, 9, 20, 10, 0)
+    basic = analyze_basic(dt)
+    global_dist = basic.get("global_element_percentages", {})
+    
+    _assert_close(global_dist.get("木", 0.0), 30.0, tol=0.1)
+    _assert_close(global_dist.get("火", 0.0), 15.0, tol=0.1)
+    _assert_close(global_dist.get("土", 0.0), 10.0, tol=0.1)
+    _assert_close(global_dist.get("金", 0.0), 45.0, tol=0.1)
+    _assert_close(global_dist.get("水", 0.0), 0.0, tol=0.1)
+    
+    print("[PASS] 全局五行占比用例A（2005-09-20）通过")
+
+
+def test_global_element_distribution_case_B():
+    """全局五行占比回归用例B：2007-01-28 12:00 男
+    
+    期望：木0%，火35%，土55%，金10%，水0%
+    """
+    dt = datetime(2007, 1, 28, 12, 0)
+    basic = analyze_basic(dt)
+    global_dist = basic.get("global_element_percentages", {})
+    
+    _assert_close(global_dist.get("木", 0.0), 0.0, tol=0.1)
+    _assert_close(global_dist.get("火", 0.0), 35.0, tol=0.1)
+    _assert_close(global_dist.get("土", 0.0), 55.0, tol=0.1)
+    _assert_close(global_dist.get("金", 0.0), 10.0, tol=0.1)
+    _assert_close(global_dist.get("水", 0.0), 0.0, tol=0.1)
+    
+    print("[PASS] 全局五行占比用例B（2007-01-28）通过")
+
+
 def main():
     try:
         test_chenwei_not_punishment()
@@ -601,6 +637,8 @@ def main():
         test_marriage_suggestion_case_B()
         test_natal_punishment_case_A_output()
         test_natal_punishment_case_2026()
+        test_global_element_distribution_case_A()
+        test_global_element_distribution_case_B()
         print("ALL REGRESSION TESTS PASS")
     except AssertionError as e:
         print(f"REGRESSION FAILED: {e}", file=sys.stderr)
@@ -1465,6 +1503,249 @@ def test_yongshen_swap_case_1969():
     print("[PASS] 用神互换提示回归用例（1969-02-07）通过")
 
 
+def test_traits_format_case_A():
+    """性格打印格式回归用例A：2005-09-20 10:00 男
+    
+    主要性格段必须包含（至少以下子串）：
+    - 财（45.0%）：偏财；得月令；纯偏财45.0%
+    - 财的五行：金；财不为用神
+    - 印（30.0%）：偏印；年柱，月柱，时柱透干×3；
+    - 印的五行：木；印为用神
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2005, 9, 20, 10, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取主要性格段
+    major_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                major_section = remaining.split("—— 其他性格 ——")[0]
+            else:
+                major_section = remaining
+    
+    # 验证关键子串（使用 contains 断言，避免空格/标点小差异）
+    assert "财（45.0%）：偏财" in major_section, "应包含：财（45.0%）：偏财"
+    assert "得月令" in major_section, "应包含：得月令"
+    assert "纯偏财45.0%" in major_section, "应包含：纯偏财45.0%"
+    assert "财的五行：金" in major_section, "应包含：财的五行：金"
+    assert "财不为用神" in major_section, "应包含：财不为用神"
+    
+    assert "印（30.0%）：偏印" in major_section, "应包含：印（30.0%）：偏印"
+    assert "年柱，月柱，时柱透干×3" in major_section, "应包含：年柱，月柱，时柱透干×3"
+    assert "印的五行：木" in major_section, "应包含：印的五行：木"
+    assert "印为用神" in major_section, "应包含：印为用神"
+    
+    print("[PASS] 性格打印格式用例A（2005-09-20）通过")
+
+
+def test_traits_format_case_B():
+    """性格打印格式回归用例B：2007-01-28 12:00 男
+    
+    主要性格段必须包含：
+    - 印（10.0%）：正印；月柱透干×1，且为用神，纯正印10.0%
+    - 印的五行：金；印为用神
+    - 官杀（55.0%）：官杀混杂；正官得月令；正官35.0%，七杀20.0%
+    - 官杀的五行：土；官杀不为用神
+    - 财（35.0%）：偏财；年柱，时柱透干×2；偏财20.0%，正财15.0%
+    - 财的五行：土；财为用神
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2007, 1, 28, 12, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取主要性格段
+    major_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                major_section = remaining.split("—— 其他性格 ——")[0]
+            else:
+                major_section = remaining
+    
+    # 验证关键子串（使用 contains 断言）
+    assert "印（10.0%）：正印" in major_section, "应包含：印（10.0%）：正印"
+    assert "月柱透干×1，且为用神" in major_section, "应包含：月柱透干×1，且为用神"
+    assert "纯正印10.0%" in major_section, "应包含：纯正印10.0%"
+    assert "印的五行：金" in major_section, "应包含：印的五行：金"
+    assert "印为用神" in major_section, "应包含：印为用神"
+    
+    assert "官杀（55.0%）：官杀混杂" in major_section, "应包含：官杀（55.0%）：官杀混杂"
+    assert "正官得月令" in major_section, "应包含：正官得月令"
+    assert "正官35.0%，七杀20.0%" in major_section, "应包含：正官35.0%，七杀20.0%"
+    assert "官杀的五行：土" in major_section, "应包含：官杀的五行：土"
+    assert "官杀不为用神" in major_section, "应包含：官杀不为用神"
+    
+    assert "财（35.0%）：正偏财混杂" in major_section, "应包含：财（35.0%）：正偏财混杂"
+    assert "年柱，时柱透干×2" in major_section, "应包含：年柱，时柱透干×2"
+    assert "偏财20.0%，正财15.0%" in major_section, "应包含：偏财20.0%，正财15.0%"
+    assert "财的五行：火" in major_section, "应包含：财的五行：火"
+    assert "财不为用神" in major_section, "应包含：财不为用神"
+    
+    print("[PASS] 性格打印格式用例B（2007-01-28）通过")
+
+
+def test_liuqin_zhuli_case_A():
+    """六亲助力回归用例A：2005-09-20 10:00 男
+    
+    —— 六亲助力 —— 段必须包含：
+    - 印（偏印）：用神力量很大，助力非常非常大。
+    - 来源：母亲/长辈/贵人/老师，技术型/非传统学习与灵感路径（偏印）
+    - 比肩（劫财）：用神有力，助力较多。
+    - 来源：兄弟姐妹/同辈（更偏竞争者），独立/同行合伙/同类支持与竞争
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2005, 9, 20, 10, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取六亲助力段
+    liuqin_section = ""
+    if "—— 六亲助力 ——" in output:
+        parts = output.split("—— 六亲助力 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 全局五行占比" in remaining:
+                liuqin_section = remaining.split("—— 全局五行占比")[0]
+            else:
+                liuqin_section = remaining
+    
+    # 验证关键子串（使用 contains 断言）
+    assert "印（偏印）：用神力量很大，助力非常非常大。" in liuqin_section, "应包含：印（偏印）：用神力量很大，助力非常非常大。"
+    assert "来源：母亲/长辈/贵人/老师，技术型/非传统学习与灵感路径（偏印）" in liuqin_section, "应包含：来源：母亲/长辈/贵人/老师，技术型/非传统学习与灵感路径（偏印）"
+    assert "比肩（劫财）：用神有力，助力较多。" in liuqin_section, "应包含：比肩（劫财）：用神有力，助力较多。"
+    assert "来源：兄弟姐妹/同辈朋友/同学同事，自我/独立/同行合伙/同类支持" in liuqin_section, "应包含：来源：兄弟姐妹/同辈朋友/同学同事，自我/独立/同行合伙/同类支持"
+    
+    print("[PASS] 六亲助力用例A（2005-09-20）通过")
+
+
+def test_liuqin_zhuli_case_B():
+    """六亲助力回归用例B：2007-01-28 12:00 男
+    
+    —— 六亲助力 —— 段必须包含：
+    - 印（正印）：用神有力，助力较多。
+    - 来源：母亲/长辈/贵人/老师，学历证书/名誉背书/正统学习/学校体系
+    - 比劫（原局没有比劫星）：该助力有心帮助但能力一般；走到比劫运/年会有额外帮助。
+    - 来源：兄弟姐妹/同辈朋友/同学同事，自我/独立/同行合伙/同类支持，
+    - 食伤（原局没有食伤星）：该助力有心帮助但能力一般；走到食伤运/年会有额外帮助。
+    - 来源：子女/晚辈，享受/口福/温和表达/才艺产出/疗愈与松弛，表达欲/叛逆/创新/挑规则/锋芒与口舌是非/输出型技术，考试发挥/即兴发挥/临场表现
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2007, 1, 28, 12, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取六亲助力段
+    liuqin_section = ""
+    if "—— 六亲助力 ——" in output:
+        parts = output.split("—— 六亲助力 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 全局五行占比" in remaining:
+                liuqin_section = remaining.split("—— 全局五行占比")[0]
+            else:
+                liuqin_section = remaining
+    
+    # 验证关键子串（使用 contains 断言）
+    assert "印（正印）：用神有力，助力较多。" in liuqin_section, "应包含：印（正印）：用神有力，助力较多。"
+    assert "来源：母亲/长辈/贵人/老师，学历证书/名誉背书/正统学习/学校体系" in liuqin_section, "应包含：来源：母亲/长辈/贵人/老师，学历证书/名誉背书/正统学习/学校体系"
+    assert "比劫（原局没有比劫星）：该助力有心帮助但能力一般；走到比劫运/年会有额外帮助。" in liuqin_section, "应包含：比劫（原局没有比劫星）：该助力有心帮助但能力一般；走到比劫运/年会有额外帮助。"
+    assert "来源：兄弟姐妹/同辈朋友/同学同事，自我/独立/同行合伙/同类支持" in liuqin_section, "应包含：来源：兄弟姐妹/同辈朋友/同学同事，自我/独立/同行合伙/同类支持"
+    assert "食伤（原局没有食伤星）：该助力有心帮助但能力一般；走到食伤运/年会有额外帮助。" in liuqin_section, "应包含：食伤（原局没有食伤星）：该助力有心帮助但能力一般；走到食伤运/年会有额外帮助。"
+    assert "来源：子女/晚辈/技术，享受/口福/温和表达/才艺产出/疗愈与松弛，表达欲/叛逆/创新/挑规则/锋芒与口舌是非/输出型技术，考试发挥/即兴发挥/临场表现" in liuqin_section, "应包含：来源：子女/晚辈/技术，享受/口福/温和表达/才艺产出/疗愈与松弛，表达欲/叛逆/创新/挑规则/锋芒与口舌是非/输出型技术，考试发挥/即兴发挥/临场表现"
+    
+    print("[PASS] 六亲助力用例B（2007-01-28）通过")
+
+
+def test_liuqin_zhuli_case_C():
+    """六亲助力回归用例C：2006-12-17 12:00 男
+    
+    —— 六亲助力 —— 段必须包含：
+    - 财（原局没有财星）：该助力有心帮助但能力一般；走到财运/年会有额外帮助。
+    - 来源：父亲/爸爸，妻子/老婆/伴侣，钱与资源/收入/项目机会/交换
+    - 官杀（官杀混杂）：用神有力，助力较多。
+    - 来源：领导/上司/强权压力/竞争与执行/风险与突破，官职/职位/体制/规则/名气/声望/责任与自我约束
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2006, 12, 17, 12, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取六亲助力段
+    liuqin_section = ""
+    if "—— 六亲助力 ——" in output:
+        parts = output.split("—— 六亲助力 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 全局五行占比" in remaining:
+                liuqin_section = remaining.split("—— 全局五行占比")[0]
+            else:
+                liuqin_section = remaining
+    
+    # 验证关键子串（使用 contains 断言）
+    assert "财（原局没有财星）：该助力有心帮助但能力一般；走到财运/年会有额外帮助。" in liuqin_section, "应包含：财（原局没有财星）：该助力有心帮助但能力一般；走到财运/年会有额外帮助。"
+    assert "来源：父亲/爸爸，妻子/老婆/伴侣，钱与资源/收入/项目机会/交换" in liuqin_section, "应包含：来源：父亲/爸爸，妻子/老婆/伴侣，钱与资源/收入/项目机会/交换"
+    assert "官杀（官杀混杂）：用神有力，助力较多。" in liuqin_section, "应包含：官杀（官杀混杂）：用神有力，助力较多。"
+    assert "来源：领导/上司/强权压力/竞争与执行/风险与突破，官职/职位/体制/规则/名气/声望/责任与自我约束" in liuqin_section, "应包含：来源：领导/上司/强权压力/竞争与执行/风险与突破，官职/职位/体制/规则/名气/声望/责任与自我约束"
+    
+    print("[PASS] 六亲助力用例C（2006-12-17）通过")
 
 
 if __name__ == "__main__":
@@ -1493,4 +1774,17 @@ if __name__ == "__main__":
     print("=" * 60)
     test_gan_wuhe_case_A()
     test_gan_wuhe_case_B()
+    
+    print("\n" + "=" * 60)
+    print("运行性格打印格式回归用例")
+    print("=" * 60)
+    test_traits_format_case_A()
+    test_traits_format_case_B()
+    
+    print("\n" + "=" * 60)
+    print("运行六亲助力回归用例")
+    print("=" * 60)
+    test_liuqin_zhuli_case_A()
+    test_liuqin_zhuli_case_B()
+    test_liuqin_zhuli_case_C()
 
