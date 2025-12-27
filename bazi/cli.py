@@ -1003,9 +1003,34 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         if zhi_has_zhengcai and zhi_has_piancai:
             marriage_hint = "正偏财混杂"
     
-    # 打印婚恋结构提示
+    # ===== 天干五合争合/双合婚恋提醒（原局层） =====
+    from .marriage_wuhe import detect_marriage_wuhe_hints
+    
+    # 收集原局四柱天干（包括日干）
+    natal_gans = [
+        bazi["year"]["gan"],
+        bazi["month"]["gan"],
+        bazi["day"]["gan"],  # 包括日干
+        bazi["hour"]["gan"],
+    ]
+    
+    natal_wuhe_hints = detect_marriage_wuhe_hints(natal_gans, day_gan, is_male)
+    
+    # 打印婚恋结构提示（混杂 + 五合提醒）
+    marriage_hints_list = []
     if marriage_hint:
-        print(f"婚恋结构提示：{marriage_hint}，桃花多，易再婚，找不对配偶难走下去")
+        marriage_hints_list.append(f"婚恋结构提示：{marriage_hint}，桃花多，易再婚，找不对配偶难走下去")
+    
+    # 添加五合提醒（原局层）
+    for hint in natal_wuhe_hints:
+        if marriage_hints_list:
+            # 第一行已带"婚恋结构提示："，后续行缩进对齐
+            marriage_hints_list.append(f"  婚恋结构提示：{hint['hint_text']}")
+        else:
+            marriage_hints_list.append(f"婚恋结构提示：{hint['hint_text']}")
+    
+    for hint_line in marriage_hints_list:
+        print(hint_line)
 
     # ===== 大运 / 流年 运势 + 冲信息 =====
     luck = analyze_luck(birth_dt, is_male, yongshen_elements=yong, max_dayun=8)
@@ -1204,6 +1229,23 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                         line = format_gan_wuhe_event(ev, incoming_shishen=dayun_shishen)
                         print(f"    {line}")
         
+        # ===== 天干五合争合/双合婚恋提醒（大运层） =====
+        # 收集大运层天干：原局四柱天干 + 当前大运天干
+        dayun_layer_gans = [
+            bazi["year"]["gan"],
+            bazi["month"]["gan"],
+            bazi["day"]["gan"],
+            bazi["hour"]["gan"],
+        ]
+        trigger_gans_dayun = []
+        if dayun_gan:
+            dayun_layer_gans.append(dayun_gan)
+            trigger_gans_dayun.append(dayun_gan)  # 大运天干作为引动
+        
+        dayun_wuhe_hints = detect_marriage_wuhe_hints(dayun_layer_gans, day_gan, is_male, trigger_gans=trigger_gans_dayun)
+        for hint in dayun_wuhe_hints:
+            print(f"    婚恋变化提醒（如恋爱）：{hint['hint_text']}")
+        
         # 大运本身与命局的冲
         for ev in dy.get("clashes_natal", []):
             if not ev:
@@ -1392,9 +1434,35 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                         # 只打印涉及流年天干的五合
                         liunian_involved = any(pos.source == "liunian" for pos in ev["many_side"] + ev["few_side"])
                         if liunian_involved:
-                            # 行内只保留“年干，月干，时干 乙 争合 流年天干，大运天干 庚 ...”
+                            # 行内只保留"年干，月干，时干 乙 争合 流年天干，大运天干 庚 ..."
                             line = format_gan_wuhe_event(ev, incoming_shishen=liunian_shishen)
                             print(f"        {line}")
+            
+            # ===== 天干五合争合/双合婚恋提醒（流年层） =====
+            # 收集流年层天干：原局四柱天干 + 当前大运天干 + 当前流年天干
+            liunian_layer_gans = [
+                bazi["year"]["gan"],
+                bazi["month"]["gan"],
+                bazi["day"]["gan"],
+                bazi["hour"]["gan"],
+            ]
+            if dayun_gan:
+                liunian_layer_gans.append(dayun_gan)
+            if liunian_gan:
+                liunian_layer_gans.append(liunian_gan)
+            
+            # 流年层只检查流年天干是否引动（避免重复打印大运层已打印的提醒）
+            # 只有当流年天干是X或Y时才触发
+            trigger_gans_liunian = []
+            if liunian_gan:
+                trigger_gans_liunian.append(liunian_gan)  # 只检查流年天干引动
+            
+            liunian_wuhe_hints = detect_marriage_wuhe_hints(liunian_layer_gans, day_gan, is_male, trigger_gans=trigger_gans_liunian)
+            for hint in liunian_wuhe_hints:
+                print(f"        婚恋变化提醒（如恋爱）：{hint['hint_text']}")
+            
+            # 在总危险系数前加一个空行
+            print()
             
             # 先打印危险系数
             total_risk = ln.get("total_risk_percent", 0.0)
