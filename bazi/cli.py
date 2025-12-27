@@ -257,7 +257,7 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             detail = trait.get("detail") or []
             hits = sum(d.get("stems_visible_count", 0) for d in detail)
             return min(hits, 3)
-        
+
         def _format_trait_line1(trait: dict, is_major_by_rule3: bool = False) -> str:
             """格式化第1行：{大类}（{total_percent:.1f}%）：{子类标签}；{透干柱位列表}透干×{n}；{得月令字段}；{子类百分比摘要}"""
             group = trait.get("group", "-")
@@ -436,21 +436,21 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         
         elif group == "食伤":
             if total_percent == 0:
-                # 原局没有食伤星：合并表达（在开头加入"技术"）
-                return "子女/晚辈/技术，享受/口福/温和表达/才艺产出/疗愈与松弛，表达欲/叛逆/创新/挑规则/锋芒与口舌是非/输出型技术，考试发挥/即兴发挥/临场表现"
+                # 原局没有食伤星：统一新文案
+                return "子女/晚辈/技术，合理宣泄/才艺产出，表达/创新/输出型技术，考试发挥/即兴发挥/临场表现"
             else:
                 shishen_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "食神"), 0.0)
                 shangguan_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "伤官"), 0.0)
                 
                 if shishen_percent > 0 and shangguan_percent == 0:
-                    # 纯食神
+                    # 纯食神：保留原来的更细分来源
                     return "子女/晚辈，享受/口福/温和表达/才艺产出/疗愈与松弛"
                 elif shangguan_percent > 0 and shishen_percent == 0:
-                    # 纯伤官
+                    # 纯伤官：保留原来的更细分来源
                     return "子女/晚辈，表达欲/叛逆/创新/挑规则/锋芒与口舌是非/输出型技术"
                 else:
-                    # 混杂（合并输出）
-                    return "子女/晚辈，享受/口福/温和表达/才艺产出/疗愈与松弛，表达欲/叛逆/创新/挑规则/锋芒与口舌是非/输出型技术"
+                    # 混杂：统一新文案
+                    return "子女/晚辈/技术，合理宣泄/才艺产出，表达/创新/输出型技术，考试发挥/即兴发挥/临场表现"
         
         elif group == "财":
             if total_percent == 0:
@@ -786,21 +786,71 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
     natal_tkdc = detect_natal_tian_ke_di_chong(bazi)
     natal_patterns = result.get("natal_patterns", [])
     
+    def _get_clash_explanation(palace1: str, palace2: str) -> str:
+        """获取特定冲的解释文本"""
+        # 标准化宫位名称（处理"事业家庭宫"和"家庭事业宫"的差异）
+        def normalize_palace(p: str) -> str:
+            if p == "事业家庭宫":
+                return "家庭事业宫"
+            return p
+        
+        p1 = normalize_palace(palace1)
+        p2 = normalize_palace(palace2)
+        
+        # 创建宫位对（不区分顺序）
+        palace_pair = frozenset([p1, p2])
+        
+        # 4种特定冲的解释
+        clash_explanations = {
+            frozenset(["祖上宫", "婚姻宫"]): "少年时期成长坎坷，家庭变故多",
+            frozenset(["婚姻宫", "夫妻宫"]): "感情、婚姻矛盾多，变故频频",
+            frozenset(["夫妻宫", "家庭事业宫"]): "中年后家庭生活不和谐，和子女关系不好或者没有子女",
+            frozenset(["祖上宫", "夫妻宫"]): "婚姻生活易受上一辈、早年经历影响",
+        }
+        
+        return clash_explanations.get(palace_pair, "")
+    
     issues = []
     
     # 打印原局冲
     for clash in natal_clashes:
         targets = clash.get("targets", [])
-        if targets:
-            palaces = sorted({PILLAR_PALACE_CN.get(t.get("pillar", ""), "") for t in targets if t.get("pillar")})
-            palaces_str = "、".join(palaces) if palaces else ""
-            flow_branch = clash.get("flow_branch", "")
-            target_branch = clash.get("target_branch", "")
-            base_power = clash.get("base_power_percent", 0.0)
-            grave_bonus = clash.get("grave_bonus_percent", 0.0)
-            risk = base_power + grave_bonus
-            if risk > 0.0:
-                issues.append(f"{palaces_str} 冲 {risk:.1f}%")
+        flow_branch = clash.get("flow_branch", "")
+        target_branch = clash.get("target_branch", "")
+        
+        if targets and flow_branch and target_branch:
+            # 获取被冲的宫位（targets中的）
+            target_palaces = sorted({PILLAR_PALACE_CN.get(t.get("pillar", ""), "") for t in targets if t.get("pillar")})
+            
+            # 获取主动冲的宫位（flow_branch对应的柱）
+            flow_palace = None
+            for pillar in ("year", "month", "day", "hour"):
+                if bazi[pillar]["zhi"] == flow_branch:
+                    flow_palace = PILLAR_PALACE_CN.get(pillar, "")
+                    break
+            
+            # 收集所有涉及的宫位
+            all_palaces = set(target_palaces)
+            if flow_palace:
+                all_palaces.add(flow_palace)
+            palaces = sorted(list(all_palaces))
+            
+            if len(palaces) >= 2:
+                # 多个宫位被冲，两两组合打印
+                for i in range(len(palaces)):
+                    for j in range(i + 1, len(palaces)):
+                        palace1 = palaces[i]
+                        palace2 = palaces[j]
+                        explanation = _get_clash_explanation(palace1, palace2)
+                        # 格式：宫位A-宫位B 地支字冲 解释（如果有）
+                        clash_text = f"{palace1}-{palace2} {flow_branch}{target_branch}冲"
+                        if explanation:
+                            issues.append(f"{clash_text} {explanation}")
+                        else:
+                            issues.append(clash_text)
+            elif len(palaces) == 1:
+                # 只有一个宫位（理论上不应该出现，但保留兼容）
+                issues.append(f"{palaces[0]} {flow_branch}{target_branch}冲")
     
     # 打印原局刑
     # 对于自刑，需要收集所有自刑地支，然后两两组合打印
@@ -811,87 +861,151 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         if targets:
             flow_branch = punish.get("flow_branch", "")
             target_branch = punish.get("target_branch", "")
-            risk = punish.get("risk_percent", 0.0)
-            if risk > 0.0:
-                # 如果是自刑（flow_branch == target_branch），需要找到所有包含该地支的柱，然后两两组合打印
-                if flow_branch == target_branch:
-                    # 检查是否已经处理过这个自刑地支
-                    if flow_branch in self_punish_processed:
-                        continue  # 跳过，已经处理过
-                    self_punish_processed.add(flow_branch)
-                    
-                    # 自刑：找到所有包含该地支的柱
-                    involved_pillars = []
-                    for pillar in ("year", "month", "day", "hour"):
-                        if bazi[pillar]["zhi"] == flow_branch:
-                            involved_pillars.append(pillar)
-                    
-                    # 自刑应该至少有两个柱，两两组合打印
-                    if len(involved_pillars) >= 2:
-                        # 两两组合：年-月、年-日、年-时、月-日、月-时、日-时
-                        for i in range(len(involved_pillars)):
-                            for j in range(i + 1, len(involved_pillars)):
-                                pillar1 = involved_pillars[i]
-                                pillar2 = involved_pillars[j]
-                                palace1 = PILLAR_PALACE_CN.get(pillar1, "")
-                                palace2 = PILLAR_PALACE_CN.get(pillar2, "")
-                                palaces_str = f"{palace1}和{palace2}"
-                                issues.append(f"{palaces_str}，{flow_branch}{target_branch}自刑 {risk:.1f}%")
-                    else:
-                        # 如果只找到一个柱，使用原来的逻辑
-                        target_palace = PILLAR_PALACE_CN.get(targets[0].get("pillar", ""), "")
-                        issues.append(f"{target_palace}，{flow_branch}{target_branch}自刑 {risk:.1f}%")
+            # 不再检查risk，只要存在就打印
+            # 如果是自刑（flow_branch == target_branch），需要找到所有包含该地支的柱，然后两两组合打印
+            if flow_branch == target_branch:
+                # 检查是否已经处理过这个自刑地支
+                if flow_branch in self_punish_processed:
+                    continue  # 跳过，已经处理过
+                self_punish_processed.add(flow_branch)
+                
+                # 自刑：找到所有包含该地支的柱
+                involved_pillars = []
+                for pillar in ("year", "month", "day", "hour"):
+                    if bazi[pillar]["zhi"] == flow_branch:
+                        involved_pillars.append(pillar)
+                
+                # 自刑应该至少有两个柱，两两组合打印
+                if len(involved_pillars) >= 2:
+                    # 两两组合：年-月、年-日、年-时、月-日、月-时、日-时
+                    for i in range(len(involved_pillars)):
+                        for j in range(i + 1, len(involved_pillars)):
+                            pillar1 = involved_pillars[i]
+                            pillar2 = involved_pillars[j]
+                            palace1 = PILLAR_PALACE_CN.get(pillar1, "")
+                            palace2 = PILLAR_PALACE_CN.get(pillar2, "")
+                            # 检查是否是祖上宫-婚姻宫 刑（不区分顺序）
+                            palace_pair = frozenset([palace1, palace2])
+                            is_zu_shang_marriage = palace_pair == frozenset(["祖上宫", "婚姻宫"])
+                            # 格式：宫位A-宫位B 地支字自刑 [解释]
+                            punish_text = f"{palace1}-{palace2} {flow_branch}{target_branch}自刑"
+                            if is_zu_shang_marriage:
+                                punish_text += " 成长过程中波折较多，压力偏大"
+                            issues.append(punish_text)
                 else:
-                    # 非自刑：使用原来的逻辑
+                    # 如果只找到一个柱，使用原来的逻辑
                     target_palace = PILLAR_PALACE_CN.get(targets[0].get("pillar", ""), "")
-                    # 找到flow_branch对应的柱
-                    flow_pillar = None
-                    target_pillar = targets[0].get("pillar", "")
-                    for pillar in ("year", "month", "day", "hour"):
-                        if bazi[pillar]["zhi"] == flow_branch and pillar != target_pillar:
-                            flow_pillar = pillar
-                            break
-                    flow_palace = PILLAR_PALACE_CN.get(flow_pillar, "") if flow_pillar else ""
-                    issues.append(f"{flow_palace}-{target_palace} 刑 {risk:.1f}%")
+                    issues.append(f"{target_palace} {flow_branch}{target_branch}自刑")
+            else:
+                # 非自刑：使用原来的逻辑
+                target_palace = PILLAR_PALACE_CN.get(targets[0].get("pillar", ""), "")
+                # 找到flow_branch对应的柱
+                flow_pillar = None
+                target_pillar = targets[0].get("pillar", "")
+                for pillar in ("year", "month", "day", "hour"):
+                    if bazi[pillar]["zhi"] == flow_branch and pillar != target_pillar:
+                        flow_pillar = pillar
+                        break
+                flow_palace = PILLAR_PALACE_CN.get(flow_pillar, "") if flow_pillar else ""
+                # 检查是否是祖上宫-婚姻宫 刑（不区分顺序）
+                palace_pair = frozenset([flow_palace, target_palace])
+                is_zu_shang_marriage = palace_pair == frozenset(["祖上宫", "婚姻宫"])
+                # 格式：宫位A-宫位B 地支字刑 [解释]
+                punish_text = f"{flow_palace}-{target_palace} {flow_branch}{target_branch}刑"
+                if is_zu_shang_marriage:
+                    punish_text += " 成长过程中波折较多，压力偏大"
+                issues.append(punish_text)
     
-    # 打印原局天克地冲
-    for tkdc in natal_tkdc:
-        palace1 = PILLAR_PALACE_CN.get(tkdc.get("pillar1", ""), "")
-        palace2 = PILLAR_PALACE_CN.get(tkdc.get("pillar2", ""), "")
-        risk = tkdc.get("risk_percent", 0.0)
-        if risk > 0.0:
-            issues.append(f"{palace1}-{palace2} 天克地冲 {risk:.1f}%")
+    # 打印原局天克地冲（不再打印，因为天克地冲已经包含在冲里了）
+    # 注释掉，因为用户要求只打印冲和刑，天克地冲应该已经包含在冲里了
+    # for tkdc in natal_tkdc:
+    #     palace1 = PILLAR_PALACE_CN.get(tkdc.get("pillar1", ""), "")
+    #     palace2 = PILLAR_PALACE_CN.get(tkdc.get("pillar2", ""), "")
+    #     issues.append(f"{palace1}-{palace2} 天克地冲")
     
-    # 打印原局模式
-    for pattern_group in natal_patterns:
-        pattern_type = pattern_group.get("pattern_type", "")
-        pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
-        pairs = pattern_group.get("pairs", [])
-        if pairs:
-            # 收集涉及的宫位
-            palaces_set = set()
-            for pair in pairs:
-                pos1 = pair.get("pos1", {})
-                pos2 = pair.get("pos2", {})
-                pillar1 = pos1.get("pillar", "")
-                pillar2 = pos2.get("pillar", "")
-                if pillar1 in ("year", "month", "day", "hour"):
-                    palaces_set.add(PILLAR_PALACE_CN.get(pillar1, ""))
-                if pillar2 in ("year", "month", "day", "hour"):
-                    palaces_set.add(PILLAR_PALACE_CN.get(pillar2, ""))
-            palaces_str = "、".join(sorted(palaces_set)) if palaces_set else ""
-            # 模式风险：天干层15%，地支层15%，如果涉及月柱则25%
-            risk = 15.0  # 默认15%
-            for pair in pairs:
-                pos1 = pair.get("pos1", {})
-                pos2 = pair.get("pos2", {})
-                if (pos1.get("pillar") == "month" or pos2.get("pillar") == "month") and pos1.get("kind") == "zhi" and pos2.get("kind") == "zhi":
-                    risk = 25.0
-                    break
-            issues.append(f"{pattern_name} {palaces_str} {risk:.1f}%")
+    # 打印原局模式（不再打印，用户要求只打印冲和刑）
+    # for pattern_group in natal_patterns:
+    #     ...
     
     if issues:
-        print("原局问题：" + "，".join(issues))
+        print("\n—— 原局问题 ——")
+        for issue in issues:
+            print(issue)
+    
+    # ===== 婚恋结构提示 =====
+    from .shishen import get_shishen, get_branch_main_gan
+    
+    day_gan = bazi["day"]["gan"]
+    marriage_hint = None
+    
+    if not is_male:
+        # 女命：检查官杀混杂
+        gan_shishens = []  # 天干十神列表
+        zhi_shishens = []  # 地支主气十神列表
+        
+        # 检查天干（年/月/日/时干，不包括日干自己）
+        for pillar in ("year", "month", "hour"):
+            gan = bazi[pillar]["gan"]
+            ss = get_shishen(day_gan, gan)
+            if ss:
+                gan_shishens.append(ss)
+        
+        # 检查地支主气（年/月/日/时支）
+        for pillar in ("year", "month", "day", "hour"):
+            zhi = bazi[pillar]["zhi"]
+            main_gan = get_branch_main_gan(zhi)
+            if main_gan:
+                ss = get_shishen(day_gan, main_gan)
+                if ss:
+                    zhi_shishens.append(ss)
+        
+        # 检查天干中是否同时出现正官和七杀
+        gan_has_zhengguan = "正官" in gan_shishens
+        gan_has_qisha = "七杀" in gan_shishens
+        if gan_has_zhengguan and gan_has_qisha:
+            marriage_hint = "官杀混杂"
+        
+        # 检查地支主气中是否同时出现正官和七杀
+        zhi_has_zhengguan = "正官" in zhi_shishens
+        zhi_has_qisha = "七杀" in zhi_shishens
+        if zhi_has_zhengguan and zhi_has_qisha:
+            marriage_hint = "官杀混杂"
+    else:
+        # 男命：检查正偏财混杂
+        gan_shishens = []  # 天干十神列表
+        zhi_shishens = []  # 地支主气十神列表
+        
+        # 检查天干（年/月/日/时干，不包括日干自己）
+        for pillar in ("year", "month", "hour"):
+            gan = bazi[pillar]["gan"]
+            ss = get_shishen(day_gan, gan)
+            if ss:
+                gan_shishens.append(ss)
+        
+        # 检查地支主气（年/月/日/时支）
+        for pillar in ("year", "month", "day", "hour"):
+            zhi = bazi[pillar]["zhi"]
+            main_gan = get_branch_main_gan(zhi)
+            if main_gan:
+                ss = get_shishen(day_gan, main_gan)
+                if ss:
+                    zhi_shishens.append(ss)
+        
+        # 检查天干中是否同时出现正财和偏财
+        gan_has_zhengcai = "正财" in gan_shishens
+        gan_has_piancai = "偏财" in gan_shishens
+        if gan_has_zhengcai and gan_has_piancai:
+            marriage_hint = "正偏财混杂"
+        
+        # 检查地支主气中是否同时出现正财和偏财
+        zhi_has_zhengcai = "正财" in zhi_shishens
+        zhi_has_piancai = "偏财" in zhi_shishens
+        if zhi_has_zhengcai and zhi_has_piancai:
+            marriage_hint = "正偏财混杂"
+    
+    # 打印婚恋结构提示
+    if marriage_hint:
+        print(f"婚恋结构提示：{marriage_hint}，桃花多，易再婚，找不对配偶难走下去")
 
     # ===== 大运 / 流年 运势 + 冲信息 =====
     luck = analyze_luck(birth_dt, is_male, yongshen_elements=yong, max_dayun=8)
@@ -1205,11 +1319,6 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                 
                 # 构建输出句子
                 parts = []
-                
-                # 开头：流年信息
-                liunian_year = ev.get("liunian_year")
-                if liunian_year:
-                    parts.append(f"{liunian_year}年")
                 
                 # 按三会局的顺序列出每个字的来源
                 matched_branches = ev.get("matched_branches", [])

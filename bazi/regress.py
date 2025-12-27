@@ -1069,11 +1069,15 @@ def test_natal_punishment_case_A_output():
     finally:
         sys.stdout = old_stdout
     
-    # 检查原局问题输出
-    assert "原局问题" in output, "应找到原局问题"
-    assert "祖上宫和婚姻宫" in output, "应找到祖上宫和婚姻宫"
-    assert "酉酉自刑" in output, "应找到酉酉自刑"
-    assert "5.0%" in output, "应找到5.0%"
+    # 检查原局问题输出（新格式：不包含百分比）
+    assert "—— 原局问题 ——" in output, "应找到原局问题标题"
+    # 提取原局问题段
+    if "—— 原局问题 ——" in output:
+        parts = output.split("—— 原局问题 ——")
+        if len(parts) > 1:
+            issues_section = parts[1].split("——")[0] if "——" in parts[1] else parts[1]
+            assert "祖上宫-婚姻宫 刑" in issues_section or "婚姻宫-祖上宫 刑" in issues_section, "应找到祖上宫-婚姻宫 刑"
+            assert "%" not in issues_section, "原局问题输出不应包含 % 符号"
     
     print("[PASS] 原局刑回归用例A输出（2005-09-20）通过")
 
@@ -1101,26 +1105,34 @@ def test_natal_punishment_case_2026():
     finally:
         sys.stdout = old_stdout
     
-    # 检查原局问题输出
-    assert "原局问题" in output, "应找到原局问题"
+    # 检查原局问题输出（新格式：不包含百分比）
+    assert "—— 原局问题 ——" in output, "应找到原局问题标题"
+    # 提取原局问题段
+    if "—— 原局问题 ——" in output:
+        parts = output.split("—— 原局问题 ——")
+        if len(parts) > 1:
+            issues_section = parts[1].split("——")[0] if "——" in parts[1] else parts[1]
+            # 检查三个自刑组合（年-月、年-时、月-时），2026-06-12有亥亥自刑（年、月、时三柱都是亥）
+            assert ("祖上宫-婚姻宫 亥亥自刑" in issues_section or 
+                    "婚姻宫-祖上宫 亥亥自刑" in issues_section), "应找到祖上宫-婚姻宫 亥亥自刑"
+            assert ("祖上宫-家庭事业宫 亥亥自刑" in issues_section or 
+                    "家庭事业宫-祖上宫 亥亥自刑" in issues_section), "应找到祖上宫-家庭事业宫 亥亥自刑"
+            assert ("婚姻宫-家庭事业宫 亥亥自刑" in issues_section or 
+                    "家庭事业宫-婚姻宫 亥亥自刑" in issues_section), "应找到婚姻宫-家庭事业宫 亥亥自刑"
+            assert "%" not in issues_section, "原局问题输出不应包含 % 符号"
     
-    # 检查三个自刑组合（年-月、年-时、月-时）
-    assert "祖上宫和婚姻宫" in output, "应找到祖上宫和婚姻宫"
-    assert "祖上宫和事业家庭宫" in output, "应找到祖上宫和事业家庭宫"
-    assert "婚姻宫和事业家庭宫" in output, "应找到婚姻宫和事业家庭宫"
-    assert "自刑" in output, "应找到自刑"
-    
-    # 验证每个自刑都有5.0%
-    issues_line = None
-    for line in output.split('\n'):
-        if '原局问题' in line:
-            issues_line = line
-            break
-    
-    assert issues_line is not None, "应找到原局问题行"
-    # 应该有三个"自刑 5.0%"
-    count = issues_line.count("自刑 5.0%")
-    assert count == 3, f"应该有3个自刑 5.0%，但找到{count}个"
+    # 提取原局问题段（更简单的方法）
+    if "—— 原局问题 ——" in output:
+        parts = output.split("—— 原局问题 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "——" in remaining:
+                issues_section = remaining.split("——")[0]
+            else:
+                issues_section = remaining
+            # 应该有三个"刑"（不再检查百分比）
+            count = issues_section.count(" 刑")
+            assert count >= 3, f"应该至少有3个刑，但找到{count}个"
     
     print("[PASS] 原局刑回归用例2026（多个柱子自刑）通过")
 
@@ -1699,7 +1711,7 @@ def test_liuqin_zhuli_case_B():
     assert "比劫（原局没有比劫星）：该助力有心帮助但能力一般；走到比劫运/年会有额外帮助。" in liuqin_section, "应包含：比劫（原局没有比劫星）：该助力有心帮助但能力一般；走到比劫运/年会有额外帮助。"
     assert "来源：兄弟姐妹/同辈朋友/同学同事，自我/独立/同行合伙/同类支持" in liuqin_section, "应包含：来源：兄弟姐妹/同辈朋友/同学同事，自我/独立/同行合伙/同类支持"
     assert "食伤（原局没有食伤星）：该助力有心帮助但能力一般；走到食伤运/年会有额外帮助。" in liuqin_section, "应包含：食伤（原局没有食伤星）：该助力有心帮助但能力一般；走到食伤运/年会有额外帮助。"
-    assert "来源：子女/晚辈/技术，享受/口福/温和表达/才艺产出/疗愈与松弛，表达欲/叛逆/创新/挑规则/锋芒与口舌是非/输出型技术，考试发挥/即兴发挥/临场表现" in liuqin_section, "应包含：来源：子女/晚辈/技术，享受/口福/温和表达/才艺产出/疗愈与松弛，表达欲/叛逆/创新/挑规则/锋芒与口舌是非/输出型技术，考试发挥/即兴发挥/临场表现"
+    assert "来源：子女/晚辈/技术，合理宣泄/才艺产出，表达/创新/输出型技术，考试发挥/即兴发挥/临场表现" in liuqin_section, "应包含：来源：子女/晚辈/技术，合理宣泄/才艺产出，表达/创新/输出型技术，考试发挥/即兴发挥/临场表现"
     
     print("[PASS] 六亲助力用例B（2007-01-28）通过")
 
@@ -1748,6 +1760,169 @@ def test_liuqin_zhuli_case_C():
     print("[PASS] 六亲助力用例C（2006-12-17）通过")
 
 
+def test_natal_issues_format():
+    """原局问题打印格式回归测试
+    
+    验证：
+    1. 输出中不再包含 % 或任何危险系数字符串
+    2. 2003-11-28 2:00 必须识别出来婚姻宫和夫妻宫冲，需要包含：感情、婚姻矛盾多，变故频频
+    3. 1993-3-19 10:00 男 必须识别出来夫妻宫和家庭事业宫冲，打印用contain识别，"中年后家庭生活不和谐，和子女关系不好或者没有子女"
+    """
+    import io
+    from .cli import run_cli
+    
+    # 测试1：2003-11-28 2:00
+    dt1 = datetime(2003, 11, 28, 2, 0)
+    
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt1, is_male=True)
+        output1 = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取原局问题段
+    natal_issues_section1 = ""
+    if "—— 原局问题 ——" in output1:
+        parts = output1.split("—— 原局问题 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "——" in remaining:
+                natal_issues_section1 = remaining.split("——")[0]
+            else:
+                natal_issues_section1 = remaining
+    
+    # 验证：不包含 % 或任何危险系数字符串
+    assert "%" not in natal_issues_section1, "原局问题输出不应包含 % 符号"
+    # 验证：包含婚姻宫和夫妻宫冲的解释（不区分顺序，包含地支字）
+    assert ("婚姻宫-夫妻宫 巳亥冲 感情、婚姻矛盾多，变故频频" in natal_issues_section1 or 
+            "夫妻宫-婚姻宫 巳亥冲 感情、婚姻矛盾多，变故频频" in natal_issues_section1 or
+            "婚姻宫-夫妻宫 亥巳冲 感情、婚姻矛盾多，变故频频" in natal_issues_section1 or
+            "夫妻宫-婚姻宫 亥巳冲 感情、婚姻矛盾多，变故频频" in natal_issues_section1), "应包含：婚姻宫-夫妻宫 巳亥冲 感情、婚姻矛盾多，变故频频（或相反顺序）"
+    
+    # 测试2：1993-3-19 10:00 男
+    dt2 = datetime(1993, 3, 19, 10, 0)
+    
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt2, is_male=True)
+        output2 = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取原局问题段
+    natal_issues_section2 = ""
+    if "—— 原局问题 ——" in output2:
+        parts = output2.split("—— 原局问题 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "——" in remaining:
+                natal_issues_section2 = remaining.split("——")[0]
+            else:
+                natal_issues_section2 = remaining
+    
+    # 验证：不包含 % 或任何危险系数字符串
+    assert "%" not in natal_issues_section2, "原局问题输出不应包含 % 符号"
+    # 验证：包含祖上宫和婚姻宫冲的解释（不区分顺序，包含地支字）
+    assert ("祖上宫-婚姻宫 卯酉冲 少年时期成长坎坷，家庭变故多" in natal_issues_section2 or
+            "婚姻宫-祖上宫 卯酉冲 少年时期成长坎坷，家庭变故多" in natal_issues_section2 or
+            "祖上宫-婚姻宫 酉卯冲 少年时期成长坎坷，家庭变故多" in natal_issues_section2 or
+            "婚姻宫-祖上宫 酉卯冲 少年时期成长坎坷，家庭变故多" in natal_issues_section2), "应包含：祖上宫-婚姻宫 卯酉冲 少年时期成长坎坷，家庭变故多（或相反顺序）"
+    # 验证：包含夫妻宫和家庭事业宫冲的解释（不区分顺序，包含地支字）
+    assert ("夫妻宫-家庭事业宫 巳亥冲 中年后家庭生活不和谐，和子女关系不好或者没有子女" in natal_issues_section2 or
+            "家庭事业宫-夫妻宫 巳亥冲 中年后家庭生活不和谐，和子女关系不好或者没有子女" in natal_issues_section2 or
+            "夫妻宫-家庭事业宫 亥巳冲 中年后家庭生活不和谐，和子女关系不好或者没有子女" in natal_issues_section2 or
+            "家庭事业宫-夫妻宫 亥巳冲 中年后家庭生活不和谐，和子女关系不好或者没有子女" in natal_issues_section2), "应包含：夫妻宫-家庭事业宫 巳亥冲 中年后家庭生活不和谐，和子女关系不好或者没有子女（或相反顺序）"
+    
+    print("[PASS] 原局问题打印格式回归测试通过")
+
+
+def test_marriage_structure_hint():
+    """婚恋结构提示回归测试
+    
+    验证：
+    1. 1990-5-26 8:00 女：断言输出包含"婚恋结构提示：官杀混杂，桃花多，易再婚，找不对配偶难走下去"
+    2. 2007-1-11 2:00 男：断言输出包含"婚恋结构提示：正偏财混杂，桃花多，易再婚，找不对配偶难走下去"
+    """
+    import io
+    from .cli import run_cli
+    
+    # 测试1：1990-5-26 8:00 女
+    dt1 = datetime(1990, 5, 26, 8, 0)
+    
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt1, is_male=False)
+        output1 = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 验证：包含婚恋结构提示
+    assert "婚恋结构提示：官杀混杂，桃花多，易再婚，找不对配偶难走下去" in output1, "应包含：婚恋结构提示：官杀混杂，桃花多，易再婚，找不对配偶难走下去"
+    
+    # 测试2：2007-1-11 2:00 男
+    dt2 = datetime(2007, 1, 11, 2, 0)
+    
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt2, is_male=True)
+        output2 = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 验证：包含婚恋结构提示
+    assert "婚恋结构提示：正偏财混杂，桃花多，易再婚，找不对配偶难走下去" in output2, "应包含：婚恋结构提示：正偏财混杂，桃花多，易再婚，找不对配偶难走下去"
+    
+    print("[PASS] 婚恋结构提示回归测试通过")
+
+
+def test_natal_punish_zu_shang_marriage_explanation():
+    """原局刑解释回归测试：祖上宫-婚姻宫 刑
+    
+    验证：
+    2007-1-28 12:00 男：断言输出包含"祖上宫-婚姻宫 丑戌刑 成长过程中波折较多，压力偏大"
+    或"婚姻宫-祖上宫 丑戌刑 成长过程中波折较多，压力偏大"
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2007, 1, 28, 12, 0)
+    
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取原局问题段
+    natal_issues_section = ""
+    if "—— 原局问题 ——" in output:
+        parts = output.split("—— 原局问题 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "——" in remaining:
+                natal_issues_section = remaining.split("——")[0]
+            else:
+                natal_issues_section = remaining
+    
+    # 验证：包含祖上宫-婚姻宫 刑的解释（不区分顺序）
+    assert ("祖上宫-婚姻宫 丑戌刑 成长过程中波折较多，压力偏大" in natal_issues_section or
+            "婚姻宫-祖上宫 丑戌刑 成长过程中波折较多，压力偏大" in natal_issues_section or
+            "祖上宫-婚姻宫 戌丑刑 成长过程中波折较多，压力偏大" in natal_issues_section or
+            "婚姻宫-祖上宫 戌丑刑 成长过程中波折较多，压力偏大" in natal_issues_section), "应包含：祖上宫-婚姻宫 丑戌刑 成长过程中波折较多，压力偏大（或相反顺序/地支顺序）"
+    
+    print("[PASS] 原局刑解释回归测试（祖上宫-婚姻宫）通过")
+
+
 if __name__ == "__main__":
     main()
     print("\n" + "=" * 60)
@@ -1787,4 +1962,19 @@ if __name__ == "__main__":
     test_liuqin_zhuli_case_A()
     test_liuqin_zhuli_case_B()
     test_liuqin_zhuli_case_C()
+    
+    print("\n" + "=" * 60)
+    print("运行原局问题打印格式回归用例")
+    print("=" * 60)
+    test_natal_issues_format()
+    
+    print("\n" + "=" * 60)
+    print("运行婚恋结构提示回归用例")
+    print("=" * 60)
+    test_marriage_structure_hint()
+    
+    print("\n" + "=" * 60)
+    print("运行原局刑解释回归用例")
+    print("=" * 60)
+    test_natal_punish_zu_shang_marriage_explanation()
 
