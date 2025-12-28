@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Dict, Any, List, Optional, Set, Tuple
 
 from .shishen import get_shishen, get_branch_main_gan, get_branch_shishen
-from .config import PATTERN_GAN_RISK_LIUNIAN, PATTERN_ZHI_RISK_LIUNIAN
+from .config import PATTERN_GAN_RISK_LIUNIAN, PATTERN_ZHI_RISK_LIUNIAN, GAN_WUXING, ZHI_WUXING
 
 
 # 模式类型定义
@@ -252,10 +252,14 @@ def detect_liunian_patterns(
     dayun_zhi: str,
     liunian_gan: str,
     liunian_zhi: str,
+    yongshen_elements: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """检测流年动态模式（§5.3.3），并计算风险。
     
     只建立"包含流年位置"的配对。
+    
+    参数:
+        yongshen_elements: 用神五行列表，用于判断枭神是否是用神
     
     返回模式事件列表，每个事件包含：
     {
@@ -263,7 +267,7 @@ def detect_liunian_patterns(
         "pattern_type": "hurt_officer" | "pianyin_eatgod",
         "role": "base",  # 基础事件，参与线运计算
         "kind": "gan" | "zhi",  # 天干层还是地支层
-        "risk_percent": 15.0 | 25.0,  # 默认15%，涉及命局月支则25%
+        "risk_percent": 10.0 | 15.0,  # 默认15%，如果枭神是用神则10%
         "pos1": {...},
         "pos2": {...},
         "flow_year": 2024,
@@ -288,6 +292,24 @@ def detect_liunian_patterns(
             if pattern_type:
                 # 默认15%风险
                 risk = PATTERN_GAN_RISK_LIUNIAN  # 15.0
+                # 如果是枭神夺食且枭神（偏印）是用神，则按10%算
+                if pattern_type == PATTERN_PIANYIN_EATGOD and yongshen_elements:
+                    # 找到偏印位置，检查其五行是否在用神列表中
+                    pianyin_pos = liunian_gan_pos if liunian_gan_pos["shishen"] == "偏印" else other_pos
+                    if pianyin_pos["shishen"] == "偏印":
+                        pianyin_char = pianyin_pos["char"]
+                        pianyin_element = GAN_WUXING.get(pianyin_char)
+                        if pianyin_element and pianyin_element in yongshen_elements:
+                            risk = 10.0
+                # 如果是伤官见官且伤官是用神，则按10%算
+                elif pattern_type == PATTERN_HURT_OFFICER and yongshen_elements:
+                    # 找到伤官位置，检查其五行是否在用神列表中
+                    shang_guan_pos = liunian_gan_pos if liunian_gan_pos["shishen"] == "伤官" else other_pos
+                    if shang_guan_pos["shishen"] == "伤官":
+                        shang_guan_char = shang_guan_pos["char"]
+                        shang_guan_element = GAN_WUXING.get(shang_guan_char)
+                        if shang_guan_element and shang_guan_element in yongshen_elements:
+                            risk = 10.0
                 events.append({
                     "type": "pattern",
                     "pattern_type": pattern_type,
@@ -306,12 +328,32 @@ def detect_liunian_patterns(
                 continue  # 跳过自己
             pattern_type = _is_pattern_match(liunian_zhi_pos["shishen"], other_pos["shishen"])
             if pattern_type:
-                # 默认15%风险，如果涉及命局月支则25%
+                # 默认15%风险
                 risk = PATTERN_ZHI_RISK_LIUNIAN  # 15.0
-                if (other_pos["source"] == "natal" and 
-                    other_pos["pillar"] == "month" and 
-                    other_pos["kind"] == "zhi"):
-                    risk = 25.0
+                # 如果是枭神夺食且枭神（偏印）是用神，则按10%算
+                if pattern_type == PATTERN_PIANYIN_EATGOD and yongshen_elements:
+                    # 找到偏印位置，检查其五行是否在用神列表中
+                    pianyin_pos = liunian_zhi_pos if liunian_zhi_pos["shishen"] == "偏印" else other_pos
+                    if pianyin_pos["shishen"] == "偏印":
+                        pianyin_char = pianyin_pos["char"]
+                        # 地支需要先转为主气天干，再查五行
+                        pianyin_main_gan = get_branch_main_gan(pianyin_char)
+                        if pianyin_main_gan:
+                            pianyin_element = GAN_WUXING.get(pianyin_main_gan)
+                            if pianyin_element and pianyin_element in yongshen_elements:
+                                risk = 10.0
+                # 如果是伤官见官且伤官是用神，则按10%算
+                elif pattern_type == PATTERN_HURT_OFFICER and yongshen_elements:
+                    # 找到伤官位置，检查其五行是否在用神列表中
+                    shang_guan_pos = liunian_zhi_pos if liunian_zhi_pos["shishen"] == "伤官" else other_pos
+                    if shang_guan_pos["shishen"] == "伤官":
+                        shang_guan_char = shang_guan_pos["char"]
+                        # 地支需要先转为主气天干，再查五行
+                        shang_guan_main_gan = get_branch_main_gan(shang_guan_char)
+                        if shang_guan_main_gan:
+                            shang_guan_element = GAN_WUXING.get(shang_guan_main_gan)
+                            if shang_guan_element and shang_guan_element in yongshen_elements:
+                                risk = 10.0
                 events.append({
                     "type": "pattern",
                     "pattern_type": pattern_type,

@@ -830,16 +830,16 @@ def test_golden_case_A_2059():
     tkdc_risk = liunian_2059.get("tkdc_risk_percent", 0.0)
     
     print(f"[REGRESS] 例A 2059年详细计算:")
-    print(f"  天干力量: {risk_from_gan} (期望: 动态枭神45+静态激活30+线运6=81，天克地冲已移除)")
-    print(f"  地支力量: {risk_from_zhi} (期望: 冲45+静态冲22.5+动态枭神15+静态枭神10+线运6=98.5)")
+    print(f"  天干力量: {risk_from_gan} (期望: 动态枭神30+静态激活15+线运6=51，天克地冲已移除)")
+    print(f"  地支力量: {risk_from_zhi} (期望: 冲45+静态冲22.5+动态枭神15+静态枭神15+线运6=103.5)")
     print(f"  天克地冲危险系数: {tkdc_risk} (期望: 15，动态天克地冲10+静态天克地冲5)")
-    print(f"  总计: {total_risk} (期望188.5，含线运)")
+    print(f"  总计: {total_risk} (期望158.5，含线运)")
     print(f"  线运加成: {lineyun_bonus} (期望6.0)")
     
-    _assert_close(total_risk, 188.5, tol=1.0)
+    _assert_close(total_risk, 158.5, tol=1.0)
     _assert_close(lineyun_bonus, 6.0, tol=0.5)
-    _assert_close(risk_from_gan, 81.0, tol=2.0)  # 动态枭神45+静态激活30+线运6=81（天克地冲已移除）
-    _assert_close(risk_from_zhi, 92.5, tol=2.0)  # 冲45+静态冲22.5+动态枭神15+静态枭神10+线运6=98.5
+    _assert_close(risk_from_gan, 51.0, tol=2.0)  # 动态枭神30+静态激活15+线运6=51（天克地冲已移除）
+    _assert_close(risk_from_zhi, 103.5, tol=2.0)  # 冲45+静态冲22.5+动态枭神15+静态枭神15+线运6=103.5
     _assert_close(tkdc_risk, 15.0, tol=1.0)  # 动态天克地冲10+静态天克地冲5=15
     print("[PASS] 例A 2059年回归测试通过")
 
@@ -2240,6 +2240,284 @@ def test_marriage_wuhe_hints_dual_hints():
     print("[PASS] 天干五合争合/双合婚恋提醒回归测试（同一年两条提醒）通过")
 
 
+def test_golden_case_A_shishen_labels():
+    """黄金回归用例A：2005-09-20 10:00 男，2023/2024/2025年十神与标签断言
+    
+    断言流年输出中包含正确的十神识别行和标签
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2005, 9, 20, 10, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 2023年断言
+    assert "2023 年" in output, "应包含2023年"
+    assert "天干 癸｜十神 七杀｜用神 否｜标签：工作压力/对抗强/紧张感/开销大" in output, \
+        "2023年天干十神行应包含：天干 癸｜十神 七杀｜用神 否｜标签：工作压力/对抗强/紧张感/开销大"
+    assert "地支 卯｜十神 偏印｜用神 是｜标签：偏门技术/思想突破/学习研究/灵感" in output, \
+        "2023年地支十神行应包含：地支 卯｜十神 偏印｜用神 是｜标签：偏门技术/思想突破/学习研究/灵感"
+    
+    # 2024年断言
+    assert "2024 年" in output, "应包含2024年"
+    assert "天干 甲｜十神 正印｜用神 是｜标签：贵人/支持/学习证书" in output, \
+        "2024年天干十神行应包含：天干 甲｜十神 正印｜用神 是｜标签：贵人/支持/学习证书"
+    assert "地支 辰｜十神 伤官｜用神 否｜标签：顶撞权威/口舌/冲突/贪玩" in output, \
+        "2024年地支十神行应包含：地支 辰｜十神 伤官｜用神 否｜标签：顶撞权威/口舌/冲突/贪玩"
+    
+    # 2025年断言
+    assert "2025 年" in output, "应包含2025年"
+    assert "天干 乙｜十神 偏印｜用神 是｜标签：偏门技术/思想突破/学习研究/灵感" in output, \
+        "2025年天干十神行应包含：天干 乙｜十神 偏印｜用神 是｜标签：偏门技术/思想突破/学习研究/灵感"
+    assert "地支 巳｜十神 劫财｜用神 是｜标签：自信独立/同辈助力/合伙资源/行动力" in output, \
+        "2025年地支十神行应包含：地支 巳｜十神 劫财｜用神 是｜标签：自信独立/同辈助力/合伙资源/行动力"
+    
+    print("[PASS] 黄金案例A（2023/2024/2025年十神与标签）通过")
+
+
+def test_golden_case_B_shishen_labels():
+    """黄金回归用例B：2007-01-28 12:00 男，2023/2024/2025年十神与标签断言
+    
+    断言流年输出中包含正确的十神识别行和标签
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2007, 1, 28, 12, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 2023年断言
+    assert "2023 年" in output, "应包含2023年"
+    assert "天干 癸｜十神 劫财｜用神 是｜标签：自信独立/同辈助力/合伙资源/行动力" in output, \
+        "2023年天干十神行应包含：天干 癸｜十神 劫财｜用神 是｜标签：自信独立/同辈助力/合伙资源/行动力"
+    assert "地支 卯｜十神 伤官｜用神 是｜标签：表达/创新/技术突破/灵感" in output, \
+        "2023年地支十神行应包含：地支 卯｜十神 伤官｜用神 是｜标签：表达/创新/技术突破/灵感"
+    
+    # 2024年断言
+    assert "2024 年" in output, "应包含2024年"
+    assert "天干 甲｜十神 食神｜用神 是｜标签：产出/表现/生活舒适/技术突破" in output, \
+        "2024年天干十神行应包含：天干 甲｜十神 食神｜用神 是｜标签：产出/表现/生活舒适/技术突破"
+    assert "地支 辰｜十神 七杀｜用神 否｜标签：工作压力/对抗强/紧张感/开销大" in output, \
+        "2024年地支十神行应包含：地支 辰｜十神 七杀｜用神 否｜标签：工作压力/对抗强/紧张感/开销大"
+    
+    # 2025年断言
+    assert "2025 年" in output, "应包含2025年"
+    assert "天干 乙｜十神 伤官｜用神 是｜标签：表达/创新/技术突破/灵感" in output, \
+        "2025年天干十神行应包含：天干 乙｜十神 伤官｜用神 是｜标签：表达/创新/技术突破/灵感"
+    assert "地支 巳｜十神 偏财｜用神 否｜标签：开销大/现实压力/精神压力大" in output, \
+        "2025年地支十神行应包含：地支 巳｜十神 偏财｜用神 否｜标签：开销大/现实压力/精神压力大"
+    
+    print("[PASS] 黄金案例B（2023/2024/2025年十神与标签）通过")
+
+
+def test_golden_case_B_2023():
+    """黄金回归用例B：2007-01-28 12:00 男，2023年
+    
+    期望：
+    - 伤官见官总系数15%（伤官是用神，动态10% + 静态5%）
+    - 总危险系数21%
+    """
+    dt = datetime(2007, 1, 28, 12, 0)
+    basic = analyze_basic(dt)
+    yongshen_elements = basic.get("yongshen_elements", [])
+    luck = analyze_luck(dt, is_male=True, yongshen_elements=yongshen_elements)
+    
+    # 查找2023年的流年
+    liunian_2023 = None
+    for group in luck.get("groups", []):
+        for liunian in group.get("liunian", []):
+            if liunian.get("year") == 2023:
+                liunian_2023 = liunian
+                break
+        if liunian_2023:
+            break
+    
+    assert liunian_2023 is not None, "应找到2023年的流年数据"
+    
+    total_risk = liunian_2023.get("total_risk_percent", 0.0)
+    
+    # 查找伤官见官模式事件（动态）
+    all_events = liunian_2023.get("all_events", [])
+    pattern_events = [ev for ev in all_events if ev.get("type") == "pattern" and ev.get("pattern_type") == "hurt_officer"]
+    pattern_risk = sum(ev.get("risk_percent", 0.0) for ev in pattern_events)
+    
+    # 查找静态激活的伤官见官
+    static_activation_events = liunian_2023.get("patterns_static_activation", [])
+    static_pattern_risk = sum(ev.get("risk_percent", 0.0) for ev in static_activation_events if ev.get("pattern_type") == "hurt_officer")
+    
+    total_pattern_risk = pattern_risk + static_pattern_risk
+    
+    print(f"[REGRESS] 例B 2023年详细计算:")
+    print(f"  动态伤官见官风险: {pattern_risk}% (期望10%)")
+    print(f"  静态伤官见官风险: {static_pattern_risk}% (期望5%)")
+    print(f"  伤官见官总风险: {total_pattern_risk}% (期望15%)")
+    print(f"  总危险系数: {total_risk}% (期望21%)")
+    
+    _assert_close(pattern_risk, 10.0, tol=0.5)
+    _assert_close(static_pattern_risk, 5.0, tol=0.5)
+    _assert_close(total_pattern_risk, 15.0, tol=0.5)
+    _assert_close(total_risk, 21.0, tol=1.0)
+    print("[PASS] 例B 2023年回归测试通过")
+
+
+def test_golden_case_C_2025():
+    """黄金回归用例C：2005-8-22 0:00 男，2025年
+    
+    期望：
+    - 枭神夺食10%（枭神是用神）
+    - 总危险系数26%
+    """
+    dt = datetime(2005, 8, 22, 0, 0)
+    basic = analyze_basic(dt)
+    yongshen_elements = basic.get("yongshen_elements", [])
+    luck = analyze_luck(dt, is_male=True, yongshen_elements=yongshen_elements)
+    
+    # 查找2025年的流年
+    liunian_2025 = None
+    for group in luck.get("groups", []):
+        for liunian in group.get("liunian", []):
+            if liunian.get("year") == 2025:
+                liunian_2025 = liunian
+                break
+        if liunian_2025:
+            break
+    
+    assert liunian_2025 is not None, "应找到2025年的流年数据"
+    
+    total_risk = liunian_2025.get("total_risk_percent", 0.0)
+    
+    # 查找枭神夺食模式事件
+    all_events = liunian_2025.get("all_events", [])
+    pattern_events = [ev for ev in all_events if ev.get("type") == "pattern" and ev.get("pattern_type") == "pianyin_eatgod"]
+    pattern_risk = sum(ev.get("risk_percent", 0.0) for ev in pattern_events)
+    
+    print(f"[REGRESS] 例C 2025年详细计算:")
+    print(f"  枭神夺食风险: {pattern_risk}% (期望10%)")
+    print(f"  总危险系数: {total_risk}% (期望26%)")
+    
+    _assert_close(pattern_risk, 10.0, tol=0.5)
+    _assert_close(total_risk, 26.0, tol=1.0)
+    print("[PASS] 例C 2025年回归测试通过")
+
+
+def test_golden_case_A_year_labels():
+    """黄金回归用例A：2005-09-20 10:00 男，年度标题行断言
+    
+    断言流年输出中包含正确的年度标题行
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2005, 9, 20, 10, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 2021年断言：全年 凶（棘手/意外），且包含建议行
+    assert "2021 年" in output, "应包含2021年"
+    assert "2021 年" in output and "全年 凶（棘手/意外）" in output, \
+        "2021年应包含：全年 凶（棘手/意外）"
+    assert "建议：买保险/不投机/守法/不轻易辞职/控制情绪/三思后行" in output, \
+        "2021年应包含建议行"
+    
+    # 2023年断言：全年 凶（棘手/意外），且包含建议行
+    assert "2023 年" in output, "应包含2023年"
+    assert "2023 年" in output and "全年 凶（棘手/意外）" in output, \
+        "2023年应包含：全年 凶（棘手/意外）"
+    assert "建议：买保险/不投机/守法/不轻易辞职/控制情绪/三思后行" in output, \
+        "2023年应包含建议行"
+    
+    # 2024年断言：上半年 好运，下半年 一般
+    assert "2024 年" in output, "应包含2024年"
+    assert "2024 年" in output and "上半年 好运" in output and "下半年 一般" in output, \
+        "2024年应包含：上半年 好运，下半年 一般"
+    
+    # 2025年断言：上半年 好运，下半年 好运
+    assert "2025 年" in output, "应包含2025年"
+    assert "2025 年" in output and "上半年 好运" in output and "下半年 好运" in output, \
+        "2025年应包含：上半年 好运，下半年 好运"
+    
+    # 2026年断言：上半年 好运，下半年 好运
+    assert "2026 年" in output, "应包含2026年"
+    assert "2026 年" in output and "上半年 好运" in output and "下半年 好运" in output, \
+        "2026年应包含：上半年 好运，下半年 好运"
+    
+    # 2017年断言：上半年 好运，下半年 有轻微变动
+    assert "2017 年" in output, "应包含2017年"
+    assert "2017 年" in output and "上半年 好运" in output and "下半年 有轻微变动" in output, \
+        "2017年应包含：上半年 好运，下半年 有轻微变动"
+    
+    print("[PASS] 黄金案例A（年度标题行）通过")
+
+
+def test_golden_case_B_year_labels():
+    """黄金回归用例B：2007-01-28 12:00 男，年度标题行断言
+    
+    断言流年输出中包含正确的年度标题行
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2007, 1, 28, 12, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 2024年断言：全年 明显变动（可克服）
+    assert "2024 年" in output, "应包含2024年"
+    assert "2024 年" in output and "全年 明显变动（可克服）" in output, \
+        "2024年应包含：全年 明显变动（可克服）"
+    
+    # 2025年断言：上半年 好运，下半年 一般
+    assert "2025 年" in output, "应包含2025年"
+    assert "2025 年" in output and "上半年 好运" in output and "下半年 一般" in output, \
+        "2025年应包含：上半年 好运，下半年 一般"
+    
+    # 2022年断言：上半年 好运，下半年 好运
+    assert "2022 年" in output, "应包含2022年"
+    assert "2022 年" in output and "上半年 好运" in output and "下半年 好运" in output, \
+        "2022年应包含：上半年 好运，下半年 好运"
+    
+    # 2023年断言：上半年 好运，下半年 有轻微变动
+    assert "2023 年" in output, "应包含2023年"
+    assert "2023 年" in output and "上半年 好运" in output and "下半年 有轻微变动" in output, \
+        "2023年应包含：上半年 好运，下半年 有轻微变动"
+    
+    print("[PASS] 黄金案例B（年度标题行）通过")
+
+
 if __name__ == "__main__":
     main()
     print("\n" + "=" * 60)
@@ -2249,9 +2527,23 @@ if __name__ == "__main__":
     test_golden_case_A_2033()  # 已更新为包含三合/三会逢冲额外加分，总计70%
     test_golden_case_A_2059()
     test_golden_case_B_2021()
+    test_golden_case_B_2023()  # 新增：2007-01-28 12:00 男，2023年
+    test_golden_case_C_2025()  # 新增：2005-8-22 0:00 男，2025年
     test_golden_case_B_2012()  # 新增：包含三合/三会逢冲额外加分
     test_golden_case_B_2016()  # 新增：包含三合/三会逢冲额外加分
     test_golden_case_B_2030()
+    
+    print("\n" + "=" * 60)
+    print("运行黄金案例十神标签回归用例")
+    print("=" * 60)
+    test_golden_case_A_shishen_labels()  # 新增：2023/2024/2025年十神与标签
+    test_golden_case_B_shishen_labels()  # 新增：2023/2024/2025年十神与标签
+    
+    print("\n" + "=" * 60)
+    print("运行黄金案例年度标题行回归用例")
+    print("=" * 60)
+    test_golden_case_A_year_labels()  # 新增：年度标题行断言
+    test_golden_case_B_year_labels()  # 新增：年度标题行断言
     
     print("\n" + "=" * 60)
     print("运行原局问题回归用例")

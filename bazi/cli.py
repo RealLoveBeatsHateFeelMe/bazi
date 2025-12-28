@@ -85,6 +85,65 @@ def _generate_marriage_suggestion(yongshen_elements: list[str]) -> str:
         return f"【婚配建议】推荐：或 {wang_str}旺的人。"
 
 
+def _calc_half_year_label(risk: float, is_yongshen: bool) -> str:
+    """计算半年判词。
+    
+    参数:
+        risk: 半年危险系数（H1 或 H2）
+        is_yongshen: 是否是用神
+    
+    返回:
+        判词：好运、一般、有轻微变动、凶（棘手/意外）
+    """
+    if risk <= 10.0:
+        return "好运" if is_yongshen else "一般"
+    elif risk < 20.0:
+        return "有轻微变动"
+    else:  # risk >= 20.0
+        return "凶（棘手/意外）"
+
+
+def _calc_year_title_line(
+    total_risk: float,
+    risk_from_gan: float,
+    risk_from_zhi: float,
+    is_gan_yongshen: bool,
+    is_zhi_yongshen: bool,
+) -> tuple[str, bool]:
+    """计算年度标题行。
+    
+    参数:
+        total_risk: 总危险系数 Y
+        risk_from_gan: 上半年危险系数 H1
+        risk_from_zhi: 下半年危险系数 H2
+        is_gan_yongshen: 天干是否用神
+        is_zhi_yongshen: 地支是否用神
+    
+    返回:
+        (title_line, should_print_suggestion)
+        title_line: 年度标题行文本
+        should_print_suggestion: 是否打印建议行（Y >= 40）
+    """
+    Y = total_risk
+    
+    # A) 若 Y >= 40：全年 凶（棘手/意外）
+    if Y >= 40.0:
+        return ("全年 凶（棘手/意外）", True)
+    
+    # B) 若 25 <= Y < 40：全年 明显变动（可克服）
+    if Y >= 25.0:
+        return ("全年 明显变动（可克服）", False)
+    
+    # C) 若 Y < 25：才允许输出上/下半年
+    H1 = risk_from_gan
+    H2 = risk_from_zhi
+    
+    S1 = _calc_half_year_label(H1, is_gan_yongshen)
+    S2 = _calc_half_year_label(H2, is_zhi_yongshen)
+    
+    return (f"上半年 {S1}，下半年 {S2}", False)
+
+
 def _print_sanhe_sanhui_clash_bonus(sanhe_sanhui_bonus_ev: dict) -> None:
     """打印三合/三会逢冲额外加分信息。
     
@@ -933,7 +992,7 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             print(issue)
     
     # ===== 婚恋结构提示 =====
-    from .shishen import get_shishen, get_branch_main_gan
+    from .shishen import get_shishen, get_branch_main_gan, get_shishen_label, get_branch_shishen
     
     day_gan = bazi["day"]["gan"]
     marriage_hint = None
@@ -1046,7 +1105,11 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         dy = group["dayun"]
         lns = group["liunian"]
 
-        label = "好运" if dy["is_good"] else "坏运"
+        # 大运判词：用神=好运，非用神=一般
+        if dy.get("zhi_good", False):
+            label = "好运"
+        else:
+            label = "一般"
         gan_flag = "✓" if dy["gan_good"] else "×"
         zhi_flag = "✓" if dy["zhi_good"] else "×"
 
@@ -1268,12 +1331,22 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         # 该大运下面的十个流年
         print("    —— 该大运对应的流年 ——")
         for ln in lns:
-            first_label = "好运" if ln["first_half_good"] else "坏运"
-            second_label = "好运" if ln["second_half_good"] else "坏运"
-
+            # 计算年度标题行（新逻辑）
+            total_risk = ln.get("total_risk_percent", 0.0)
+            risk_from_gan = ln.get("risk_from_gan", 0.0)
+            risk_from_zhi = ln.get("risk_from_zhi", 0.0)
+            gan_element = ln.get("gan_element", "")
+            zhi_element = ln.get("zhi_element", "")
+            is_gan_yongshen = gan_element in yongshen_elements if gan_element else False
+            is_zhi_yongshen = zhi_element in yongshen_elements if zhi_element else False
+            
+            title_line, should_print_suggestion = _calc_year_title_line(
+                total_risk, risk_from_gan, risk_from_zhi,
+                is_gan_yongshen, is_zhi_yongshen
+            )
+            
             print(
-                f"    {ln['year']} 年 {ln['gan']}{ln['zhi']}（虚龄 {ln['age']} 岁）："
-                f"上半年 {first_label}，下半年 {second_label}"
+                f"    {ln['year']} 年 {ln['gan']}{ln['zhi']}（虚龄 {ln['age']} 岁）：{title_line}"
             )
             
             # 流年六合 / 半合（只解释，不计分）：流年支与原局四宫位
@@ -1461,18 +1534,61 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             for hint in liunian_wuhe_hints:
                 print(f"        婚恋变化提醒（如恋爱）：{hint['hint_text']}")
             
-            # 在总危险系数前加一个空行
+            # 事件区结束后固定只留 1 个空行
             print()
             
-            # 先打印危险系数
+            # ===== 危险系数块（新格式） =====
             total_risk = ln.get("total_risk_percent", 0.0)
             risk_from_gan = ln.get("risk_from_gan", 0.0)
             risk_from_zhi = ln.get("risk_from_zhi", 0.0)
             tkdc_risk = ln.get("tkdc_risk_percent", 0.0)
-            print(f"        总危险系数：{total_risk:.1f}%")
-            print(f"        上半年危险系数（天干引起）：{risk_from_gan:.1f}%")
-            print(f"        下半年危险系数（地支引起）：{risk_from_zhi:.1f}%")
-            print(f"        天克地冲危险系数：{tkdc_risk:.1f}%")
+            
+            # 计算流年天干十神和用神
+            liunian_gan = ln.get("gan", "")
+            gan_shishen = get_shishen(day_gan, liunian_gan) if liunian_gan else None
+            gan_element = ln.get("gan_element", "")
+            is_gan_yongshen = gan_element in yongshen_elements if gan_element else False
+            gan_label = get_shishen_label(gan_shishen, is_gan_yongshen) if gan_shishen else ""
+            
+            # 计算流年地支主气十神和用神
+            liunian_zhi = ln.get("zhi", "")
+            zhi_main_gan = get_branch_main_gan(liunian_zhi) if liunian_zhi else None
+            zhi_shishen = get_shishen(day_gan, zhi_main_gan) if zhi_main_gan else None
+            zhi_element = ln.get("zhi_element", "")
+            is_zhi_yongshen = zhi_element in yongshen_elements if zhi_element else False
+            zhi_label = get_shishen_label(zhi_shishen, is_zhi_yongshen) if zhi_shishen else ""
+            
+            # 打印总危险系数（带分隔线）
+            print(f"        --- 总危险系数：{total_risk:.1f}% ---")
+            
+            # 如果 Y >= 40，打印建议行
+            if should_print_suggestion:
+                print("        建议：买保险/不投机/守法/不轻易辞职/控制情绪/三思后行")
+            
+            # 打印天干十神行
+            gan_yongshen_str = "是" if is_gan_yongshen else "否"
+            if gan_shishen:
+                label_str = f"｜标签：{gan_label}" if gan_label else ""
+                print(f"        天干 {liunian_gan}｜十神 {gan_shishen}｜用神 {gan_yongshen_str}{label_str}")
+            else:
+                print(f"        天干 {liunian_gan}｜十神 -｜用神 {gan_yongshen_str}")
+            
+            # 打印上半年危险系数
+            print(f"        - 上半年危险系数（天干引起）：{risk_from_gan:.1f}%")
+            
+            # 打印地支十神行
+            zhi_yongshen_str = "是" if is_zhi_yongshen else "否"
+            if zhi_shishen:
+                label_str = f"｜标签：{zhi_label}" if zhi_label else ""
+                print(f"        地支 {liunian_zhi}｜十神 {zhi_shishen}｜用神 {zhi_yongshen_str}{label_str}")
+            else:
+                print(f"        地支 {liunian_zhi}｜十神 -｜用神 {zhi_yongshen_str}")
+            
+            # 打印下半年危险系数
+            print(f"        - 下半年危险系数（地支引起）：{risk_from_zhi:.1f}%")
+            
+            # 打印天克地冲危险系数
+            print(f"        - 天克地冲危险系数：{tkdc_risk:.1f}%")
             print("")
             
             # 组织所有事件

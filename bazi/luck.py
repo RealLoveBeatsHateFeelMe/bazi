@@ -956,6 +956,7 @@ def analyze_luck(
                 dayun_gan=gan_dy,
                 dayun_zhi=zhi_dy,
                 liunian_gan=gan_ln,
+                yongshen_elements=yongshen_elements,
                 liunian_zhi=zhi_ln,
             )
             
@@ -1121,9 +1122,14 @@ def analyze_luck(
                                 if dayun_pair not in activated_dayun_zhi_pairs:
                                     activated_dayun_zhi_pairs.append(dayun_pair)
                 
-                # 计算静态激活风险（只加10%，不管是否涉及月支）
-                static_risk_gan = PATTERN_GAN_RISK_STATIC * (len(activated_natal_gan_pairs) + len(activated_dayun_gan_pairs))
-                static_risk_zhi = PATTERN_ZHI_RISK_STATIC * (len(activated_natal_zhi_pairs) + len(activated_dayun_zhi_pairs))
+                # 计算静态激活风险
+                # 枭神夺食和伤官见官静态按5%算，其他模式按10%算
+                if pattern_type in ("pianyin_eatgod", "hurt_officer"):
+                    static_risk_gan = 5.0 * (len(activated_natal_gan_pairs) + len(activated_dayun_gan_pairs))
+                    static_risk_zhi = 5.0 * (len(activated_natal_zhi_pairs) + len(activated_dayun_zhi_pairs))
+                else:
+                    static_risk_gan = PATTERN_GAN_RISK_STATIC * (len(activated_natal_gan_pairs) + len(activated_dayun_gan_pairs))
+                    static_risk_zhi = PATTERN_ZHI_RISK_STATIC * (len(activated_natal_zhi_pairs) + len(activated_dayun_zhi_pairs))
                 
                 # 如果有激活的静态模式，生成汇总事件
                 if static_risk_gan > 0.0 or static_risk_zhi > 0.0:
