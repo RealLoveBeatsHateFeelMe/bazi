@@ -1351,6 +1351,12 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             
             # 流年六合 / 半合（只解释，不计分）：流年支与原局四宫位
             liunian_lines = []
+            # 记录已提示的宫位（同一年同一宫位只提示一次）
+            hinted_palaces = set()
+            # 跟踪合类引动和冲类感情标志（用于组合提示）
+            has_love_merge = False  # 是否出现婚姻宫/夫妻宫的合引动提示
+            has_love_clash = False  # 是否出现婚姻宫/夫妻宫的冲摘要
+            
             for ev in ln.get("harmonies_natal", []) or []:
                 if ev.get("type") != "branch_harmony":
                     continue
@@ -1375,10 +1381,26 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                         else:
                             pair_str = f"{flow_branch}{target_branch}半合"
                         line = f"        流年 与 {palace} 半合（{pair_str}）"
-                    liunian_lines.append(line)
+                    liunian_lines.append((line, palace))
+            
+            # 打印事件行，并在婚姻宫/夫妻宫命中时追加提示
             if liunian_lines:
-                for line in sorted(set(liunian_lines)):
+                # 去重：使用字典记录每个(line, palace)组合，保留第一次出现的
+                seen_lines = {}
+                for line, palace in liunian_lines:
+                    key = (line, palace)
+                    if key not in seen_lines:
+                        seen_lines[key] = palace
+                
+                # 按行文本排序后打印
+                sorted_items = sorted(seen_lines.items(), key=lambda x: x[0])
+                for (line, _), palace in sorted_items:
                     print(line)
+                    # 如果是婚姻宫或夫妻宫，且该宫位尚未提示过，则追加提示行
+                    if palace in ("婚姻宫", "夫妻宫") and palace not in hinted_palaces:
+                        print(f"        提示：{palace}引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）")
+                        hinted_palaces.add(palace)
+                        has_love_merge = True  # 标记出现了合类引动
             
             # 流年完整三合局（包括大运+流年+原局的情况）
             for ev in ln.get("sanhe_complete", []) or []:
@@ -1534,6 +1556,128 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             for hint in liunian_wuhe_hints:
                 print(f"        婚恋变化提醒（如恋爱）：{hint['hint_text']}")
             
+            # ===== 冲摘要（流年地支冲命局宫位） =====
+            # 允许进入摘要的宫位集合（匹配PILLAR_PALACE中的值）
+            allowed_palaces = {"婚姻宫", "夫妻宫", "事业家庭宫（工作 / 子女 / 后期家庭）"}
+            # 宫位名称映射（用于识别提示）
+            palace_name_map = {
+                "婚姻宫": "婚姻宫",
+                "夫妻宫": "夫妻宫",
+                "事业家庭宫（工作 / 子女 / 后期家庭）": "事业家庭宫"
+            }
+            
+            # 收集流年地支冲命局宫位的事件
+            clash_summary_lines = []
+            clash_palaces_hit = set()  # 记录命中的允许宫位（用于识别提示）
+            
+            for ev in ln.get("clashes_natal", []) or []:
+                if not ev:
+                    continue
+                flow_branch = ev.get("flow_branch", "")
+                target_branch = ev.get("target_branch", "")
+                if not flow_branch or not target_branch:
+                    continue
+                
+                # 收集该次冲命中的允许宫位
+                hit_palaces = []
+                targets = ev.get("targets", [])
+                for target in targets:
+                    palace = target.get("palace", "")
+                    # 检查是否在允许的宫位集合中
+                    if palace in allowed_palaces:
+                        # 使用简化的宫位名称（用于摘要显示）
+                        simple_palace = palace_name_map.get(palace, palace)
+                        hit_palaces.append(simple_palace)
+                        clash_palaces_hit.add(simple_palace)
+                
+                # 如果过滤后还有允许的宫位，则生成摘要行
+                if hit_palaces:
+                    # 按固定顺序排序：婚姻宫/夫妻宫/事业家庭宫
+                    palace_order = {"婚姻宫": 0, "夫妻宫": 1, "事业家庭宫": 2}
+                    hit_palaces_sorted = sorted(hit_palaces, key=lambda p: palace_order.get(p, 99))
+                    palace_str = "/".join(hit_palaces_sorted)
+                    clash_name = f"{flow_branch}{target_branch}冲"
+                    clash_summary_lines.append((clash_name, palace_str))
+            
+            # 打印冲摘要行（去重同一组冲）
+            if clash_summary_lines:
+                # 按冲名称分组，合并同一组冲的不同宫位
+                clash_groups = {}
+                for clash_name, palace_str in clash_summary_lines:
+                    if clash_name not in clash_groups:
+                        clash_groups[clash_name] = set()
+                    clash_groups[clash_name].add(palace_str)
+                
+                # 打印摘要行
+                for clash_name in sorted(clash_groups.keys()):
+                    # 合并同一组冲的所有宫位（去重并排序）
+                    all_palaces = set()
+                    for palace_str in clash_groups[clash_name]:
+                        all_palaces.update(palace_str.split("/"))
+                    palace_order = {"婚姻宫": 0, "夫妻宫": 1, "事业家庭宫": 2}
+                    sorted_palaces = sorted(all_palaces, key=lambda p: palace_order.get(p, 99))
+                    palace_str = "/".join(sorted_palaces)
+                    print(f"        冲：{clash_name}（{palace_str}）")
+            
+            # 打印识别提示
+            # 先打印感情提示（如果命中婚姻宫或夫妻宫）
+            if "婚姻宫" in clash_palaces_hit or "夫妻宫" in clash_palaces_hit:
+                print("        提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）")
+                has_love_clash = True  # 标记出现了冲类感情
+            
+            # 检查是否命中时柱天克地冲（用于决定是否替换家庭变动提示）
+            has_hour_tkdc = False
+            hour_tkdc_info = None  # 存储时柱天克地冲信息，用于后续打印
+            for ev_clash in ln.get("clashes_natal", []) or []:
+                if not ev_clash:
+                    continue
+                tkdc_targets = ev_clash.get("tkdc_targets", [])
+                if tkdc_targets:
+                    flow_branch = ev_clash.get("flow_branch", "")
+                    flow_gan = ev_clash.get("flow_gan", "")
+                    for target in tkdc_targets:
+                        if target.get("pillar") == "hour":
+                            has_hour_tkdc = True
+                            target_gan = target.get("target_gan", "")
+                            target_branch = ev_clash.get("target_branch", "")
+                            hour_tkdc_info = {
+                                "liunian_ganzhi": f"{flow_gan}{flow_branch}",
+                                "hour_ganzhi": f"{target_gan}{target_branch}"
+                            }
+                            break
+                if has_hour_tkdc:
+                    break
+            
+            # 再打印家庭变动提示（如果命中事业家庭宫，且未命中时柱天克地冲）
+            if "事业家庭宫" in clash_palaces_hit and not has_hour_tkdc:
+                print("        提示：家庭变动（搬家/换工作/家庭节奏变化）")
+            
+            # 组合提示：当同一年内同时满足合类引动和冲类感情时
+            if has_love_merge and has_love_clash:
+                print("        提示：感情线合冲同现（进展易受阻/反复拉扯/不宜急定）")
+            
+            # ===== 运年天克地冲摘要 =====
+            # 检查运年相冲中的天克地冲
+            for ev_clash in ln.get("clashes_dayun", []) or []:
+                if not ev_clash:
+                    continue
+                if ev_clash.get("is_tian_ke_di_chong", False):
+                    dayun_gan = ev_clash.get("dayun_gan", "")
+                    liunian_gan = ev_clash.get("liunian_gan", "")
+                    dayun_branch = ev_clash.get("dayun_branch", "")
+                    liunian_branch = ev_clash.get("liunian_branch", "")
+                    dayun_ganzhi = f"{dayun_gan}{dayun_branch}"
+                    liunian_ganzhi = f"{liunian_gan}{liunian_branch}"
+                    print(f"        天克地冲：大运 {dayun_ganzhi} ↔ 流年 {liunian_ganzhi}")
+                    print("        提示：运年天克地冲（家人去世/生活环境变化剧烈，如出国上学打工）")
+                    break  # 每年只打印一次
+            
+            # ===== 时柱天克地冲摘要 =====
+            # 如果命中时柱天克地冲，打印强提示
+            if has_hour_tkdc and hour_tkdc_info:
+                print(f"        天克地冲：流年 {hour_tkdc_info['liunian_ganzhi']} ↔ 时柱 {hour_tkdc_info['hour_ganzhi']}")
+                print("        提示：事业家庭宫天克地冲（着重注意工作变动/有可能搬家）")
+            
             # 事件区结束后固定只留 1 个空行
             print()
             
@@ -1567,9 +1711,15 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             
             # 打印天干十神行
             gan_yongshen_str = "是" if is_gan_yongshen else "否"
+            # 判断是否需要追加感情字段（天干行）
+            gan_love_str = ""
+            if gan_shishen:
+                if (is_male and gan_shishen in ("正财", "偏财")) or (not is_male and gan_shishen in ("正官", "七杀")):
+                    gan_love_str = "｜感情：暧昧推进"
+            
             if gan_shishen:
                 label_str = f"｜标签：{gan_label}" if gan_label else ""
-                print(f"        天干 {liunian_gan}｜十神 {gan_shishen}｜用神 {gan_yongshen_str}{label_str}")
+                print(f"        天干 {liunian_gan}｜十神 {gan_shishen}｜用神 {gan_yongshen_str}{label_str}{gan_love_str}")
             else:
                 print(f"        天干 {liunian_gan}｜十神 -｜用神 {gan_yongshen_str}")
             
@@ -1578,9 +1728,15 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             
             # 打印地支十神行
             zhi_yongshen_str = "是" if is_zhi_yongshen else "否"
+            # 判断是否需要追加感情字段（地支行）
+            zhi_love_str = ""
+            if zhi_shishen:
+                if (is_male and zhi_shishen in ("正财", "偏财")) or (not is_male and zhi_shishen in ("正官", "七杀")):
+                    zhi_love_str = "｜感情：易遇合适伴侣"
+            
             if zhi_shishen:
                 label_str = f"｜标签：{zhi_label}" if zhi_label else ""
-                print(f"        地支 {liunian_zhi}｜十神 {zhi_shishen}｜用神 {zhi_yongshen_str}{label_str}")
+                print(f"        地支 {liunian_zhi}｜十神 {zhi_shishen}｜用神 {zhi_yongshen_str}{label_str}{zhi_love_str}")
             else:
                 print(f"        地支 {liunian_zhi}｜十神 -｜用神 {zhi_yongshen_str}")
             
