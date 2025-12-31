@@ -307,6 +307,9 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
     dominant_traits = result.get("dominant_traits") or []
     yongshen_elements = result.get("yongshen_elements", [])
     
+    # 获取日干和八字，用于计算透干和得月令
+    day_gan = bazi["day"]["gan"]
+    
     if dominant_traits:
         # 辅助：按 group 索引
         trait_by_group = {t.get("group"): t for t in dominant_traits}
@@ -316,6 +319,182 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             detail = trait.get("detail") or []
             hits = sum(d.get("stems_visible_count", 0) for d in detail)
             return min(hits, 3)
+
+        def _get_trait_tougan_info(trait: dict) -> List[tuple]:
+            """获取该组的透干信息（具体十神 + 柱位），返回 [(柱位, 具体十神), ...]"""
+            tougan_list = []
+            detail = trait.get("detail") or []
+            
+            # 从detail中获取每个子类的透出柱位
+            for d in detail:
+                shishen_name = d.get("name", "")
+                stem_pillars = d.get("stem_pillars", [])  # 已经是中文柱位名列表
+                for pillar in stem_pillars:
+                    tougan_list.append((pillar, shishen_name))
+            
+            # 按固定顺序排序：年柱；月柱；时柱
+            pillar_order = {"年柱": 0, "月柱": 1, "时柱": 2}
+            tougan_list.sort(key=lambda x: (pillar_order.get(x[0], 99), x[0]))
+            
+            return tougan_list
+        
+        def _get_trait_yueling_shishen(trait: dict, bazi: dict, day_gan: str) -> Optional[str]:
+            """获取该组得月令的具体十神"""
+            from .shishen import get_shishen, get_branch_main_gan
+            
+            # 先检查trait中是否有de_yueling字段
+            de_yueling = trait.get("de_yueling")
+            if de_yueling:
+                # 如果de_yueling是"得月令"，需要从月支计算具体十神
+                if de_yueling == "得月令":
+                    month_zhi = bazi["month"]["zhi"]
+                    month_main_gan = get_branch_main_gan(month_zhi)
+                    if month_main_gan:
+                        month_ss = get_shishen(day_gan, month_main_gan)
+                        return month_ss
+                # 如果de_yueling是"{具体十神}得月令"，提取具体十神
+                elif "得月令" in de_yueling:
+                    # 例如"正官得月令" -> "正官"
+                    shishen = de_yueling.replace("得月令", "")
+                    return shishen
+            
+            return None
+
+        def _format_trait_new(trait: dict, bazi: dict, day_gan: str, yongshen_elements: list) -> List[str]:
+            """新的格式化函数，返回多行输出"""
+            from .shishen import get_shishen
+            
+            group = trait.get("group", "")
+            total_percent = trait.get("total_percent", 0.0)
+            detail = trait.get("detail") or []
+            
+            # 1.1 组是否打印：若该组 正% + 偏% == 0，整组不打印
+            zheng_percent = 0.0
+            pian_percent = 0.0
+            zheng_shishen = None
+            pian_shishen = None
+            
+            # 定义组到具体十神的映射（正/偏）
+            # 注意：对于食伤组，食神是"正"，伤官是"偏"
+            # 对于比劫组，比肩是"正"，劫财是"偏"
+            group_to_shishens = {
+                "印": ("正印", "偏印"),
+                "官杀": ("正官", "七杀"),
+                "食伤": ("食神", "伤官"),  # 食神=正，伤官=偏
+                "比劫": ("比肩", "劫财"),  # 比肩=正，劫财=偏
+                "财": ("正财", "偏财"),
+            }
+            
+            zheng_name, pian_name = group_to_shishens.get(group, ("", ""))
+            
+            for d in detail:
+                name = d.get("name", "")
+                percent = d.get("percent", 0.0)
+                if name == zheng_name:
+                    zheng_percent = percent
+                    zheng_shishen = name
+                elif name == pian_name:
+                    pian_percent = percent
+                    pian_shishen = name
+            
+            if zheng_percent == 0.0 and pian_percent == 0.0:
+                return []  # 不打印
+            
+            # 1.2 偏占比计算（仅在并存时）
+            pian_ratio = None
+            if zheng_percent > 0.0 and pian_percent > 0.0:
+                total_sub_percent = zheng_percent + pian_percent
+                if total_sub_percent > 0.0:
+                    pian_ratio = pian_percent / total_sub_percent
+                    # 保留1位小数，四舍五入（使用round，但注意0.75应该变成0.8）
+                    pian_ratio = round(pian_ratio + 0.0001, 1)  # 加小量避免浮点误差
+                    if pian_ratio > 1.0:
+                        pian_ratio = 1.0
+            
+            # 1.3 口径阈值
+            koujing = None
+            if pian_ratio is not None:
+                if pian_ratio <= 0.30:
+                    koujing = f"{zheng_shishen}明显更多（{pian_shishen}只算一点）"
+                elif pian_ratio <= 0.60:
+                    koujing = f"{zheng_shishen}与{pian_shishen}并存"
+                else:  # pian_ratio > 0.60
+                    koujing = f"{pian_shishen}明显更多（{zheng_shishen}只算一点）"
+            
+            # 1.4 "纯"判定
+            is_pure = False
+            pure_shishen = None
+            pure_percent = 0.0
+            if zheng_percent > 0.0 and pian_percent == 0.0:
+                is_pure = True
+                pure_shishen = zheng_shishen
+                pure_percent = zheng_percent
+            elif pian_percent > 0.0 and zheng_percent == 0.0:
+                is_pure = True
+                pure_shishen = pian_shishen
+                pure_percent = pian_percent
+            
+            # 2. 透干信息（具体十神 + 柱位）
+            tougan_list = _get_trait_tougan_info(trait)
+            
+            # 3. 得月令信息（具体十神）
+            yueling_shishen = _get_trait_yueling_shishen(trait, bazi, day_gan)
+            
+            # 4. 主标签
+            if is_pure:
+                main_label = pure_shishen
+            else:
+                if pian_ratio is not None:
+                    if pian_ratio > 0.60:
+                        main_label = pian_shishen
+                    elif pian_ratio <= 0.30:
+                        main_label = zheng_shishen
+                    else:  # 0.30 < pian_ratio <= 0.60
+                        main_label = f"{zheng_shishen}与{pian_shishen}"
+                else:
+                    main_label = group
+            
+            # 4.1 第一行构建
+            line1_parts = [f"{group}（{total_percent:.1f}%）：{main_label}"]
+            
+            # 得月令段
+            if yueling_shishen:
+                line1_parts.append(f"得月令：{yueling_shishen}")
+            
+            # 透干段（用全角分号连接）
+            if tougan_list:
+                tougan_strs = [f"{pillar}{shishen}透干×1" for pillar, shishen in tougan_list]
+                line1_parts.append("；".join(tougan_strs))
+            
+            # 结构段
+            if is_pure:
+                struct_str = f"纯{pure_shishen}{pure_percent:.1f}%"
+            else:
+                struct_str = f"{zheng_shishen}{zheng_percent:.1f}%，{pian_shishen}{pian_percent:.1f}%"
+            line1_parts.append(struct_str)
+            
+            line1 = "；".join(line1_parts)
+            
+            # 4.2 后续行（Bullet行）
+            lines = [line1]
+            
+            if not is_pure and pian_ratio is not None:
+                # 并存：打印三行
+                lines.append(f"- 偏占多少：{pian_ratio:.1f}")
+                lines.append(f"- 混杂口径：{koujing}")
+            elif is_pure:
+                # 纯：打印混杂口径（新增）
+                lines.append(f"- 混杂口径：纯{pure_shishen}，只有{pure_shishen}心性。")
+            
+            # 最后一行：五行和用神
+            element = trait.get("element", "")
+            if not element:
+                element = "None"
+            is_yongshen = element in yongshen_elements if element and element != "None" else False
+            yongshen_status = "为用神" if is_yongshen else "不为用神"
+            lines.append(f"- {group}的五行：{element}；{group}{yongshen_status}")
+            
+            return lines
 
         def _format_trait_line1(trait: dict, is_major_by_rule3: bool = False) -> str:
             """格式化第1行：{大类}（{total_percent:.1f}%）：{子类标签}；{透干柱位列表}透干×{n}；{得月令字段}；{子类百分比摘要}"""
@@ -430,12 +609,9 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         if major:
             print("\n—— 主要性格 ——")
             for trait in major:
-                group = trait.get("group", "")
-                is_major_by_rule3 = group in major_by_rule3 and (
-                    trait.get("total_percent", 0.0) < 35.0 and _stem_hits(trait) < 2
-                )
-                print(_format_trait_line1(trait, is_major_by_rule3))
-                print(_format_trait_line2(trait))
+                lines = _format_trait_new(trait, bazi, day_gan, yongshen_elements)
+                for line in lines:
+                    print(line)
 
         # 其他性格：五大类全量（含 0%）
         print("\n—— 其他性格 ——")
@@ -456,8 +632,9 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                     "element": None,
                 }
             
-            print(_format_trait_line1(trait, False))
-            print(_format_trait_line2(trait))
+            lines = _format_trait_new(trait, bazi, day_gan, yongshen_elements)
+            for line in lines:
+                print(line)
 
     # 六亲助力：只输出用神十神大类
     print("\n—— 六亲助力 ——")

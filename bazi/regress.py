@@ -1550,15 +1550,14 @@ def test_traits_format_case_A():
             else:
                 major_section = remaining
     
-    # 验证关键子串（使用 contains 断言，避免空格/标点小差异）
-    assert "财（45.0%）：偏财" in major_section, "应包含：财（45.0%）：偏财"
-    assert "得月令" in major_section, "应包含：得月令"
-    assert "纯偏财45.0%" in major_section, "应包含：纯偏财45.0%"
+    # 验证关键子串（使用 contains 断言，新格式）
+    assert "纯偏财" in major_section, "应包含：纯偏财"
+    assert "得月令：偏财" in major_section, "应包含：得月令：偏财"
+    assert "年柱偏印透干×1" in major_section, "应包含：年柱偏印透干×1"
+    assert "月柱偏印透干×1" in major_section, "应包含：月柱偏印透干×1"
+    assert "时柱偏印透干×1" in major_section, "应包含：时柱偏印透干×1"
     assert "财的五行：金" in major_section, "应包含：财的五行：金"
     assert "财不为用神" in major_section, "应包含：财不为用神"
-    
-    assert "印（30.0%）：偏印" in major_section, "应包含：印（30.0%）：偏印"
-    assert "年柱，月柱，时柱透干×3" in major_section, "应包含：年柱，月柱，时柱透干×3"
     assert "印的五行：木" in major_section, "应包含：印的五行：木"
     assert "印为用神" in major_section, "应包含：印为用神"
     
@@ -1602,26 +1601,318 @@ def test_traits_format_case_B():
             else:
                 major_section = remaining
     
-    # 验证关键子串（使用 contains 断言）
-    assert "印（10.0%）：正印" in major_section, "应包含：印（10.0%）：正印"
-    assert "月柱透干×1，且为用神" in major_section, "应包含：月柱透干×1，且为用神"
-    assert "纯正印10.0%" in major_section, "应包含：纯正印10.0%"
-    assert "印的五行：金" in major_section, "应包含：印的五行：金"
-    assert "印为用神" in major_section, "应包含：印为用神"
-    
-    assert "官杀（55.0%）：官杀混杂" in major_section, "应包含：官杀（55.0%）：官杀混杂"
-    assert "正官得月令" in major_section, "应包含：正官得月令"
-    assert "正官35.0%，七杀20.0%" in major_section, "应包含：正官35.0%，七杀20.0%"
+    # 验证关键子串（使用 contains 断言，新格式）
+    assert "正官" in major_section, "应包含：正官"
+    assert "七杀" in major_section, "应包含：七杀"
+    assert "混杂口径：正官与七杀并存" in major_section, "应包含：混杂口径：正官与七杀并存"
     assert "官杀的五行：土" in major_section, "应包含：官杀的五行：土"
     assert "官杀不为用神" in major_section, "应包含：官杀不为用神"
     
-    assert "财（35.0%）：正偏财混杂" in major_section, "应包含：财（35.0%）：正偏财混杂"
-    assert "年柱，时柱透干×2" in major_section, "应包含：年柱，时柱透干×2"
+    assert "正财" in major_section, "应包含：正财"
+    assert "偏财" in major_section, "应包含：偏财"
+    assert "年柱偏财透干×1" in major_section, "应包含：年柱偏财透干×1"
+    assert "时柱偏财透干×1" in major_section, "应包含：时柱偏财透干×1"
+    assert "混杂口径：正财与偏财并存" in major_section, "应包含：混杂口径：正财与偏财并存"
+    assert "财的五行：火" in major_section, "应包含：财的五行：火"
+    assert "财不为用神" in major_section, "应包含：财不为用神"
+    
+    assert "纯正印" in major_section, "应包含：纯正印"
+    assert "月柱正印透干×1" in major_section, "应包含：月柱正印透干×1"
+    assert "印的五行：金" in major_section, "应包含：印的五行：金"
+    assert "印为用神" in major_section, "应包含：印为用神"
     assert "偏财20.0%，正财15.0%" in major_section, "应包含：偏财20.0%，正财15.0%"
     assert "财的五行：火" in major_section, "应包含：财的五行：火"
     assert "财不为用神" in major_section, "应包含：财不为用神"
     
     print("[PASS] 性格打印格式用例B（2007-01-28）通过")
+
+
+def test_traits_new_format_case_A():
+    """性格打印格式新格式回归用例A：2005-9-20 10:00 男
+    
+    要求 contains：
+    - 纯偏财
+    - 得月令：偏财
+    - 财的五行：金；财不为用神
+    - 纯偏印
+    - 年柱偏印透干×1
+    - 月柱偏印透干×1
+    - 时柱偏印透干×1
+    - 印的五行：木；印为用神
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2005, 9, 20, 10, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取主要性格段
+    major_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                major_section = remaining.split("—— 其他性格 ——")[0]
+            else:
+                major_section = remaining
+    
+    # 验证关键子串
+    assert "纯偏财" in major_section, "应包含：纯偏财"
+    assert "得月令：偏财" in major_section, "应包含：得月令：偏财"
+    assert "混杂口径：纯偏财，只有偏财心性。" in major_section, "应包含：混杂口径：纯偏财，只有偏财心性。"
+    assert "财的五行：金" in major_section, "应包含：财的五行：金"
+    assert "财不为用神" in major_section, "应包含：财不为用神"
+    
+    assert "纯偏印" in major_section, "应包含：纯偏印"
+    assert "年柱偏印透干×1" in major_section, "应包含：年柱偏印透干×1"
+    assert "月柱偏印透干×1" in major_section, "应包含：月柱偏印透干×1"
+    assert "时柱偏印透干×1" in major_section, "应包含：时柱偏印透干×1"
+    assert "混杂口径：纯偏印，只有偏印心性。" in major_section, "应包含：混杂口径：纯偏印，只有偏印心性。"
+    assert "印的五行：木" in major_section, "应包含：印的五行：木"
+    assert "印为用神" in major_section, "应包含：印为用神"
+    
+    print("[PASS] 性格打印格式新格式用例A（2005-9-20）通过")
+
+
+def test_traits_new_format_case_B():
+    """性格打印格式新格式回归用例B：2007-1-28 12:00 男
+    
+    官杀并存（正官/七杀一半）contains：
+    - 正官
+    - 七杀
+    - 混杂口径：正官与七杀并存
+    - 官杀的五行：土；官杀不为用神
+    
+    财并存 + 透偏财 contains：
+    - 正财
+    - 偏财
+    - 年柱偏财透干×1
+    - 时柱偏财透干×1
+    - 混杂口径：正财与偏财并存
+    - 财的五行：火；财不为用神
+    
+    纯正印 + 月柱透干 contains：
+    - 纯正印
+    - 月柱正印透干×1
+    - 印的五行：金；印为用神
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2007, 1, 28, 12, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取主要性格段
+    major_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                major_section = remaining.split("—— 其他性格 ——")[0]
+            else:
+                major_section = remaining
+    
+    # 验证关键子串
+    assert "正官" in major_section, "应包含：正官"
+    assert "七杀" in major_section, "应包含：七杀"
+    assert "混杂口径：正官与七杀并存" in major_section, "应包含：混杂口径：正官与七杀并存"
+    assert "官杀的五行：土" in major_section, "应包含：官杀的五行：土"
+    assert "官杀不为用神" in major_section, "应包含：官杀不为用神"
+    
+    assert "正财" in major_section, "应包含：正财"
+    assert "偏财" in major_section, "应包含：偏财"
+    assert "年柱偏财透干×1" in major_section, "应包含：年柱偏财透干×1"
+    assert "时柱偏财透干×1" in major_section, "应包含：时柱偏财透干×1"
+    assert "混杂口径：正财与偏财并存" in major_section, "应包含：混杂口径：正财与偏财并存"
+    assert "财的五行：火" in major_section, "应包含：财的五行：火"
+    assert "财不为用神" in major_section, "应包含：财不为用神"
+    
+    assert "纯正印" in major_section, "应包含：纯正印"
+    assert "月柱正印透干×1" in major_section, "应包含：月柱正印透干×1"
+    assert "混杂口径：纯正印，只有正印心性。" in major_section, "应包含：混杂口径：纯正印，只有正印心性。"
+    assert "印的五行：金" in major_section, "应包含：印的五行：金"
+    assert "印为用神" in major_section, "应包含：印为用神"
+    
+    print("[PASS] 性格打印格式新格式用例B（2007-1-28）通过")
+
+
+def test_traits_new_format_case_C():
+    """性格打印格式新格式回归用例C：2006-3-22 14:00 女
+    
+    contains：
+    - 混杂口径：正印与偏印并存
+    - 印的五行：土；印不为用神
+    - 纯正财
+    - 得月令：正财
+    - 财的五行：木；财为用神
+    - 纯七杀
+    - 年柱七杀透干×1
+    - 官杀的五行：火；官杀为用神
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2006, 3, 22, 14, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=False)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取主要性格段和其他性格段
+    all_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                all_section = remaining.split("—— 其他性格 ——")[0]
+                if len(remaining.split("—— 其他性格 ——")) > 1:
+                    all_section += remaining.split("—— 其他性格 ——")[1]
+            else:
+                all_section = remaining
+    elif "—— 其他性格 ——" in output:
+        parts = output.split("—— 其他性格 ——")
+        if len(parts) > 1:
+            all_section = parts[1]
+    
+    # 验证关键子串
+    assert "混杂口径：正印与偏印并存" in all_section, "应包含：混杂口径：正印与偏印并存"
+    assert "印的五行：土" in all_section, "应包含：印的五行：土"
+    assert "印不为用神" in all_section, "应包含：印不为用神"
+    
+    assert "纯正财" in all_section, "应包含：纯正财"
+    assert "得月令：正财" in all_section, "应包含：得月令：正财"
+    assert "混杂口径：纯正财，只有正财心性。" in all_section, "应包含：混杂口径：纯正财，只有正财心性。"
+    assert "财的五行：木" in all_section, "应包含：财的五行：木"
+    assert "财为用神" in all_section, "应包含：财为用神"
+    
+    assert "纯七杀" in all_section, "应包含：纯七杀"
+    assert "年柱七杀透干×1" in all_section, "应包含：年柱七杀透干×1"
+    assert "混杂口径：纯七杀，只有七杀心性。" in all_section, "应包含：混杂口径：纯七杀，只有七杀心性。"
+    assert "官杀的五行：火" in all_section, "应包含：官杀的五行：火"
+    assert "官杀为用神" in all_section, "应包含：官杀为用神"
+    
+    print("[PASS] 性格打印格式新格式用例C（2006-3-22 14:00 女）通过")
+
+
+def test_traits_new_format_case_D():
+    """性格打印格式新格式回归用例D：1972-12-20 4:00 男
+    
+    contains：
+    - 混杂口径：偏印明显更多（正印只算一点）
+    - 印的五行：水；印不为用神
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(1972, 12, 20, 4, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取主要性格段和其他性格段
+    all_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                all_section = remaining.split("—— 其他性格 ——")[0]
+                if len(remaining.split("—— 其他性格 ——")) > 1:
+                    all_section += remaining.split("—— 其他性格 ——")[1]
+            else:
+                all_section = remaining
+    elif "—— 其他性格 ——" in output:
+        parts = output.split("—— 其他性格 ——")
+        if len(parts) > 1:
+            all_section = parts[1]
+    
+    # 验证关键子串
+    assert "混杂口径：偏印明显更多（正印只算一点）" in all_section, "应包含：混杂口径：偏印明显更多（正印只算一点）"
+    assert "印的五行：水" in all_section, "应包含：印的五行：水"
+    assert "印不为用神" in all_section, "应包含：印不为用神"
+    
+    print("[PASS] 性格打印格式新格式用例D（1972-12-20 4:00 男）通过")
+
+
+def test_traits_new_format_case_E():
+    """性格打印格式新格式回归用例E：2005-8-22 00:00 男
+    
+    contains：
+    - 混杂口径：食神明显更多（伤官只算一点）
+    - 食伤的五行：金；食伤不为用神
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2005, 8, 22, 0, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取主要性格段和其他性格段
+    all_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                all_section = remaining.split("—— 其他性格 ——")[0]
+                if len(remaining.split("—— 其他性格 ——")) > 1:
+                    all_section += remaining.split("—— 其他性格 ——")[1]
+            else:
+                all_section = remaining
+    elif "—— 其他性格 ——" in output:
+        parts = output.split("—— 其他性格 ——")
+        if len(parts) > 1:
+            all_section = parts[1]
+    
+    # 验证关键子串
+    assert "混杂口径：食神明显更多（伤官只算一点）" in all_section, "应包含：混杂口径：食神明显更多（伤官只算一点）"
+    assert "食伤的五行：金" in all_section, "应包含：食伤的五行：金"
+    assert "食伤不为用神" in all_section, "应包含：食伤不为用神"
+    
+    print("[PASS] 性格打印格式新格式用例E（2005-8-22 00:00 男）通过")
 
 
 def test_liuqin_zhuli_case_A():
@@ -3096,8 +3387,13 @@ if __name__ == "__main__":
     print("\n" + "=" * 60)
     print("运行性格打印格式回归用例")
     print("=" * 60)
-    test_traits_format_case_A()
-    test_traits_format_case_B()
+    test_traits_format_case_A()  # 更新为新格式断言
+    test_traits_format_case_B()  # 更新为新格式断言
+    test_traits_new_format_case_A()  # 新增：新格式用例A
+    test_traits_new_format_case_B()  # 新增：新格式用例B
+    test_traits_new_format_case_C()  # 新增：新格式用例C（2006-3-22 14:00 女）
+    test_traits_new_format_case_D()  # 新增：新格式用例D（1972-12-20 4:00 男）
+    test_traits_new_format_case_E()  # 新增：新格式用例E（2005-8-22 00:00 男）
     
     print("\n" + "=" * 60)
     print("运行六亲助力回归用例")
