@@ -308,6 +308,7 @@ def analyze_basic(birth_dt: datetime) -> Dict[str, Any]:
         "yongshen_shishen": yong_explain["yongshen_shishen"],
         "yongshen_tokens": yong_explain["yongshen_tokens"],
         "shishen_category_percentages": shishen_cat,
+        "hints": [],  # 初始化为空列表，enrich_natal 会填充
         "stem_pattern_summary": stem_patterns,
         "dominant_traits": dominant_traits,
         "natal_patterns": natal_patterns,
@@ -398,7 +399,7 @@ def get_yun_info(birth_dt: datetime, is_male: bool) -> Dict[str, Any]:
 def analyze_complete(
     birth_dt: datetime,
     is_male: bool,
-    max_dayun: int = 8,
+    max_dayun: int = 10,
 ) -> Dict[str, Any]:
     """完整分析：整合 analyze_basic() + analyze_luck() + 数据丰富化。
     
@@ -407,7 +408,7 @@ def analyze_complete(
     参数:
         birth_dt: 出生日期时间
         is_male: 是否男性
-        max_dayun: 最大大运数量（默认8步）
+        max_dayun: 最大大运数量（默认10步）
         
     返回:
         完整的分析结果字典，包含：
@@ -451,6 +452,7 @@ def analyze_complete(
             strength_percent=strength_percent,
             support_percent=support_percent,
             yongshen_elements=yongshen_elements,
+            is_male=is_male,
         )
         dayun.update(dayun_enriched)
         

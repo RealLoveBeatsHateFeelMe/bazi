@@ -47,6 +47,38 @@ def _assert_close(actual: float, expected: float, tol: float = 0.5) -> None:
     assert abs(actual - expected) <= tol, f"expected {expected}, got {actual}"
 
 
+def _parse_sections(output: str) -> dict:
+    """解析输出文本，按 section header "—— xxx ——" 分段。
+    
+    返回:
+        dict: {section_name: section_content}
+    """
+    import re
+    sections = {}
+    lines = output.split('\n')
+    current_section = None
+    current_content = []
+    
+    for line in lines:
+        # 匹配 section header: "—— xxx ——"
+        match = re.match(r'^——\s*([^—]+?)\s*——\s*$', line)
+        if match:
+            # 保存上一个 section
+            if current_section:
+                sections[current_section] = '\n'.join(current_content)
+            # 开始新 section
+            current_section = match.group(1).strip()
+            current_content = []
+        elif current_section:
+            current_content.append(line)
+    
+    # 保存最后一个 section
+    if current_section:
+        sections[current_section] = '\n'.join(current_content)
+    
+    return sections
+
+
 def _get_dominant_traits(year: int, month: int, day: int, hour: int, minute: int):
     """便于 traits 回归直接取出 dominant_traits。"""
     dt = datetime(year, month, day, hour, minute)
@@ -688,11 +720,25 @@ def test_golden_case_A_2021():
     assert "职业路径上更可能出现调整/变动窗口" in output, "应找到职业路径上更可能出现调整/变动窗口"
     
     # 检查婚配倾向（黄金回归A：2005-9-20 10:00 男）
-    # 期望：用神五行（候选）： 木、火 【婚配倾向】更容易匹配：虎兔蛇马；或 木，火旺的人。
+    # 期望：用神五行（候选）独立一行，婚配倾向在独立 section
     assert "用神五行（候选）：" in output, "应找到用神五行（候选）"
-    assert "【婚配倾向】" in output, "应找到婚配倾向"
+    # 防漏改：断言"用神五行（候选）"那一行不包含"婚配倾向"字样
+    yong_line_match = re.search(r"用神五行（候选）：[^\n]*", output)
+    if yong_line_match:
+        yong_line = yong_line_match.group(0)
+        assert "婚配倾向" not in yong_line, f"用神五行（候选）行不应包含婚配倾向，实际：{yong_line}"
+    # 断言独立段落"—— 婚配倾向 ——"出现
+    assert "—— 婚配倾向 ——" in output, "应找到独立段落「—— 婚配倾向 ——」"
     assert "更容易匹配：虎兔蛇马" in output, "应找到更容易匹配：虎兔蛇马"
     assert "或 木，火旺的人。" in output or "或 木、火旺的人。" in output, "应找到或 木，火旺的人。"
+    
+    # 防漏改：确保婚配倾向 section 不包含合类结构
+    sections = _parse_sections(output)
+    if "婚配倾向" in sections:
+        marriage_section = sections["婚配倾向"]
+        assert "原局半合" not in marriage_section, "婚配倾向 section 不应包含「原局半合」"
+        assert "原局六合" not in marriage_section, "婚配倾向 section 不应包含「原局六合」"
+        assert "原局天干五合" not in marriage_section, "婚配倾向 section 不应包含「原局天干五合」"
     
     # 提取大运4和大运5的内容，确保提示出现在正确的大运下
     dayun4_match = re.search(r"【大运 4】.*?【大运 5】", output, re.DOTALL)
@@ -859,7 +905,7 @@ def test_golden_case_A_2059():
 def test_marriage_suggestion_case_A():
     """婚配倾向回归用例A：2005-09-20 10:00 男
     
-    期望：用神五行（候选）： 木、火 【婚配倾向】更容易匹配：虎兔蛇马；或 木，火旺的人。
+    期望：用神五行（候选）独立一行，婚配倾向在独立 section
     """
     import io
     from .cli import run_cli
@@ -876,11 +922,28 @@ def test_marriage_suggestion_case_A():
     finally:
         sys.stdout = old_stdout
     
-    # 检查婚配倾向（使用contains断言，更灵活）
+    # 检查用神五行（候选）独立一行，不包含婚配倾向
     assert "用神五行（候选）：" in output, "应找到用神五行（候选）"
-    assert "【婚配倾向】" in output, "应找到婚配倾向"
+    yong_line_match = re.search(r"用神五行（候选）：[^\n]*", output)
+    if yong_line_match:
+        yong_line = yong_line_match.group(0)
+        assert "婚配倾向" not in yong_line, f"用神五行（候选）行不应包含婚配倾向，实际：{yong_line}"
+    
+    # 检查独立段落"—— 婚配倾向 ——"
+    assert "—— 婚配倾向 ——" in output, "应找到独立段落「—— 婚配倾向 ——」"
     assert "更容易匹配：虎兔蛇马" in output, "应找到更容易匹配：虎兔蛇马"
     assert "或 木" in output and "火旺的人。" in output, "应找到或 木，火旺的人。"
+    
+    # 防漏改：确保婚配倾向 section 不包含合类结构
+    sections = _parse_sections(output)
+    if "婚配倾向" in sections:
+        marriage_section = sections["婚配倾向"]
+        assert "原局半合" not in marriage_section, "婚配倾向 section 不应包含「原局半合」"
+        assert "原局六合" not in marriage_section, "婚配倾向 section 不应包含「原局六合」"
+        assert "原局天干五合" not in marriage_section, "婚配倾向 section 不应包含「原局天干五合」"
+    
+    # 防漏改：不应包含旧前缀
+    assert "婚恋结构提示：" not in output, "不应包含旧前缀「婚恋结构提示：」"
     
     print("[PASS] 婚配倾向回归用例A通过")
 
@@ -888,7 +951,7 @@ def test_marriage_suggestion_case_A():
 def test_marriage_suggestion_case_B():
     """婚配倾向回归用例B：2007-01-28 12:00 男
     
-    期望：用神五行（候选）： 金、水、木 【婚配倾向】更容易匹配：猪鼠猴鸡虎兔；或 金，水，木旺的人。
+    期望：用神五行（候选）独立一行，婚配倾向在独立 section
     """
     import io
     from .cli import run_cli
@@ -905,11 +968,28 @@ def test_marriage_suggestion_case_B():
     finally:
         sys.stdout = old_stdout
     
-    # 检查婚配倾向（使用contains断言，更灵活）
+    # 检查用神五行（候选）独立一行，不包含婚配倾向
     assert "用神五行（候选）：" in output, "应找到用神五行（候选）"
-    assert "【婚配倾向】" in output, "应找到婚配倾向"
+    yong_line_match = re.search(r"用神五行（候选）：[^\n]*", output)
+    if yong_line_match:
+        yong_line = yong_line_match.group(0)
+        assert "婚配倾向" not in yong_line, f"用神五行（候选）行不应包含婚配倾向，实际：{yong_line}"
+    
+    # 检查独立段落"—— 婚配倾向 ——"
+    assert "—— 婚配倾向 ——" in output, "应找到独立段落「—— 婚配倾向 ——」"
     assert "更容易匹配：猪鼠猴鸡虎兔" in output, "应找到更容易匹配：猪鼠猴鸡虎兔"
     assert "或 金" in output and "水" in output and "木旺的人。" in output, "应找到或 金，水，木旺的人。"
+    
+    # 防漏改：确保婚配倾向 section 不包含合类结构
+    sections = _parse_sections(output)
+    if "婚配倾向" in sections:
+        marriage_section = sections["婚配倾向"]
+        assert "原局半合" not in marriage_section, "婚配倾向 section 不应包含「原局半合」"
+        assert "原局六合" not in marriage_section, "婚配倾向 section 不应包含「原局六合」"
+        assert "原局天干五合" not in marriage_section, "婚配倾向 section 不应包含「原局天干五合」"
+    
+    # 防漏改：不应包含旧前缀
+    assert "婚恋结构提示：" not in output, "不应包含旧前缀「婚恋结构提示：」"
     
     print("[PASS] 婚配倾向回归用例B通过")
 
@@ -2144,11 +2224,12 @@ def test_natal_issues_format():
 
 
 def test_marriage_structure_hint():
-    """婚恋结构提示回归测试
+    """婚恋结构回归测试
     
     验证：
-    1. 1990-5-26 8:00 女：断言输出包含"婚恋结构提示：官杀混杂，桃花多，易再婚，找不对配偶难走下去"
-    2. 2007-1-11 2:00 男：断言输出包含"婚恋结构提示：正偏财混杂，桃花多，易再婚，找不对配偶难走下去"
+    1. 1990-5-26 8:00 女：断言输出包含独立 section "—— 婚恋结构 ——" 和内容"官杀混杂，桃花多，易再婚，找不对配偶难走下去"
+    2. 2007-1-11 2:00 男：断言输出包含独立 section "—— 婚恋结构 ——" 和内容"正偏财混杂，桃花多，易再婚，找不对配偶难走下去"
+    3. 防漏改：NOT contains "婚恋结构提示："
     """
     import io
     from .cli import run_cli
@@ -2165,8 +2246,12 @@ def test_marriage_structure_hint():
     finally:
         sys.stdout = old_stdout
     
-    # 验证：包含婚恋结构提示
-    assert "婚恋结构提示：官杀混杂，桃花多，易再婚，找不对配偶难走下去" in output1, "应包含：婚恋结构提示：官杀混杂，桃花多，易再婚，找不对配偶难走下去"
+    # 验证：包含独立 section "—— 婚恋结构 ——"
+    assert "—— 婚恋结构 ——" in output1, "应包含独立 section「—— 婚恋结构 ——」"
+    # 验证：包含内容（不带前缀）
+    assert "官杀混杂，桃花多，易再婚，找不对配偶难走下去" in output1, "应包含：官杀混杂，桃花多，易再婚，找不对配偶难走下去"
+    # 防漏改：不应包含旧前缀
+    assert "婚恋结构提示：" not in output1, "不应包含旧前缀「婚恋结构提示：」"
     
     # 测试2：2007-1-11 2:00 男
     dt2 = datetime(2007, 1, 11, 2, 0)
@@ -2179,10 +2264,14 @@ def test_marriage_structure_hint():
     finally:
         sys.stdout = old_stdout
     
-    # 验证：包含婚恋结构提示
-    assert "婚恋结构提示：正偏财混杂，桃花多，易再婚，找不对配偶难走下去" in output2, "应包含：婚恋结构提示：正偏财混杂，桃花多，易再婚，找不对配偶难走下去"
+    # 验证：包含独立 section "—— 婚恋结构 ——"
+    assert "—— 婚恋结构 ——" in output2, "应包含独立 section「—— 婚恋结构 ——」"
+    # 验证：包含内容（不带前缀）
+    assert "正偏财混杂，桃花多，易再婚，找不对配偶难走下去" in output2, "应包含：正偏财混杂，桃花多，易再婚，找不对配偶难走下去"
+    # 防漏改：不应包含旧前缀
+    assert "婚恋结构提示：" not in output2, "不应包含旧前缀「婚恋结构提示：」"
     
-    print("[PASS] 婚恋结构提示回归测试通过")
+    print("[PASS] 婚恋结构回归测试通过")
 
 
 def test_natal_punish_zu_shang_marriage_explanation():
@@ -3282,18 +3371,18 @@ def test_golden_case_A_yongshen_swap_intervals():
         sys.stdout = old_stdout
     
     # 检查原局模块中的用神互换区间汇总section存在
-    assert "— 用神互换 —" in output, "原局模块中应出现「— 用神互换 —」标题"
-    assert output.count("— 用神互换 —") == 1, "「— 用神互换 —」应只出现一次"
+    assert "—— 用神互换 ——" in output, "原局模块中应出现「—— 用神互换 ——」标题"
+    assert output.count("—— 用神互换 ——") == 1, "「—— 用神互换 ——」应只出现一次"
     
     # 检查位置：在大运转折点之后、在大运模块之前
     pos_turning_points = output.find("— 大运转折点 —")
-    pos_swap_intervals = output.find("— 用神互换 —")
+    pos_swap_intervals = output.find("—— 用神互换 ——")
     pos_dayun_module = output.find("【大运")
     
     assert pos_turning_points != -1, "应找到「— 大运转折点 —」"
-    assert pos_swap_intervals != -1, "应找到「— 用神互换 —」"
+    assert pos_swap_intervals != -1, "应找到「—— 用神互换 ——」"
     assert pos_dayun_module != -1, "应找到大运模块起始标记「【大运」"
-    assert pos_turning_points < pos_swap_intervals < pos_dayun_module, "「— 用神互换 —」应在大运转折点之后、大运模块之前"
+    assert pos_turning_points < pos_swap_intervals < pos_dayun_module, "「—— 用神互换 ——」应在大运转折点之后、大运模块之前"
     
     # 检查区间行（大运4和大运5合并为2029-2048年）
     # 注意：大运4起运2029，大运5起运2039，下一步大运6起运2049，所以区间终点是2048
@@ -3323,7 +3412,7 @@ def test_yongshen_swap_intervals_no_swap():
         sys.stdout = old_stdout
     
     # 检查不应出现用神互换区间汇总section
-    assert "— 用神互换 —" not in output, "无互换时不应出现「— 用神互换 —」section"
+    assert "—— 用神互换 ——" not in output, "无互换时不应出现「—— 用神互换 ——」section"
     
     print("[PASS] 用神互换区间汇总（无互换）回归测试通过")
 

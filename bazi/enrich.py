@@ -62,9 +62,9 @@ def _generate_marriage_suggestion(yongshen_elements: list[str]) -> str:
     wang_str = "，".join(yongshen_elements)
     
     if zodiac_str:
-        return f"【婚配倾向】更容易匹配：{zodiac_str}；或 {wang_str}旺的人。"
+        return f"更容易匹配：{zodiac_str}；或 {wang_str}旺的人。"
     else:
-        return f"【婚配倾向】更容易匹配：{wang_str}旺的人。"
+        return f"更容易匹配：{wang_str}旺的人。"
 
 
 def _serialize_gan_wuhe_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -113,7 +113,7 @@ def enrich_natal(
     day_gan: str,
     is_male: bool,
 ) -> Dict[str, Any]:
-    """丰富原局数据：添加 marriage_suggestion, liuqin_zhuli, wuhe_events。
+    """丰富原局数据：添加 marriage_suggestion, liuqin_zhuli, wuhe_events, hints。
     
     参数:
         natal: analyze_basic() 返回的原局数据
@@ -154,11 +154,30 @@ def enrich_natal(
     natal_wuhe_events_raw = detect_gan_wuhe(natal_gan_positions)
     natal_wuhe_events = _serialize_gan_wuhe_events(natal_wuhe_events_raw)
     
+    # 4. hints：原局提示列表（唯一真相源，不包含婚配倾向）
+    hints: List[str] = []
+    # 注意：婚配倾向不再放入 hints，而是单独存储为 marriage_hint
+    
+    # 5. 原局层婚恋提醒（从 marriage_wuhe_hints 中提取）
+    natal_gans = [
+        bazi["year"]["gan"],
+        bazi["month"]["gan"],
+        bazi["day"]["gan"],  # 包括日干
+        bazi["hour"]["gan"],
+    ]
+    natal_wuhe_hints = detect_marriage_wuhe_hints(natal_gans, day_gan, is_male)
+    # 注意：婚恋结构提示不再放入 hints，而是单独存储为 marriage_structure_hints
+    # 这里暂时保留在 hints 中，但会在 CLI 层去掉前缀后放入婚恋结构 section
+    for hint in natal_wuhe_hints:
+        hints.append(f"婚恋结构提示：{hint['hint_text']}")
+    
     # 返回新增字段（不修改原字典，由调用者合并）
     return {
-        "marriage_suggestion": marriage_suggestion,
+        "marriage_suggestion": marriage_suggestion,  # 保留兼容字段
+        "marriage_hint": marriage_suggestion,  # 新增：独立的婚配倾向字段（不带【婚配倾向】前缀）
         "liuqin_zhuli": liuqin_zhuli,
         "wuhe_events": natal_wuhe_events,
+        "hints": hints,
     }
 
 
@@ -169,8 +188,9 @@ def enrich_dayun(
     strength_percent: float,
     support_percent: float,
     yongshen_elements: List[str],
+    is_male: bool,
 ) -> Dict[str, Any]:
-    """丰富大运数据：添加 yongshen_swap_hint, wuhe_events。
+    """丰富大运数据：添加 yongshen_swap_hint, wuhe_events, hints。
     
     参数:
         dayun: 大运数据
@@ -179,6 +199,7 @@ def enrich_dayun(
         strength_percent: 综合强弱百分比
         support_percent: 生扶力量占比
         yongshen_elements: 用神五行列表
+        is_male: 是否男性
         
     返回:
         丰富后的大运数据（新增字段）
@@ -225,9 +246,40 @@ def enrich_dayun(
         
         dayun_wuhe_events = _serialize_gan_wuhe_events(dayun_wuhe_events)
     
+    # 3. hints：大运提示列表（唯一真相源）
+    hints: List[str] = []
+    if yongshen_swap_hint:
+        from .yongshen_swap import format_yongshen_swap_hint
+        hints.append(format_yongshen_swap_hint(yongshen_swap_hint))
+    
+    # 4. 大运层婚恋提醒（从 marriage_wuhe_hints 中提取）
+    dayun_gan = dayun.get("gan", "")
+    if dayun_gan:
+        # 收集大运层天干：原局四柱天干 + 当前大运天干
+        dayun_layer_gans = [
+            bazi["year"]["gan"],
+            bazi["month"]["gan"],
+            bazi["day"]["gan"],
+            bazi["hour"]["gan"],
+        ]
+        trigger_gans_dayun = []
+        if dayun_gan:
+            dayun_layer_gans.append(dayun_gan)
+            trigger_gans_dayun.append(dayun_gan)  # 大运天干作为引动
+        
+        dayun_wuhe_hints = detect_marriage_wuhe_hints(
+            gan_list=dayun_layer_gans,
+            day_gan=day_gan,
+            is_male=is_male,
+            trigger_gans=trigger_gans_dayun if trigger_gans_dayun else None,
+        )
+        for hint in dayun_wuhe_hints:
+            hints.append(f"婚恋变化提醒（如恋爱）：{hint['hint_text']}")
+    
     return {
         "yongshen_swap_hint": yongshen_swap_hint,
         "wuhe_events": dayun_wuhe_events,
+        "hints": hints,
     }
 
 
@@ -314,10 +366,113 @@ def enrich_liunian(
     # 3. love_signals：感情信号（合冲同现等）
     love_signals = _compute_love_signals(liunian, bazi, day_gan, is_male, liunian_gan)
     
+    # 4. hints：流年提示列表（唯一真相源）
+    hints: List[str] = []
+    
+    # 4.1 婚恋变化提醒（从 marriage_wuhe_hints）
+    for hint in marriage_wuhe_hints:
+        hints.append(f"婚恋变化提醒（如恋爱）：{hint['hint_text']}")
+    
+    # 4.2 缘分提示（从 love_signals）
+    liunian_zhi = liunian.get("zhi", "")
+    if liunian_gan:
+        gan_shishen = get_shishen(day_gan, liunian_gan)
+        if gan_shishen:
+            if is_male:
+                if gan_shishen in ("正财", "偏财"):
+                    hints.append("提示：缘分（天干）：暧昧推进")
+            else:
+                if gan_shishen in ("正官", "七杀"):
+                    hints.append("提示：缘分（天干）：暧昧推进")
+    
+    if liunian_zhi:
+        main_gan = get_branch_main_gan(liunian_zhi)
+        if main_gan:
+            zhi_shishen = get_shishen(day_gan, main_gan)
+            if zhi_shishen:
+                if is_male:
+                    if zhi_shishen in ("正财", "偏财"):
+                        hints.append("提示：缘分（地支）：易遇合适伴侣（良缘）")
+                else:
+                    if zhi_shishen in ("正官", "七杀"):
+                        hints.append("提示：缘分（地支）：易遇合适伴侣（良缘）")
+    
+    # 4.3 合冲同现提示
+    if love_signals.get("he_and_chong_coexist"):
+        hints.append("提示：感情线合冲同现（进展易受阻/反复拉扯；仓促定论的稳定性更低）")
+    
+    # 4.4 天克地冲提示（从 liunian 数据中提取）
+    # 检查运年天克地冲（从 clashes_dayun 中检查）
+    clashes_dayun = liunian.get("clashes_dayun", [])
+    for ev_clash in clashes_dayun:
+        if not ev_clash:
+            continue
+        if ev_clash.get("is_tian_ke_di_chong", False):
+            hints.append("提示：运年天克地冲（家人去世/生活环境变化剧烈，如出国上学打工）")
+            break  # 每年只加一次
+    
+    # 检查时柱天克地冲（从 clashes_natal 中检查 tkdc_targets）
+    clashes_natal = liunian.get("clashes_natal", [])
+    has_hour_tkdc = False
+    for ev in clashes_natal:
+        if not ev:
+            continue
+        tkdc_targets = ev.get("tkdc_targets", [])
+        for tkdc_target in tkdc_targets:
+            if tkdc_target.get("pillar") == "hour":
+                hints.append("提示：事业家庭宫天克地冲（工作变动概率上升/可能出现搬家窗口）")
+                has_hour_tkdc = True
+                break
+        if has_hour_tkdc:
+            break
+    
+    # 4.5 风险管理选项（从 total_risk_percent 判断，>= 40% 时添加）
+    total_risk = liunian.get("total_risk_percent", 0.0)
+    if total_risk >= 40.0:
+        hints.append("风险管理选项（供参考）：保险/预案；投机回撤风险更高；合规优先；职业变动成本更高；情绪波动时更易误判；重大决定适合拉长周期")
+    
+    # 4.6 其他提示（从 clashes_natal 和 harmonies_natal 中提取）
+    # 婚姻宫/夫妻宫被冲
+    clash_palaces_hit = set()
+    for ev in clashes_natal:
+        if not ev:
+            continue
+        targets = ev.get("targets", [])
+        for target in targets:
+            palace = target.get("palace", "")
+            if palace in ("婚姻宫", "夫妻宫"):
+                clash_palaces_hit.add(palace)
+    
+    if clash_palaces_hit:
+        hints.append("提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）")
+    
+    # 婚姻宫/夫妻宫被合（六合/半合）
+    harmonies_natal = liunian.get("harmonies_natal", [])
+    harmony_palaces_hit = set()
+    for ev in harmonies_natal:
+        if ev.get("type") != "branch_harmony":
+            continue
+        subtype = ev.get("subtype")
+        if subtype not in ("liuhe", "banhe"):
+            continue
+        targets = ev.get("targets", [])
+        for target in targets:
+            palace = target.get("palace", "")
+            if palace in ("婚姻宫", "夫妻宫"):
+                harmony_palaces_hit.add(palace)
+    
+    for palace in harmony_palaces_hit:
+        hints.append(f"提示：{palace}引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）")
+    
+    # 事业家庭宫被冲（且未命中时柱天克地冲）
+    if "事业家庭宫" in clash_palaces_hit and not has_hour_tkdc:
+        hints.append("提示：家庭变动（搬家/换工作/家庭节奏变化）")
+    
     return {
         "wuhe_events": liunian_wuhe_events,
         "marriage_wuhe_hints": marriage_wuhe_hints,
         "love_signals": love_signals,
+        "hints": hints,
     }
 
 

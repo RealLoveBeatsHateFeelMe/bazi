@@ -474,7 +474,7 @@ def analyze_luck(
     birth_dt: datetime,
     is_male: bool,
     yongshen_elements: List[str],
-    max_dayun: int = 8,
+    max_dayun: int = 10,
 ) -> Dict[str, Any]:
     """综合分析大运 / 流年：好运 / 坏运 + 冲的信息。
 
@@ -1301,6 +1301,7 @@ def analyze_luck(
                 all_events.append(sanhe_sanhui_clash_bonus_event)
 
             liunian_dict = {
+                "hints": [],  # 初始化为空列表，enrich_liunian 会填充
                 "year": ln.getYear(),
                 "age": ln.getAge(),
                 "gan": gan_ln,
@@ -1363,6 +1364,12 @@ def analyze_luck(
         dayun_dict["is_very_good"] = is_very_good  # 是否"非常好运"（干支皆用神且风险<30%）
         dayun_dict["punishments_natal"] = punishments_dy_filtered  # 大运支 与 命局地支 的刑
         dayun_dict["patterns_dayun"] = dayun_pattern_events  # 大运干/支 与 命局干/支 的模式事件
+        dayun_dict["hints"] = []  # 初始化为空列表，enrich_dayun 会填充
+
+        # 确保每个流年对象都有 hints 字段
+        for liunian_dict in liunian_list:
+            if "hints" not in liunian_dict:
+                liunian_dict["hints"] = []  # 初始化为空列表，enrich_liunian 会填充
 
         groups.append(
             {
