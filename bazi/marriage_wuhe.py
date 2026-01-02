@@ -114,7 +114,7 @@ def detect_marriage_wuhe_hints(
         # 且X必须出现（X不可能是日干，因为X是配偶星）
         if Y_count >= 2 and X_count >= 1:
             hint_text = (
-                f"天干{'官杀星' if not is_male else '财星'}被争合，{wuhe_name}合走{'官杀星' if not is_male else '财星'}，注意，防止感情竞争/第三者介入"
+                f"天干{'官杀星' if not is_male else '财星'}被争合，{wuhe_name}合走{'官杀星' if not is_male else '财星'}：感情竞争/第三者介入的风险上升"
             )
             hints.append({
                 "type": "他人争合",
@@ -127,7 +127,7 @@ def detect_marriage_wuhe_hints(
         # 由于Y != day_gan，且X是配偶星（不可能是日干），所以只要X和Y都出现就满足
         if X_count >= 1 and Y_count >= 1:
             hint_text = (
-                f"天干{'官杀星' if not is_male else '财星'}被争合，{wuhe_name}合走{'官杀星' if not is_male else '财星'}，注意，防止感情竞争/第三者介入"
+                f"天干{'官杀星' if not is_male else '财星'}被争合，{wuhe_name}合走{'官杀星' if not is_male else '财星'}：感情竞争/第三者介入的风险上升"
             )
             hints.append({
                 "type": "他人争合",
@@ -138,7 +138,7 @@ def detect_marriage_wuhe_hints(
     # B) 命主双合：日干=Y，且出现两个X
     if Y == day_gan and X_count >= 2:
         hint_text = (
-            f"命主合两个{'官杀星' if not is_male else '财星'}，{wuhe_name}，注意，防止陷入三角恋"
+            f"命主合两个{'官杀星' if not is_male else '财星'}，{wuhe_name}：更容易出现三方拉扯/三角关系倾向"
         )
         hints.append({
             "type": "命主双合",
@@ -170,7 +170,7 @@ def detect_marriage_wuhe_hints(
         # 如果存在另一个配偶星Z（不是X），则触发
         if other_spouse_stars:
             hint_text = (
-                f"命主合两个{'官杀星' if not is_male else '财星'}，{wuhe_name}，注意，防止陷入三角恋"
+                f"命主合两个{'官杀星' if not is_male else '财星'}，{wuhe_name}：更容易出现三方拉扯/三角关系倾向"
             )
             hints.append({
                 "type": "命主三角恋B2",

@@ -684,14 +684,14 @@ def test_golden_case_A_2021():
     assert f"生扶力量={support_percent:.0f}%" in output, f"应找到生扶力量={support_percent:.0f}%"
     assert ("运支=午(火)" in output or "运支=午（火）" in output), "应找到运支=午(火)"
     assert ("运支=巳(火)" in output or "运支=巳（火）" in output), "应找到运支=巳(火)"
-    assert "可从事：金、水行业" in output, "应找到可从事：金、水行业"
-    assert "注意转行，工作变动" in output, "应找到注意转行，工作变动"
+    assert "更匹配的行业方向：金、水" in output, "应找到更匹配的行业方向：金、水"
+    assert "职业路径上更可能出现调整/变动窗口" in output, "应找到职业路径上更可能出现调整/变动窗口"
     
-    # 检查婚配建议（黄金回归A：2005-9-20 10:00 男）
-    # 期望：用神五行（候选）： 木、火 【婚配建议】推荐：虎兔蛇马；或 木，火旺的人。
+    # 检查婚配倾向（黄金回归A：2005-9-20 10:00 男）
+    # 期望：用神五行（候选）： 木、火 【婚配倾向】更容易匹配：虎兔蛇马；或 木，火旺的人。
     assert "用神五行（候选）：" in output, "应找到用神五行（候选）"
-    assert "【婚配建议】" in output, "应找到婚配建议"
-    assert "推荐：虎兔蛇马" in output, "应找到推荐：虎兔蛇马"
+    assert "【婚配倾向】" in output, "应找到婚配倾向"
+    assert "更容易匹配：虎兔蛇马" in output, "应找到更容易匹配：虎兔蛇马"
     assert "或 木，火旺的人。" in output or "或 木、火旺的人。" in output, "应找到或 木，火旺的人。"
     
     # 提取大运4和大运5的内容，确保提示出现在正确的大运下
@@ -750,6 +750,18 @@ def test_golden_case_A_2021():
     _assert_close(risk_from_gan, 0.0, tol=1.0)  # 天克地冲已移除
     _assert_close(risk_from_zhi, 45.0, tol=1.0)  # 地支层总风险实际≈45（包含冲+墓库等）
     _assert_close(tkdc_risk, 20.0, tol=1.0)  # 天克地冲20%（日柱额外10%）
+    
+    # 新增：正向断言（新文案应出现）- 使用已捕获的output
+    output_2021 = _extract_year_block(output, "2021")
+    assert "风险管理选项（供参考）：" in output_2021, "2021年应包含风险管理选项"
+    
+    # 新增：反向断言（旧文案不应出现）
+    assert "【婚配建议】推荐" not in output, "不应包含【婚配建议】推荐"
+    assert "注意，防止" not in output, "不应包含注意，防止"
+    assert "不宜急定" not in output, "不应包含不宜急定"
+    assert "着重注意工作变动" not in output, "不应包含着重注意工作变动"
+    assert "建议：买保险/不投机/守法/不轻易辞职/控制情绪/三思后行" not in output, "不应包含旧建议行"
+    
     print("[PASS] 例A 2021年回归测试通过")
 
 
@@ -845,9 +857,9 @@ def test_golden_case_A_2059():
 
 
 def test_marriage_suggestion_case_A():
-    """婚配建议回归用例A：2005-09-20 10:00 男
+    """婚配倾向回归用例A：2005-09-20 10:00 男
     
-    期望：用神五行（候选）： 木、火 【婚配建议】推荐：虎兔蛇马；或 木，火旺的人。
+    期望：用神五行（候选）： 木、火 【婚配倾向】更容易匹配：虎兔蛇马；或 木，火旺的人。
     """
     import io
     from .cli import run_cli
@@ -864,19 +876,19 @@ def test_marriage_suggestion_case_A():
     finally:
         sys.stdout = old_stdout
     
-    # 检查婚配建议（使用contains断言，更灵活）
+    # 检查婚配倾向（使用contains断言，更灵活）
     assert "用神五行（候选）：" in output, "应找到用神五行（候选）"
-    assert "【婚配建议】" in output, "应找到婚配建议"
-    assert "推荐：虎兔蛇马" in output, "应找到推荐：虎兔蛇马"
+    assert "【婚配倾向】" in output, "应找到婚配倾向"
+    assert "更容易匹配：虎兔蛇马" in output, "应找到更容易匹配：虎兔蛇马"
     assert "或 木" in output and "火旺的人。" in output, "应找到或 木，火旺的人。"
     
-    print("[PASS] 婚配建议回归用例A通过")
+    print("[PASS] 婚配倾向回归用例A通过")
 
 
 def test_marriage_suggestion_case_B():
-    """婚配建议回归用例B：2007-01-28 12:00 男
+    """婚配倾向回归用例B：2007-01-28 12:00 男
     
-    期望：用神五行（候选）： 金、水、木 【婚配建议】推荐：猪鼠猴鸡虎兔；或 金，水，木旺的人。
+    期望：用神五行（候选）： 金、水、木 【婚配倾向】更容易匹配：猪鼠猴鸡虎兔；或 金，水，木旺的人。
     """
     import io
     from .cli import run_cli
@@ -893,13 +905,13 @@ def test_marriage_suggestion_case_B():
     finally:
         sys.stdout = old_stdout
     
-    # 检查婚配建议（使用contains断言，更灵活）
+    # 检查婚配倾向（使用contains断言，更灵活）
     assert "用神五行（候选）：" in output, "应找到用神五行（候选）"
-    assert "【婚配建议】" in output, "应找到婚配建议"
-    assert "推荐：猪鼠猴鸡虎兔" in output, "应找到推荐：猪鼠猴鸡虎兔"
+    assert "【婚配倾向】" in output, "应找到婚配倾向"
+    assert "更容易匹配：猪鼠猴鸡虎兔" in output, "应找到更容易匹配：猪鼠猴鸡虎兔"
     assert "或 金" in output and "水" in output and "木旺的人。" in output, "应找到或 金，水，木旺的人。"
     
-    print("[PASS] 婚配建议回归用例B通过")
+    print("[PASS] 婚配倾向回归用例B通过")
 
 
 def test_golden_case_B_2021():
@@ -2260,7 +2272,8 @@ def test_marriage_wuhe_hints_case_A():
         if len(parts) > 1:
             liunian_2026 = parts[1].split("年")[0] if "年" in parts[1][:200] else parts[1][:500]
             if "婚恋变化提醒" in liunian_2026:
-                assert "第三者介入" in liunian_2026 or "三角恋" in liunian_2026, "2026年如有提醒应包含'第三者介入'或'三角恋'"
+                # 更新：检查新文案（风险上升或三角关系倾向）
+                assert ("风险上升" in liunian_2026 or "三角关系倾向" in liunian_2026 or "三方拉扯" in liunian_2026), "2026年如有提醒应包含新文案（风险上升/三角关系倾向/三方拉扯）"
                 assert ("乙庚合" in liunian_2026 or "丁壬合" in liunian_2026 or "甲己合" in liunian_2026 or "戊癸合" in liunian_2026 or "丙辛合" in liunian_2026), "2026年如有提醒应包含合名"
     
     # 检查流年2021（如果存在提醒）
@@ -2269,7 +2282,8 @@ def test_marriage_wuhe_hints_case_A():
         if len(parts) > 1:
             liunian_2021 = parts[1].split("年")[0] if "年" in parts[1][:200] else parts[1][:500]
             if "婚恋变化提醒" in liunian_2021:
-                assert "第三者介入" in liunian_2021 or "三角恋" in liunian_2021, "2021年如有提醒应包含'第三者介入'或'三角恋'"
+                # 更新：检查新文案（风险上升或三角关系倾向）
+                assert ("风险上升" in liunian_2021 or "三角关系倾向" in liunian_2021 or "三方拉扯" in liunian_2021), "2021年如有提醒应包含新文案（风险上升/三角关系倾向/三方拉扯）"
                 assert ("乙庚合" in liunian_2021 or "丁壬合" in liunian_2021 or "甲己合" in liunian_2021 or "戊癸合" in liunian_2021 or "丙辛合" in liunian_2021), "2021年如有提醒应包含合名"
     
     print("[PASS] 天干五合争合/双合婚恋提醒回归用例A通过")
@@ -2302,7 +2316,8 @@ def test_marriage_wuhe_hints_case_B():
         if len(parts) > 1:
             liunian_2025 = parts[1].split("年")[0] if "年" in parts[1][:200] else parts[1][:500]
             if "婚恋变化提醒" in liunian_2025:
-                assert "第三者介入" in liunian_2025 or "三角恋" in liunian_2025, "2025年如有提醒应包含'第三者介入'或'三角恋'"
+                # 更新：检查新文案（风险上升或三角关系倾向）
+                assert ("风险上升" in liunian_2025 or "三角关系倾向" in liunian_2025 or "三方拉扯" in liunian_2025), "2025年如有提醒应包含新文案（风险上升/三角关系倾向/三方拉扯）"
                 assert ("乙庚合" in liunian_2025 or "丁壬合" in liunian_2025 or "甲己合" in liunian_2025 or "戊癸合" in liunian_2025 or "丙辛合" in liunian_2025), "2025年如有提醒应包含合名"
     
     # 检查流年2035（如果存在提醒）
@@ -2311,8 +2326,8 @@ def test_marriage_wuhe_hints_case_B():
         if len(parts) > 1:
             liunian_2035 = parts[1].split("年")[0] if "年" in parts[1][:200] else parts[1][:500]
             if "婚恋变化提醒" in liunian_2035:
-                # 可能是争合（第三者介入）或双合（三角恋）
-                assert ("第三者介入" in liunian_2035 or "三角恋" in liunian_2035), "2035年如有提醒应包含'第三者介入'或'三角恋'"
+                # 更新：检查新文案（风险上升或三角关系倾向）
+                assert ("风险上升" in liunian_2035 or "三角关系倾向" in liunian_2035 or "三方拉扯" in liunian_2035), "2035年如有提醒应包含新文案（风险上升/三角关系倾向/三方拉扯）"
                 assert ("乙庚合" in liunian_2035 or "丁壬合" in liunian_2035 or "甲己合" in liunian_2035 or "戊癸合" in liunian_2035 or "丙辛合" in liunian_2035), "2035年如有提醒应包含合名"
     
     print("[PASS] 天干五合争合/双合婚恋提醒回归用例B通过")
@@ -2322,9 +2337,9 @@ def test_marriage_wuhe_hints_case_C():
     """天干五合争合/双合婚恋提醒回归用例C：1984-9-20 4:00 女
     
     验证：
-    - 流年 2022：断言包含 防止陷入三角恋，并包含 {合名}
+    - 流年 2022：断言包含 三方拉扯/三角关系倾向，并包含 {合名}
     - 流年 2037：断言包含 第三者介入，并包含 {合名}
-    - 大运2：在"大运批注最下面"断言包含 防止陷入三角恋，并包含 {合名}
+    - 大运2：在"大运批注最下面"断言包含 三方拉扯/三角关系倾向，并包含 {合名}
     """
     import io
     from .cli import run_cli
@@ -2346,7 +2361,7 @@ def test_marriage_wuhe_hints_case_C():
         if len(parts) > 1:
             liunian_2022 = parts[1].split("年")[0] if "年" in parts[1][:200] else parts[1][:500]
             if "婚恋变化提醒" in liunian_2022:
-                assert "防止陷入三角恋" in liunian_2022, "2022年如有提醒应包含'防止陷入三角恋'"
+                assert ("三方拉扯" in liunian_2022 or "三角关系倾向" in liunian_2022), "2022年如有提醒应包含'三方拉扯/三角关系倾向'"
                 assert ("乙庚合" in liunian_2022 or "丁壬合" in liunian_2022 or "甲己合" in liunian_2022 or "戊癸合" in liunian_2022 or "丙辛合" in liunian_2022), "2022年如有提醒应包含合名"
     
     # 检查流年2037（如果存在提醒）
@@ -2355,7 +2370,8 @@ def test_marriage_wuhe_hints_case_C():
         if len(parts) > 1:
             liunian_2037 = parts[1].split("年")[0] if "年" in parts[1][:200] else parts[1][:500]
             if "婚恋变化提醒" in liunian_2037:
-                assert "第三者介入" in liunian_2037 or "三角恋" in liunian_2037, "2037年如有提醒应包含'第三者介入'或'三角恋'"
+                # 更新：检查新文案（风险上升或三角关系倾向）
+                assert ("风险上升" in liunian_2037 or "三角关系倾向" in liunian_2037 or "三方拉扯" in liunian_2037), "2037年如有提醒应包含新文案（风险上升/三角关系倾向/三方拉扯）"
                 assert ("乙庚合" in liunian_2037 or "丁壬合" in liunian_2037 or "甲己合" in liunian_2037 or "戊癸合" in liunian_2037 or "丙辛合" in liunian_2037), "2037年如有提醒应包含合名"
     
     # 检查大运2（索引为1）的批注段
@@ -2371,7 +2387,7 @@ def test_marriage_wuhe_hints_case_C():
                 break
     
     if dayun2_section and "婚恋变化提醒" in dayun2_section:
-        assert "防止陷入三角恋" in dayun2_section, "大运2如有提醒应包含'防止陷入三角恋'"
+        assert ("三方拉扯" in dayun2_section or "三角关系倾向" in dayun2_section), "大运2如有提醒应包含'三方拉扯/三角关系倾向'"
         assert ("乙庚合" in dayun2_section or "丁壬合" in dayun2_section or "甲己合" in dayun2_section or "戊癸合" in dayun2_section or "丙辛合" in dayun2_section), "大运2如有提醒应包含合名"
     
     print("[PASS] 天干五合争合/双合婚恋提醒回归用例C通过")
@@ -2498,13 +2514,14 @@ def test_marriage_wuhe_hints_dual_hints():
             
             if has_marriage_hint:
                 # 如果有提醒，必须同时包含两条（被争合 + 三角恋）
-                has_zhenhe = "被争合" in liunian_2040 and "乙庚合" in liunian_2040 and "第三者介入" in liunian_2040
-                has_sanjiao = "命主合两个官杀星" in liunian_2040 and "乙庚合" in liunian_2040 and "三角恋" in liunian_2040
+                # 更新：检查新文案（风险上升或三角关系倾向）
+                has_zhenhe = "被争合" in liunian_2040 and "乙庚合" in liunian_2040 and "风险上升" in liunian_2040
+                has_sanjiao = "命主合两个官杀星" in liunian_2040 and "乙庚合" in liunian_2040 and ("三方拉扯" in liunian_2040 or "三角关系倾向" in liunian_2040)
                 
                 # 如果有一条，另一条也应该存在（因为触发条件相同）
                 if has_zhenhe or has_sanjiao:
-                    assert has_zhenhe, "2040年如有提醒，应包含'被争合'提醒（乙庚合，第三者介入）"
-                    assert has_sanjiao, "2040年如有提醒，应包含'三角恋'提醒（命主合两个官杀星，乙庚合，三角恋）"
+                    assert has_zhenhe, "2040年如有提醒，应包含'被争合'提醒（乙庚合，风险上升）"
+                    assert has_sanjiao, "2040年如有提醒，应包含'三角关系倾向'提醒（命主合两个官杀星，乙庚合，三方拉扯/三角关系倾向）"
     
     # 检查流年2030（如果存在且有提醒）
     if "2030 年" in output:
@@ -2517,13 +2534,14 @@ def test_marriage_wuhe_hints_dual_hints():
             
             if has_marriage_hint:
                 # 如果有提醒，必须同时包含两条（被争合 + 三角恋）
-                has_zhenhe = "被争合" in liunian_2030 and "乙庚合" in liunian_2030 and "第三者介入" in liunian_2030
-                has_sanjiao = "命主合两个官杀星" in liunian_2030 and "乙庚合" in liunian_2030 and "三角恋" in liunian_2030
+                # 更新：检查新文案（风险上升或三角关系倾向）
+                has_zhenhe = "被争合" in liunian_2030 and "乙庚合" in liunian_2030 and "风险上升" in liunian_2030
+                has_sanjiao = "命主合两个官杀星" in liunian_2030 and "乙庚合" in liunian_2030 and ("三方拉扯" in liunian_2030 or "三角关系倾向" in liunian_2030)
                 
                 # 如果有一条，另一条也应该存在（因为触发条件相同）
                 if has_zhenhe or has_sanjiao:
-                    assert has_zhenhe, "2030年如有提醒，应包含'被争合'提醒（乙庚合，第三者介入）"
-                    assert has_sanjiao, "2030年如有提醒，应包含'三角恋'提醒（命主合两个官杀星，乙庚合，三角恋）"
+                    assert has_zhenhe, "2030年如有提醒，应包含'被争合'提醒（乙庚合，风险上升）"
+                    assert has_sanjiao, "2030年如有提醒，应包含'三角关系倾向'提醒（命主合两个官杀星，乙庚合，三方拉扯/三角关系倾向）"
     
     # 验证不串层：检查相邻年份（如果它们没有引动，不应该有提醒）
     # 这里只做基本检查，因为无法确定其他年份是否有引动
@@ -2733,15 +2751,15 @@ def test_golden_case_A_year_labels():
     assert "2021 年" in output, "应包含2021年"
     assert "2021 年" in output and "全年 凶（棘手/意外）" in output, \
         "2021年应包含：全年 凶（棘手/意外）"
-    assert "建议：买保险/不投机/守法/不轻易辞职/控制情绪/三思后行" in output, \
-        "2021年应包含建议行"
+    assert "风险管理选项（供参考）：保险/预案；投机回撤风险更高；合规优先；职业变动成本更高；情绪波动时更易误判；重大决定适合拉长周期" in output, \
+        "2021年应包含风险管理选项"
     
-    # 2023年断言：全年 凶（棘手/意外），且包含建议行
+    # 2023年断言：全年 凶（棘手/意外），且包含风险管理选项
     assert "2023 年" in output, "应包含2023年"
     assert "2023 年" in output and "全年 凶（棘手/意外）" in output, \
         "2023年应包含：全年 凶（棘手/意外）"
-    assert "建议：买保险/不投机/守法/不轻易辞职/控制情绪/三思后行" in output, \
-        "2023年应包含建议行"
+    assert "风险管理选项（供参考）：保险/预案；投机回撤风险更高；合规优先；职业变动成本更高；情绪波动时更易误判；重大决定适合拉长周期" in output, \
+        "2023年应包含风险管理选项"
     
     # 2024年断言：上半年 好运，下半年 一般
     assert "2024 年" in output, "应包含2024年"
@@ -2805,6 +2823,16 @@ def test_golden_case_B_year_labels():
     assert "2023 年" in output, "应包含2023年"
     assert "2023 年" in output and "上半年 好运" in output and "下半年 有轻微变动" in output, \
         "2023年应包含：上半年 好运，下半年 有轻微变动"
+    
+    # 新增：正向断言（新文案应出现）
+    # 检查婚配倾向
+    assert "【婚配倾向】" in output, "应找到【婚配倾向】"
+    assert "更容易匹配" in output, "应找到更容易匹配"
+    
+    # 新增：反向断言（旧文案不应出现）
+    assert "【婚配建议】推荐" not in output, "不应包含【婚配建议】推荐"
+    assert "注意，防止" not in output, "不应包含注意，防止"
+    assert "不宜急定" not in output, "不应包含不宜急定"
     
     print("[PASS] 黄金案例B（年度标题行）通过")
 
@@ -2977,26 +3005,36 @@ def test_golden_case_A_clash_summary():
     finally:
         sys.stdout = old_stdout
     
-    # 2023年：婚姻宫被冲 → 识别感情
+    # 2023年：婚姻宫被冲 → 识别感情（现在在提示汇总区）
     assert "2023 年" in output, "应找到2023年输出"
     output_2023 = _extract_year_block(output, "2023")
     assert "冲：" in output_2023, "2023年应包含冲摘要"
     assert "（婚姻宫" in output_2023 or "（婚姻宫/" in output_2023, "2023年应命中婚姻宫"
-    assert output_2023.count("提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）") == 1, "2023年应包含且仅包含一次感情提示"
+    assert "提示汇总：" in output_2023, "2023年应包含提示汇总区"
+    # 提取提示汇总区内容
+    if "提示汇总：" in output_2023:
+        hints_section = output_2023.split("提示汇总：")[1].split("---")[0] if "---" in output_2023.split("提示汇总：")[1] else output_2023.split("提示汇总：")[1]
+        assert hints_section.count("提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）") == 1, "2023年提示汇总区应包含且仅包含一次感情提示"
     
-    # 2021年：夫妻宫被冲 → 识别感情
+    # 2021年：夫妻宫被冲 → 识别感情（现在在提示汇总区）
     assert "2021 年" in output, "应找到2021年输出"
     output_2021 = _extract_year_block(output, "2021")
     assert "冲：" in output_2021, "2021年应包含冲摘要"
     assert "（夫妻宫" in output_2021 or "（夫妻宫/" in output_2021, "2021年应命中夫妻宫"
-    assert output_2021.count("提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）") == 1, "2021年应包含且仅包含一次感情提示"
+    assert "提示汇总：" in output_2021, "2021年应包含提示汇总区"
+    if "提示汇总：" in output_2021:
+        hints_section = output_2021.split("提示汇总：")[1].split("---")[0] if "---" in output_2021.split("提示汇总：")[1] else output_2021.split("提示汇总：")[1]
+        assert hints_section.count("提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）") == 1, "2021年提示汇总区应包含且仅包含一次感情提示"
     
-    # 2019年：事业家庭宫被冲 → 识别家庭变动
+    # 2019年：事业家庭宫被冲 → 识别家庭变动（现在在提示汇总区）
     assert "2019 年" in output, "应找到2019年输出"
     output_2019 = _extract_year_block(output, "2019")
     assert "冲：" in output_2019, "2019年应包含冲摘要"
     assert "（事业家庭宫" in output_2019 or "（事业家庭宫/" in output_2019, "2019年应命中事业家庭宫"
-    assert output_2019.count("提示：家庭变动（搬家/换工作/家庭节奏变化）") == 1, "2019年应包含且仅包含一次家庭变动提示"
+    assert "提示汇总：" in output_2019, "2019年应包含提示汇总区"
+    if "提示汇总：" in output_2019:
+        hints_section = output_2019.split("提示汇总：")[1].split("---")[0] if "---" in output_2019.split("提示汇总：")[1] else output_2019.split("提示汇总：")[1]
+        assert hints_section.count("提示：家庭变动（搬家/换工作/家庭节奏变化）") == 1, "2019年提示汇总区应包含且仅包含一次家庭变动提示"
     
     print("[PASS] 黄金案例A冲摘要回归测试通过")
 
@@ -3024,28 +3062,654 @@ def test_golden_case_B_clash_summary():
     finally:
         sys.stdout = old_stdout
     
-    # 2027年：婚姻宫被冲 → 识别感情
+    # 2027年：婚姻宫被冲 → 识别感情（现在在提示汇总区）
     assert "2027 年" in output, "应找到2027年输出"
     output_2027 = _extract_year_block(output, "2027")
     assert "冲：" in output_2027, "2027年应包含冲摘要"
     assert "（婚姻宫" in output_2027 or "（婚姻宫/" in output_2027, "2027年应命中婚姻宫"
-    assert output_2027.count("提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）") == 1, "2027年应包含且仅包含一次感情提示"
+    assert "提示汇总：" in output_2027, "2027年应包含提示汇总区"
+    if "提示汇总：" in output_2027:
+        hints_section = output_2027.split("提示汇总：")[1].split("---")[0] if "---" in output_2027.split("提示汇总：")[1] else output_2027.split("提示汇总：")[1]
+        assert hints_section.count("提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）") == 1, "2027年提示汇总区应包含且仅包含一次感情提示"
     
-    # 2024年：夫妻宫被冲 → 识别感情
+    # 2024年：夫妻宫被冲 → 识别感情（现在在提示汇总区）
     assert "2024 年" in output, "应找到2024年输出"
     output_2024 = _extract_year_block(output, "2024")
     assert "冲：" in output_2024, "2024年应包含冲摘要"
     assert "（夫妻宫" in output_2024 or "（夫妻宫/" in output_2024, "2024年应命中夫妻宫"
-    assert output_2024.count("提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）") == 1, "2024年应包含且仅包含一次感情提示"
+    assert "提示汇总：" in output_2024, "2024年应包含提示汇总区"
+    if "提示汇总：" in output_2024:
+        hints_section = output_2024.split("提示汇总：")[1].split("---")[0] if "---" in output_2024.split("提示汇总：")[1] else output_2024.split("提示汇总：")[1]
+        assert hints_section.count("提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）") == 1, "2024年提示汇总区应包含且仅包含一次感情提示"
     
-    # 2020年：事业家庭宫被冲 → 识别家庭变动
+    # 2020年：事业家庭宫被冲 → 识别家庭变动（现在在提示汇总区）
     assert "2020 年" in output, "应找到2020年输出"
     output_2020 = _extract_year_block(output, "2020")
     assert "冲：" in output_2020, "2020年应包含冲摘要"
     assert "（事业家庭宫" in output_2020 or "（事业家庭宫/" in output_2020, "2020年应命中事业家庭宫"
-    assert output_2020.count("提示：家庭变动（搬家/换工作/家庭节奏变化）") == 1, "2020年应包含且仅包含一次家庭变动提示"
+    assert "提示汇总：" in output_2020, "2020年应包含提示汇总区"
+    if "提示汇总：" in output_2020:
+        hints_section = output_2020.split("提示汇总：")[1].split("---")[0] if "---" in output_2020.split("提示汇总：")[1] else output_2020.split("提示汇总：")[1]
+        assert hints_section.count("提示：家庭变动（搬家/换工作/家庭节奏变化）") == 1, "2020年提示汇总区应包含且仅包含一次家庭变动提示"
     
     print("[PASS] 黄金案例B冲摘要回归测试通过")
+
+
+def _extract_dayun_block(output: str, dayun_index: int) -> str:
+    """从输出中提取指定大运的块（从大运标题到下一个大运标题或结束）。"""
+    dayun_marker = f"【大运 {dayun_index}】"
+    if dayun_marker not in output:
+        return ""
+    
+    parts = output.split(dayun_marker)
+    if len(parts) < 2:
+        return ""
+    
+    # 提取该大运块（到下一个大运或结束）
+    dayun_block = parts[1]
+    # 查找下一个大运标记
+    next_dayun_pos = len(dayun_block)
+    for idx in range(dayun_index + 1, dayun_index + 20):  # 最多往后找20个大运
+        next_marker = f"【大运 {idx}】"
+        pos = dayun_block.find(next_marker)
+        if pos != -1:
+            next_dayun_pos = pos
+            break
+    
+    return dayun_block[:next_dayun_pos]
+
+
+def _find_dayun_index_by_start_year(output: str, start_year: int) -> int:
+    """根据大运标题行里的'起运年份 {start_year}'反查该大运序号（1-based）。"""
+    needle = f"(起运年份 {start_year},"
+    pos = output.find(needle)
+    if pos == -1:
+        return 0
+    # 向前找最近的【大运 X】
+    before = output[:pos]
+    last = before.rfind("【大运 ")
+    if last == -1:
+        return 0
+    # 解析 X
+    end = before.find("】", last)
+    if end == -1:
+        return 0
+    try:
+        num_str = before[last + len("【大运 ") : end].strip()
+        return int(num_str)
+    except Exception:
+        return 0
+
+
+def test_golden_case_A_dayun_shishen():
+    """黄金案例A大运十神回归测试：2005-9-20 10:00 男
+    
+    A1) 大运4十神两行（方案A结构层级）
+    断言大运4输出块包含：
+    - 大运主轴（地支定调）：
+    - 天干补充（不翻盘）：
+    - 地支 午｜十神 比肩｜用神 是
+    - 天干 壬｜十神 正官｜用神 否
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2005, 9, 20, 10, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取大运4块
+    dayun4_block = _extract_dayun_block(output, 4)
+    assert dayun4_block, "应找到大运4输出"
+    
+    # 断言包含方案A结构层级标题
+    assert "大运主轴（地支定调）：" in dayun4_block, "大运4应包含：大运主轴（地支定调）："
+    assert "天干补充（不翻盘）：" in dayun4_block, "大运4应包含：天干补充（不翻盘）："
+    
+    # 断言包含地支十神行（在主轴段落）
+    assert "地支 午｜十神 比肩｜用神 是" in dayun4_block, "大运4应包含：地支 午｜十神 比肩｜用神 是"
+    
+    # 断言包含天干十神行（在补充段落）
+    assert "天干 壬｜十神 正官｜用神 否" in dayun4_block, "大运4应包含：天干 壬｜十神 正官｜用神 否"
+    
+    print("[PASS] 黄金案例A大运4十神回归测试通过")
+
+
+def test_golden_case_A_turning_points():
+    """黄金案例A转折点回归测试：2005-9-20 10:00 男
+    
+    Turning point 断言（只看地支）：
+    - 2029 年：一般 → 好运（转好）
+    - 2049 年：好运 → 一般（转弱）
+    - 2059 年：一般 → 好运（转好）
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2005, 9, 20, 10, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 不再打印“转折点列表标题”，而是在发生转折的那步大运块内标记
+    assert "大运转折点（仅看大运地支）：" not in output, "不应再打印大运转折点列表标题"
+    assert "转折点（仅看大运地支）：" not in output, "不应再打印旧的转折点列表标题"
+    
+    # 大运4：2029（一般 → 好运）
+    dayun4_block = _extract_dayun_block(output, 4)
+    assert dayun4_block, "应找到大运4输出"
+    assert "天干补充（不翻盘）：" in dayun4_block, "大运4应包含：天干补充（不翻盘）："
+    assert "这是大运转折点：2029 年：一般 → 好运（转好）" in dayun4_block, "大运4应标记2029转折点"
+    
+    # 大运6：2049（好运 → 一般）
+    dayun6_block = _extract_dayun_block(output, 6)
+    assert dayun6_block, "应找到大运6输出"
+    assert "这是大运转折点：2049 年：好运 → 一般（转弱）" in dayun6_block, "大运6应标记2049转折点"
+    
+    # 大运7：2059（一般 → 好运）
+    dayun7_block = _extract_dayun_block(output, 7)
+    assert dayun7_block, "应找到大运7输出"
+    assert "这是大运转折点：2059 年：一般 → 好运（转好）" in dayun7_block, "大运7应标记2059转折点"
+    
+    # 总数：应出现3次
+    assert output.count("这是大运转折点：") == 3, "黄金A应只出现3次大运转折点标记"
+    
+    # 检查原局模块中的大运转折点汇总
+    assert output.count("— 大运转折点 —") == 1, "原局模块中应只出现一次「— 大运转折点 —」标题"
+    
+    # 检查位置：在原局问题之后、在大运模块之前
+    pos_natal_issues = output.find("—— 原局问题 ——")
+    pos_turning_points_summary = output.find("— 大运转折点 —")
+    pos_dayun_module = output.find("【大运")
+    
+    assert pos_natal_issues != -1, "应找到「—— 原局问题 ——」"
+    assert pos_turning_points_summary != -1, "应找到「— 大运转折点 —」"
+    assert pos_dayun_module != -1, "应找到大运模块起始标记「【大运」"
+    assert pos_natal_issues < pos_turning_points_summary < pos_dayun_module, "「— 大运转折点 —」应在原局问题之后、大运模块之前"
+    
+    # 检查汇总内容（提取汇总section的内容）
+    summary_start = pos_turning_points_summary
+    summary_end = output.find("\n", summary_start + len("— 大运转折点 —"))
+    if summary_end == -1:
+        summary_end = pos_dayun_module
+    summary_section = output[summary_start:summary_end]
+    
+    # 检查包含3个转折点
+    assert "2029 年：一般 → 好运（转好）" in summary_section, "汇总应包含2029年转折点"
+    assert "2049 年：好运 → 一般（转弱）" in summary_section, "汇总应包含2049年转折点"
+    assert "2059 年：一般 → 好运（转好）" in summary_section, "汇总应包含2059年转折点"
+    assert summary_section.count("年：") == 3, "汇总应包含3个转折点"
+    
+    print("[PASS] 黄金案例A转折点回归测试通过")
+
+
+def test_golden_case_A_yongshen_swap_intervals():
+    """黄金案例A用神互换区间汇总回归测试：2005-9-20 10:00 男
+    
+    验证原局模块中的用神互换区间汇总：
+    - 大运4（壬午，2029起）和大运5（辛巳，2039起）都触发用神互换
+    - 应合并为区间：2029-2048年（大运6起运2049，所以区间终点是2048）
+    - 五行应为"金、水"（根据实际输出为准）
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2005, 9, 20, 10, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 检查原局模块中的用神互换区间汇总section存在
+    assert "— 用神互换 —" in output, "原局模块中应出现「— 用神互换 —」标题"
+    assert output.count("— 用神互换 —") == 1, "「— 用神互换 —」应只出现一次"
+    
+    # 检查位置：在大运转折点之后、在大运模块之前
+    pos_turning_points = output.find("— 大运转折点 —")
+    pos_swap_intervals = output.find("— 用神互换 —")
+    pos_dayun_module = output.find("【大运")
+    
+    assert pos_turning_points != -1, "应找到「— 大运转折点 —」"
+    assert pos_swap_intervals != -1, "应找到「— 用神互换 —」"
+    assert pos_dayun_module != -1, "应找到大运模块起始标记「【大运」"
+    assert pos_turning_points < pos_swap_intervals < pos_dayun_module, "「— 用神互换 —」应在大运转折点之后、大运模块之前"
+    
+    # 检查区间行（大运4和大运5合并为2029-2048年）
+    # 注意：大运4起运2029，大运5起运2039，下一步大运6起运2049，所以区间终点是2048
+    assert "2029-2048年：金、水" in output, "应包含合并后的区间：2029-2048年：金、水"
+    
+    print("[PASS] 黄金案例A用神互换区间汇总回归测试通过")
+
+
+def test_yongshen_swap_intervals_no_swap():
+    """用神互换区间汇总回归测试：无互换时不显示section
+    
+    使用一个不会触发用神互换的用例（1969-02-07 00:00 男，已知不会触发）
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(1969, 2, 7, 0, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 检查不应出现用神互换区间汇总section
+    assert "— 用神互换 —" not in output, "无互换时不应出现「— 用神互换 —」section"
+    
+    print("[PASS] 用神互换区间汇总（无互换）回归测试通过")
+
+
+def test_golden_case_A_dayun_printing_order():
+    """黄金案例A大运打印顺序回归测试：2005-9-20 10:00 男
+    
+    验证单条大运打印顺序：Header → 事实 → 分隔线 → 主轴/天干 → 提示汇总
+    使用大运4作为测试案例（包含事实、主轴/天干、转折点、用神互换提示）
+    验证缩进统一为4空格，分隔线位置正确
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2005, 9, 20, 10, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 提取大运4块
+    dayun4_block = _extract_dayun_block(output, 4)
+    assert dayun4_block, "应找到大运4输出"
+    
+    # 找到各个锚点的位置（在大运4块内查找）
+    pos_header = dayun4_block.find("【大运 4】")
+    pos_separator = dayun4_block.find("    ——————————")
+    pos_axis_anchor = dayun4_block.find("    大运主轴（地支定调）：")
+    pos_turning_point = dayun4_block.find("    这是大运转折点：")
+    pos_yongshen_swap = dayun4_block.find("    【用神互换提示】")
+    
+    # 检查是否有事实行（例如三会火局等，使用稳定的事实锚点）
+    pos_fact_anchor = dayun4_block.find("三会火局")
+    if pos_fact_anchor == -1:
+        pos_fact_anchor = dayun4_block.find("午未合")
+    if pos_fact_anchor == -1:
+        pos_fact_anchor = dayun4_block.find("命局冲（大运）：")
+    
+    # Header 在最前
+    assert pos_header != -1, "应找到Header行"
+    assert pos_header == 0, "Header应在最前"
+    
+    # 分隔线存在
+    assert pos_separator != -1, "应找到分隔线"
+    
+    # 分隔线位置正确：在事实锚点之后、在大运主轴之前
+    if pos_fact_anchor != -1:
+        assert pos_fact_anchor < pos_separator, "事实锚点应在分隔线之前"
+    assert pos_separator < pos_axis_anchor, "分隔线应在主轴区之前"
+    
+    assert pos_axis_anchor != -1, "应找到主轴区"
+    
+    # 主轴区出现在这是大运转折点之前
+    if pos_turning_point != -1:
+        assert pos_axis_anchor < pos_turning_point, "主轴区应在转折点之前"
+    
+    # 这是大运转折点出现在【用神互换提示】之前
+    if pos_turning_point != -1 and pos_yongshen_swap != -1:
+        assert pos_turning_point < pos_yongshen_swap, "转折点应在用神互换提示之前"
+    
+    # 禁止8空格缩进的地支/天干行（在大运4块内检查）
+    assert "        地支 " not in dayun4_block, "大运4块内不应出现8空格缩进的地支行"
+    assert "        天干 " not in dayun4_block, "大运4块内不应出现8空格缩进的天干行"
+    
+    # 验证4空格缩进的地支/天干行存在
+    assert "    地支 " in dayun4_block, "大运4块内应出现4空格缩进的地支行"
+    assert "    天干 " in dayun4_block, "大运4块内应出现4空格缩进的天干行"
+    
+    print("[PASS] 黄金案例A大运打印顺序回归测试通过")
+
+
+def test_golden_case_B_turning_points():
+    """黄金案例B转折点回归测试：2007-1-28 12:00 男
+    
+    Turning point 断言（只看地支）：
+    根据实际输出：
+    - 2029 年：好运 → 一般（转弱）
+    - 2069 年：一般 → 好运（转好）
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2007, 1, 28, 12, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    assert "大运转折点（仅看大运地支）：" not in output, "不应再打印大运转折点列表标题"
+    assert "转折点（仅看大运地支）：" not in output, "不应再打印旧的转折点列表标题"
+    
+    # 2029（好运 → 一般）
+    dayun_2029 = _find_dayun_index_by_start_year(output, 2029)
+    assert dayun_2029 > 0, "应能定位起运年份2029对应的大运序号"
+    block_2029 = _extract_dayun_block(output, dayun_2029)
+    assert f"这是大运转折点：2029 年：好运 → 一般（转弱）" in block_2029, "应在对应大运块内标记2029转折点"
+    
+    # 2069（一般 → 好运）
+    dayun_2069 = _find_dayun_index_by_start_year(output, 2069)
+    assert dayun_2069 > 0, "应能定位起运年份2069对应的大运序号"
+    block_2069 = _extract_dayun_block(output, dayun_2069)
+    assert f"这是大运转折点：2069 年：一般 → 好运（转好）" in block_2069, "应在对应大运块内标记2069转折点"
+    
+    assert output.count("这是大运转折点：") == 2, "黄金B应只出现2次大运转折点标记"
+    
+    print("[PASS] 黄金案例B转折点回归测试通过")
+
+
+def test_golden_case_C_turning_points():
+    """黄金案例C转折点回归测试：2006-3-22 14:00 女（正式定为黄金C基准生日）
+    
+    Turning point 断言（只看地支）：
+    - 2021 年：好运 → 一般（转弱）
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2006, 3, 22, 14, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=False)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    assert "大运转折点（仅看大运地支）：" not in output, "不应再打印大运转折点列表标题"
+    assert "转折点（仅看大运地支）：" not in output, "不应再打印旧的转折点列表标题"
+    
+    # 2021（好运 → 一般）
+    dayun_2021 = _find_dayun_index_by_start_year(output, 2021)
+    assert dayun_2021 > 0, "应能定位起运年份2021对应的大运序号"
+    block_2021 = _extract_dayun_block(output, dayun_2021)
+    assert "这是大运转折点：2021 年：好运 → 一般（转弱）" in block_2021, "应在对应大运块内标记2021转折点"
+    
+    assert output.count("这是大运转折点：") == 1, "黄金C应只出现1次大运转折点标记"
+    
+    print("[PASS] 黄金案例C转折点回归测试通过")
+
+
+def test_turning_points_summary_format():
+    """大运转折点汇总格式测试
+    测试原局模块中的「— 大运转折点 —」section 格式和位置
+    """
+    import io
+    from .cli import run_cli
+    
+    # 使用黄金案例A（已知有转折点）测试格式
+    dt = datetime(2005, 9, 20, 10, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 检查「— 大运转折点 —」section 存在且只出现一次
+    assert output.count("— 大运转折点 —") == 1, "原局模块中应只出现一次「— 大运转折点 —」标题"
+    
+    # 检查位置：在原局问题之后、在大运模块之前
+    pos_natal_issues = output.find("—— 原局问题 ——")
+    pos_turning_points_summary = output.find("— 大运转折点 —")
+    pos_dayun_module = output.find("【大运")
+    
+    assert pos_natal_issues != -1, "应找到「—— 原局问题 ——」"
+    assert pos_turning_points_summary != -1, "应找到「— 大运转折点 —」"
+    assert pos_dayun_module != -1, "应找到大运模块起始标记「【大运」"
+    assert pos_natal_issues < pos_turning_points_summary < pos_dayun_module, "「— 大运转折点 —」应在原局问题之后、大运模块之前"
+    
+    # 提取汇总section的内容
+    summary_start = pos_turning_points_summary
+    # 找到标题行结束
+    title_line_end = output.find("\n", summary_start)
+    assert title_line_end != -1, "应找到标题行结束"
+    
+    # 获取下一行（内容行）
+    content_line_start = title_line_end + 1
+    content_line_end = output.find("\n", content_line_start)
+    if content_line_end == -1 or content_line_end > pos_dayun_module:
+        content_line_end = pos_dayun_module
+    content_line = output[content_line_start:content_line_end].strip()
+    
+    # 黄金案例A应该有转折点，验证格式
+    assert "年：" in content_line, "有转折点时应包含年份格式"
+    assert " → " in content_line, "有转折点时应包含箭头"
+    assert "（" in content_line and "）" in content_line, "有转折点时应包含括号标注"
+    
+    print("[PASS] 大运转折点汇总格式回归测试通过")
+
+
+def test_golden_case_A_liuyuan():
+    """黄金案例A流年缘分回归测试：2005-9-20 10:00 男
+    
+    A2) 2029：识别"流年地支财星引起的缘分"（良缘一次）
+    A3) 2020：识别"天干引起的缘分"（暧昧推进一次）
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2005, 9, 20, 10, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 2029年：识别"流年地支财星引起的缘分"（良缘一次）
+    assert "2029 年" in output, "应找到2029年输出"
+    output_2029 = _extract_year_block(output, "2029")
+    assert "提示汇总：" in output_2029, "2029年应包含提示汇总区"
+    
+    if "提示汇总：" in output_2029:
+        hints_section = output_2029.split("提示汇总：")[1].split("---")[0] if "---" in output_2029.split("提示汇总：")[1] else output_2029.split("提示汇总：")[1]
+        assert "提示：缘分（地支）：易遇合适伴侣（良缘）" in hints_section, "2029年提示汇总应包含：提示：缘分（地支）：易遇合适伴侣（良缘）"
+        assert hints_section.count("提示：缘分（地支）：易遇合适伴侣（良缘）") == 1, "2029年提示汇总应只包含一次缘分（地支）提示"
+    
+    # 2020年：识别"天干引起的缘分"（暧昧推进一次）
+    assert "2020 年" in output, "应找到2020年输出"
+    output_2020 = _extract_year_block(output, "2020")
+    assert "提示汇总：" in output_2020, "2020年应包含提示汇总区"
+    
+    if "提示汇总：" in output_2020:
+        hints_section = output_2020.split("提示汇总：")[1].split("---")[0] if "---" in output_2020.split("提示汇总：")[1] else output_2020.split("提示汇总：")[1]
+        assert "提示：缘分（天干）：暧昧推进" in hints_section, "2020年提示汇总应包含：提示：缘分（天干）：暧昧推进"
+        assert hints_section.count("提示：缘分（天干）：暧昧推进") == 1, "2020年提示汇总应只包含一次缘分（天干）提示"
+    
+    print("[PASS] 黄金案例A流年缘分回归测试通过")
+
+
+def test_golden_case_B_liuyuan():
+    """黄金案例B流年缘分回归测试：2007-1-28 12:00 男
+    
+    B1) 2026：识别天干财星 + 地支财星缘分（两条都要）
+    并且同年还要"夫妻宫半合引起的缘分"（合引动提示一次）
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2007, 1, 28, 12, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # 2026年：识别天干财星 + 地支财星缘分（两条都要）
+    assert "2026 年" in output, "应找到2026年输出"
+    output_2026 = _extract_year_block(output, "2026")
+    assert "提示汇总：" in output_2026, "2026年应包含提示汇总区"
+    
+    if "提示汇总：" in output_2026:
+        hints_section = output_2026.split("提示汇总：")[1].split("---")[0] if "---" in output_2026.split("提示汇总：")[1] else output_2026.split("提示汇总：")[1]
+        
+        # 断言包含天干缘分提示
+        assert "提示：缘分（天干）：暧昧推进" in hints_section, "2026年提示汇总应包含：提示：缘分（天干）：暧昧推进"
+        assert hints_section.count("提示：缘分（天干）：暧昧推进") == 1, "2026年提示汇总应只包含一次缘分（天干）提示"
+        
+        # 断言包含地支缘分提示
+        assert "提示：缘分（地支）：易遇合适伴侣（良缘）" in hints_section, "2026年提示汇总应包含：提示：缘分（地支）：易遇合适伴侣（良缘）"
+        assert hints_section.count("提示：缘分（地支）：易遇合适伴侣（良缘）") == 1, "2026年提示汇总应只包含一次缘分（地支）提示"
+        
+        # 断言包含夫妻宫半合引动提示
+        assert "提示：夫妻宫引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）" in hints_section, "2026年提示汇总应包含：提示：夫妻宫引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）"
+        assert hints_section.count("提示：夫妻宫引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）") == 1, "2026年提示汇总应只包含一次夫妻宫引动提示"
+    
+    print("[PASS] 黄金案例B流年缘分回归测试通过")
+
+
+def test_case_C_new_format():
+    """用例C新格式回归测试：2001-4-3 6:00 男
+    
+    C1) 2029：识别冲 + 识别流年财星缘分
+    C2) 大运5十神两行
+    """
+    import io
+    from .cli import run_cli
+    
+    dt = datetime(2001, 4, 3, 6, 0)
+    
+    # 捕获输出
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+    
+    # C1) 2029：识别冲 + 识别流年财星缘分
+    assert "2029 年" in output, "应找到2029年输出"
+    output_2029 = _extract_year_block(output, "2029")
+    
+    # 断言事件区仍包含冲摘要
+    event_section = output_2029.split("提示汇总：")[0] if "提示汇总：" in output_2029 else output_2029
+    assert "冲：" in event_section, "2029年事件区应包含冲摘要"
+    assert "（婚姻宫" in event_section or "（夫妻宫" in event_section, "2029年应命中婚姻宫或夫妻宫"
+    
+    # 断言提示汇总包含缘分提示
+    if "提示汇总：" in output_2029:
+        hints_section = output_2029.split("提示汇总：")[1].split("---")[0] if "---" in output_2029.split("提示汇总：")[1] else output_2029.split("提示汇总：")[1]
+        # 检查是否有地支或天干缘分提示（用户说"财星缘分"默认地支财触发更可能）
+        has_liuyuan = (
+            "提示：缘分（地支）：易遇合适伴侣（良缘）" in hints_section or
+            "提示：缘分（天干）：暧昧推进" in hints_section
+        )
+        assert has_liuyuan, "2029年提示汇总应包含至少一个缘分提示"
+    
+    # C2) 大运5十神两行
+    dayun5_block = _extract_dayun_block(output, 5)
+    assert dayun5_block, "应找到大运5输出"
+    
+    # 断言包含天干十神行（劫财）
+    assert "天干" in dayun5_block and "十神 劫财｜用神 否" in dayun5_block, "大运5应包含：天干 ... 十神 劫财｜用神 否"
+    
+    # 断言包含地支十神行（七杀）
+    assert "地支 亥｜十神 七杀｜用神 是" in dayun5_block, "大运5应包含：地支 亥｜十神 七杀｜用神 是"
+    
+    print("[PASS] 用例C新格式回归测试通过")
+
+
+def test_event_area_no_hints():
+    """通用断言：事件区不应出现以"提示："开头的行"""
+    import io
+    from .cli import run_cli
+    
+    # 测试几个代表性年份
+    test_cases = [
+        (datetime(2005, 9, 20, 10, 0), True, "2026"),  # 黄金A，2026年
+        (datetime(2007, 1, 28, 12, 0), True, "2033"),  # 黄金B，2033年
+    ]
+    
+    for dt, is_male, test_year in test_cases:
+        old_stdout = sys.stdout
+        sys.stdout = captured_output = io.StringIO()
+        
+        try:
+            run_cli(dt, is_male=is_male)
+            output = captured_output.getvalue()
+        finally:
+            sys.stdout = old_stdout
+        
+        if f"{test_year} 年" in output:
+            output_year = _extract_year_block(output, test_year)
+            # 提取事件区（提示汇总之前的部分）
+            if "提示汇总：" in output_year:
+                event_section = output_year.split("提示汇总：")[0]
+            else:
+                event_section = output_year.split("---")[0] if "---" in output_year else output_year
+            
+            # 检查事件区中不应有"提示："开头的行
+            lines = event_section.split("\n")
+            for line in lines:
+                if line.strip().startswith("提示："):
+                    assert False, f"{test_year}年事件区不应包含以'提示：'开头的行，但找到了：{line.strip()}"
+    
+    print("[PASS] 事件区不应包含提示行回归测试通过")
 
 
 def test_golden_case_A_merge_clash_combo():
@@ -3074,100 +3738,65 @@ def test_golden_case_A_merge_clash_combo():
     assert "2023 年" in output, "应找到2023年输出"
     output_2023 = _extract_year_block(output, "2023")
     
-    # 断言包含合引动之一（至少包含夫妻宫引动）
-    has_merge_hint = (
-        "提示：夫妻宫引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）" in output_2023 or
-        "提示：婚姻宫引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）" in output_2023
-    )
-    assert has_merge_hint, "2023年应包含合引动提示（夫妻宫或婚姻宫）"
+    # 断言包含提示汇总区
+    assert "提示汇总：" in output_2023, "2023年应包含提示汇总区"
     
-    # 断言包含冲摘要命中婚姻/夫妻宫
-    has_clash_summary = "冲：" in output_2023 and ("（婚姻宫" in output_2023 or "（夫妻宫" in output_2023)
-    assert has_clash_summary, "2023年应包含冲摘要且命中婚姻宫或夫妻宫"
-    
-    # 断言包含组合提示行，并且count==1
-    combo_hint = "提示：感情线合冲同现（进展易受阻/反复拉扯/不宜急定）"
-    assert combo_hint in output_2023, f"2023年应包含组合提示行：{combo_hint}"
-    assert output_2023.count(combo_hint) == 1, f"2023年组合提示应只出现1次，实际出现{output_2023.count(combo_hint)}次"
+    if "提示汇总：" in output_2023:
+        hints_section = output_2023.split("提示汇总：")[1].split("---")[0] if "---" in output_2023.split("提示汇总：")[1] else output_2023.split("提示汇总：")[1]
+        
+        # 断言包含合引动之一（至少包含夫妻宫引动）
+        has_merge_hint = (
+            "提示：夫妻宫引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）" in hints_section or
+            "提示：婚姻宫引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）" in hints_section
+        )
+        assert has_merge_hint, "2023年提示汇总区应包含合引动提示（夫妻宫或婚姻宫）"
+        
+        # 断言包含冲摘要命中婚姻/夫妻宫（事件区）
+        event_section = output_2023.split("提示汇总：")[0]
+        has_clash_summary = "冲：" in event_section and ("（婚姻宫" in event_section or "（夫妻宫" in event_section)
+        assert has_clash_summary, "2023年事件区应包含冲摘要且命中婚姻宫或夫妻宫"
+        
+        # 断言包含组合提示行，并且count==1（在提示汇总区）
+        combo_hint = "提示：感情线合冲同现（进展易受阻/反复拉扯；仓促定论的稳定性更低）"
+        assert combo_hint in hints_section, f"2023年提示汇总区应包含组合提示行：{combo_hint}"
+        assert hints_section.count(combo_hint) == 1, f"2023年组合提示应只出现1次，实际出现{hints_section.count(combo_hint)}次"
     
     # 2009年：夫妻宫冲 + 婚姻宫半合 → 组合识别
     assert "2009 年" in output, "应找到2009年输出"
     output_2009 = _extract_year_block(output, "2009")
     
-    # 断言包含合引动之一（至少包含婚姻宫引动）
-    has_merge_hint_2009 = (
-        "提示：婚姻宫引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）" in output_2009 or
-        "提示：夫妻宫引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）" in output_2009
-    )
-    assert has_merge_hint_2009, "2009年应包含合引动提示（婚姻宫或夫妻宫）"
+    # 断言包含提示汇总区
+    assert "提示汇总：" in output_2009, "2009年应包含提示汇总区"
     
-    # 断言包含冲摘要命中婚姻/夫妻宫
-    has_clash_summary_2009 = "冲：" in output_2009 and ("（婚姻宫" in output_2009 or "（夫妻宫" in output_2009)
-    assert has_clash_summary_2009, "2009年应包含冲摘要且命中婚姻宫或夫妻宫"
-    
-    # 断言包含组合提示行，并且count==1
-    assert combo_hint in output_2009, f"2009年应包含组合提示行：{combo_hint}"
-    assert output_2009.count(combo_hint) == 1, f"2009年组合提示应只出现1次，实际出现{output_2009.count(combo_hint)}次"
+    if "提示汇总：" in output_2009:
+        hints_section = output_2009.split("提示汇总：")[1].split("---")[0] if "---" in output_2009.split("提示汇总：")[1] else output_2009.split("提示汇总：")[1]
+        
+        # 断言包含合引动之一（至少包含婚姻宫引动）
+        has_merge_hint_2009 = (
+            "提示：婚姻宫引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）" in hints_section or
+            "提示：夫妻宫引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）" in hints_section
+        )
+        assert has_merge_hint_2009, "2009年提示汇总区应包含合引动提示（婚姻宫或夫妻宫）"
+        
+        # 断言包含冲摘要命中婚姻/夫妻宫（事件区）
+        event_section = output_2009.split("提示汇总：")[0]
+        has_clash_summary_2009 = "冲：" in event_section and ("（婚姻宫" in event_section or "（夫妻宫" in event_section)
+        assert has_clash_summary_2009, "2009年事件区应包含冲摘要且命中婚姻宫或夫妻宫"
+        
+        # 断言包含组合提示行，并且count==1（在提示汇总区）
+        combo_hint = "提示：感情线合冲同现（进展易受阻/反复拉扯；仓促定论的稳定性更低）"
+        assert combo_hint in hints_section, f"2009年提示汇总区应包含组合提示行：{combo_hint}"
+        assert hints_section.count(combo_hint) == 1, f"2009年组合提示应只出现1次，实际出现{hints_section.count(combo_hint)}次"
     
     print("[PASS] 黄金案例A合冲组合提示回归测试通过")
 
 
-def test_golden_case_A_love_field():
-    """黄金案例A感情字段回归测试：2005-9-20 10:00男
-    
-    测试年份：
-    - 2028：识别一次
-    - 2029：识别一次
-    """
-    import io
-    from .cli import run_cli
-    
-    dt = datetime(2005, 9, 20, 10, 0)
-    
-    # 捕获输出
-    old_stdout = sys.stdout
-    sys.stdout = captured_output = io.StringIO()
-    
-    try:
-        run_cli(dt, is_male=True)
-        output = captured_output.getvalue()
-    finally:
-        sys.stdout = old_stdout
-    
-    # 2028年：识别一次
-    assert "2028 年" in output, "应找到2028年输出"
-    output_2028 = _extract_year_block(output, "2028")
-    
-    # 断言至少出现一次感情字段（优先地支，其次天干）
-    has_love_field = (
-        "｜感情：易遇合适伴侣" in output_2028 or
-        "｜感情：暧昧推进" in output_2028
-    )
-    assert has_love_field, "2028年应包含至少一个感情字段"
-    
-    # 断言对应信号count==1
-    love_count = output_2028.count("｜感情：易遇合适伴侣") + output_2028.count("｜感情：暧昧推进")
-    assert love_count == 1, f"2028年感情字段应只出现1次，实际出现{love_count}次"
-    
-    # 2029年：识别一次
-    assert "2029 年" in output, "应找到2029年输出"
-    output_2029 = _extract_year_block(output, "2029")
-    
-    # 断言至少出现一次感情字段（优先地支，其次天干）
-    has_love_field_2029 = (
-        "｜感情：易遇合适伴侣" in output_2029 or
-        "｜感情：暧昧推进" in output_2029
-    )
-    assert has_love_field_2029, "2029年应包含至少一个感情字段"
-    
-    # 断言对应信号count==1
-    love_count_2029 = output_2029.count("｜感情：易遇合适伴侣") + output_2029.count("｜感情：暧昧推进")
-    assert love_count_2029 == 1, f"2029年感情字段应只出现1次，实际出现{love_count_2029}次"
-    
-    print("[PASS] 黄金案例A感情字段回归测试通过")
+# 已废弃：test_golden_case_A_love_field 和 test_golden_case_B_love_field
+# 原因：十神行的感情字段已移除，改为在提示汇总区显示缘分提示
+# 新测试：test_golden_case_A_liuyuan 和 test_golden_case_B_liuyuan 已覆盖此功能
 
 
-def test_golden_case_B_love_field():
+def test_golden_case_B_love_field_OLD():
     """黄金案例B感情字段回归测试：2007-1-28 12:00男
     
     测试年份：
@@ -3254,7 +3883,7 @@ def test_golden_case_A_tkdc_summary():
     output_2019 = _extract_year_block(output, "2019")
     
     # 断言包含时柱天克地冲强提示（count==1）
-    strong_hint = "提示：事业家庭宫天克地冲（着重注意工作变动/有可能搬家）"
+    strong_hint = "提示：事业家庭宫天克地冲（工作变动概率上升/可能出现搬家窗口）"
     assert strong_hint in output_2019, f"2019年应包含强提示：{strong_hint}"
     assert output_2019.count(strong_hint) == 1, f"2019年强提示应只出现1次，实际出现{output_2019.count(strong_hint)}次"
     
@@ -3321,7 +3950,7 @@ def test_golden_case_B_tkdc_summary():
     output_2032 = _extract_year_block(output, "2032")
     
     # 断言包含时柱天克地冲强提示（count==1）
-    strong_hint = "提示：事业家庭宫天克地冲（着重注意工作变动/有可能搬家）"
+    strong_hint = "提示：事业家庭宫天克地冲（工作变动概率上升/可能出现搬家窗口）"
     assert strong_hint in output_2032, f"2032年应包含强提示：{strong_hint}"
     assert output_2032.count(strong_hint) == 1, f"2032年强提示应只出现1次，实际出现{output_2032.count(strong_hint)}次"
     
@@ -3367,8 +3996,19 @@ if __name__ == "__main__":
     test_golden_case_A_clash_summary()  # 新增：流年地支冲命局宫位摘要与识别提示
     test_golden_case_B_clash_summary()  # 新增：流年地支冲命局宫位摘要与识别提示
     test_golden_case_A_merge_clash_combo()  # 新增：合冲组合提示（感情线合冲同现）
-    test_golden_case_A_love_field()  # 新增：十神行感情字段
-    test_golden_case_B_love_field()  # 新增：十神行感情字段
+    # 已废弃：test_golden_case_A_love_field 和 test_golden_case_B_love_field（十神行感情字段已移除）
+    test_golden_case_A_dayun_shishen()  # 更新：大运十神打印（方案A结构层级）
+    test_golden_case_A_turning_points()  # 新增：转折点打印（黄金A）
+    test_golden_case_B_turning_points()  # 新增：转折点打印（黄金B）
+    test_golden_case_C_turning_points()  # 新增：转折点打印（黄金C，2006-3-22 14:00）
+    test_turning_points_summary_format()  # 新增：原局模块大运转折点汇总格式测试
+    test_golden_case_A_dayun_printing_order()  # 新增：大运打印顺序测试（黄金A）
+    test_golden_case_A_yongshen_swap_intervals()  # 新增：用神互换区间汇总测试（黄金A）
+    test_yongshen_swap_intervals_no_swap()  # 新增：用神互换区间汇总（无互换）测试
+    test_golden_case_A_liuyuan()  # 新增：流年缘分提示
+    test_golden_case_B_liuyuan()  # 新增：流年缘分提示
+    test_case_C_new_format()  # 新增：用例C新格式
+    test_event_area_no_hints()  # 新增：事件区不应包含提示行
     
     print("\n" + "=" * 60)
     print("运行原局问题回归用例")

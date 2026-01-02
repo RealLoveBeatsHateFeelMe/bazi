@@ -393,3 +393,87 @@ def get_yun_info(birth_dt: datetime, is_male: bool) -> Dict[str, Any]:
         "dayun": [asdict(x) for x in da_yun_list],
         "liunian_first_dayun": [asdict(x) for x in liu_nian_list],
     }
+
+
+def analyze_complete(
+    birth_dt: datetime,
+    is_male: bool,
+    max_dayun: int = 8,
+) -> Dict[str, Any]:
+    """完整分析：整合 analyze_basic() + analyze_luck() + 数据丰富化。
+    
+    这是新的主入口函数，返回包含所有结构化数据的完整结果对象。
+    
+    参数:
+        birth_dt: 出生日期时间
+        is_male: 是否男性
+        max_dayun: 最大大运数量（默认8步）
+        
+    返回:
+        完整的分析结果字典，包含：
+        - schema_version: 数据格式版本号
+        - natal: 原局数据（包含新增字段）
+        - luck: 大运/流年数据（包含新增字段）
+        - turning_points: 大运转折点列表
+    """
+    from .luck import analyze_luck
+    from .enrich import (
+        enrich_natal,
+        enrich_dayun,
+        enrich_liunian,
+        compute_turning_points,
+    )
+    
+    # 1. 基础分析
+    natal = analyze_basic(birth_dt)
+    bazi = natal["bazi"]
+    day_gan = bazi["day"]["gan"]
+    yongshen_elements = natal["yongshen_elements"]
+    
+    # 2. 大运/流年分析
+    luck = analyze_luck(birth_dt, is_male, yongshen_elements, max_dayun=max_dayun)
+    
+    # 3. 丰富原局数据
+    natal_enriched = enrich_natal(natal, bazi, day_gan, is_male)
+    natal.update(natal_enriched)
+    
+    # 4. 丰富大运和流年数据
+    strength_percent = natal.get("strength_percent", 50.0)
+    support_percent = natal.get("support_percent", 0.0)
+    
+    for group in luck.get("groups", []):
+        # 丰富大运数据
+        dayun = group.get("dayun", {})
+        dayun_enriched = enrich_dayun(
+            dayun=dayun,
+            bazi=bazi,
+            day_gan=day_gan,
+            strength_percent=strength_percent,
+            support_percent=support_percent,
+            yongshen_elements=yongshen_elements,
+        )
+        dayun.update(dayun_enriched)
+        
+        # 丰富流年数据
+        liunian_list = group.get("liunian", [])
+        dayun_gan = dayun.get("gan", "")
+        for liunian in liunian_list:
+            liunian_enriched = enrich_liunian(
+                liunian=liunian,
+                bazi=bazi,
+                day_gan=day_gan,
+                is_male=is_male,
+                dayun_gan=dayun_gan,
+            )
+            liunian.update(liunian_enriched)
+    
+    # 5. 计算转折点
+    turning_points = compute_turning_points(luck.get("groups", []))
+    
+    # 6. 组装最终结果
+    return {
+        "schema_version": "1.0.0",  # 数据格式版本号
+        "natal": natal,
+        "luck": luck,
+        "turning_points": turning_points,
+    }

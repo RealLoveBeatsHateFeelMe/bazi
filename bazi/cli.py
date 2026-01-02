@@ -4,20 +4,20 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from .lunar_engine import analyze_basic
-from .luck import analyze_luck
+from .lunar_engine import analyze_complete
 from .config import ZHI_WUXING
 
 
 def _generate_marriage_suggestion(yongshen_elements: list[str]) -> str:
-    """根据用神五行生成婚配建议。
+    """根据用神五行生成婚配倾向。
     
     参数:
         yongshen_elements: 用神五行列表，例如 ["木", "火"]
     
     返回:
-        婚配建议字符串，例如 "【婚配建议】推荐：虎兔蛇马；或 木，火旺的人。"
+        婚配倾向字符串，例如 "【婚配倾向】更容易匹配：虎兔蛇马；或 木，火旺的人。"
     """
     if not yongshen_elements:
         return ""
@@ -80,9 +80,9 @@ def _generate_marriage_suggestion(yongshen_elements: list[str]) -> str:
     wang_str = "，".join(yongshen_elements)
     
     if zodiac_str:
-        return f"【婚配建议】推荐：{zodiac_str}；或 {wang_str}旺的人。"
+        return f"【婚配倾向】更容易匹配：{zodiac_str}；或 {wang_str}旺的人。"
     else:
-        return f"【婚配建议】推荐：或 {wang_str}旺的人。"
+        return f"【婚配倾向】更容易匹配：{wang_str}旺的人。"
 
 
 def _calc_half_year_label(risk: float, is_yongshen: bool) -> str:
@@ -286,8 +286,11 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         sex_str = input("请输入性别 (M/F)：").strip().upper()
         is_male = True if sex_str != "F" else False
 
-    # ===== 本命 + 用神 =====
-    result = analyze_basic(birth_dt)
+    # ===== 完整分析（使用新的 analyze_complete 函数） =====
+    complete_result = analyze_complete(birth_dt, is_male, max_dayun=8)
+    result = complete_result["natal"]  # 原局数据
+    luck = complete_result["luck"]  # 大运/流年数据
+    turning_points = complete_result["turning_points"]  # 转折点
     bazi = result["bazi"]
 
     print("\n—— 四柱八字 ——")
@@ -636,8 +639,11 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             for line in lines:
                 print(line)
 
-    # 六亲助力：只输出用神十神大类
+    # 六亲助力：只输出用神十神大类（从结构化结果读取）
     print("\n—— 六亲助力 ——")
+    
+    # 从结构化结果读取 liuqin_zhuli
+    liuqin_traits = result.get("liuqin_zhuli", [])
     
     def _get_liuqin_source(group: str, detail: List[Dict[str, Any]], total_percent: float, is_male: bool) -> str:
         """获取六亲助力的来源清单"""
@@ -892,8 +898,11 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
     print("\n—— 用神信息 ——")
     yong = result["yongshen_elements"]
     yong_str = "、".join(yong)
-    marriage_suggestion = _generate_marriage_suggestion(yong)
-    print(f"用神五行（候选）： {yong_str} {marriage_suggestion}")
+    marriage_suggestion = result.get("marriage_suggestion", "")  # 从结构化结果读取
+    if marriage_suggestion:
+        print(f"用神五行（候选）： {yong_str} {marriage_suggestion}")
+    else:
+        print(f"用神五行（候选）： {yong_str}")
     
     # 用神（五行→十神）
     yong_ss = result.get("yongshen_shishen") or []
@@ -1168,6 +1177,116 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         for issue in issues:
             print(issue)
     
+    # ===== 大运转折点汇总 =====
+    # 使用 analyze_complete 返回的 turning_points（已结构化，无需重复计算）
+    # 打印大运转折点汇总
+    print("\n— 大运转折点 —")
+    if turning_points:
+        for tp in turning_points:
+            print(f"{tp['year']} 年：{tp['from_state']} → {tp['to_state']}（{tp['change_type']}）")
+    else:
+        print("无转折点")
+    
+    # ===== 用神互换区间汇总 =====
+    # 收集用神互换信息（复用现有判断逻辑）
+    from .yongshen_swap import should_print_yongshen_swap_hint
+    
+    # 获取 strength_percent 和 support_percent（从 result 中获取）
+    strength_percent_for_swap = result.get("strength_percent", 50.0)
+    support_percent_for_swap = result.get("support_percent", 0.0)
+    
+    swap_events: List[Dict[str, Any]] = []
+    for idx, group in enumerate(luck["groups"]):
+        dy = group["dayun"]
+        dayun_zhi = dy.get("zhi", "")
+        start_year = dy.get("start_year")
+        
+        # 复用现有的互换判断逻辑
+        hint_info = should_print_yongshen_swap_hint(
+            day_gan=day_gan,
+            strength_percent=strength_percent_for_swap,
+            support_percent=support_percent_for_swap,
+            yongshen_elements=yong,
+            dayun_zhi=dayun_zhi,
+        )
+        
+        if hint_info:
+            # 获取下一步大运的起运年份（用于计算区间终点）
+            next_start_year = None
+            if idx + 1 < len(luck["groups"]):
+                next_dy = luck["groups"][idx + 1]["dayun"]
+                next_start_year = next_dy.get("start_year")
+            
+            swap_events.append({
+                "start_year": start_year,
+                "next_start_year": next_start_year,
+                "target_industry": hint_info.get("target_industry", ""),  # 例如 "金、水" 或 "木、火"
+            })
+    
+    # 合并连续触发的大运成区间
+    merged_intervals: List[Dict[str, Any]] = []
+    if swap_events:
+        # 按顺序遍历，合并连续触发的大运
+        current_interval_start = None
+        current_interval_target = None
+        last_swap_event = None
+        
+        for swap in swap_events:
+            if current_interval_start is None:
+                # 开始新区间
+                current_interval_start = swap["start_year"]
+                current_interval_target = swap["target_industry"]
+                last_swap_event = swap
+            else:
+                # 检查是否连续（当前大运的起运年应该等于前一个大运的下一步起运年）
+                if last_swap_event["next_start_year"] and swap["start_year"] == last_swap_event["next_start_year"]:
+                    # 连续触发，继续当前区间
+                    last_swap_event = swap
+                else:
+                    # 不连续，结束当前区间，开始新区间
+                    # 计算当前区间的终点
+                    end_year = None
+                    if last_swap_event["next_start_year"]:
+                        end_year = last_swap_event["next_start_year"] - 1
+                    else:
+                        # 最后一步大运，使用 start_year + 9 兜底
+                        end_year = last_swap_event["start_year"] + 9
+                    
+                    merged_intervals.append({
+                        "start_year": current_interval_start,
+                        "end_year": end_year,
+                        "target_industry": current_interval_target,
+                    })
+                    
+                    # 开始新区间
+                    current_interval_start = swap["start_year"]
+                    current_interval_target = swap["target_industry"]
+                    last_swap_event = swap
+        
+        # 处理最后一个区间
+        if current_interval_start is not None:
+            end_year = None
+            if last_swap_event["next_start_year"]:
+                end_year = last_swap_event["next_start_year"] - 1
+            else:
+                # 最后一步大运，使用 start_year + 9 兜底
+                end_year = last_swap_event["start_year"] + 9
+            
+            merged_intervals.append({
+                "start_year": current_interval_start,
+                "end_year": end_year,
+                "target_industry": current_interval_target,
+            })
+    
+    # 打印用神互换区间汇总（只有当存在至少一段触发区间时才打印）
+    if merged_intervals:
+        print("\n— 用神互换 —")
+        for interval in merged_intervals:
+            start_year = interval["start_year"]
+            end_year = interval["end_year"]
+            target_industry = interval["target_industry"]
+            print(f"{start_year}-{end_year}年：{target_industry}")
+    
     # ===== 婚恋结构提示 =====
     from .shishen import get_shishen, get_branch_main_gan, get_shishen_label, get_branch_shishen
     
@@ -1269,7 +1388,7 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         print(hint_line)
 
     # ===== 大运 / 流年 运势 + 冲信息 =====
-    luck = analyze_luck(birth_dt, is_male, yongshen_elements=yong, max_dayun=8)
+    # 使用 analyze_complete 返回的 luck 数据（已结构化）
 
     print("\n======== 大运 & 流年（按大运分组） ========\n")
 
@@ -1277,11 +1396,22 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
     support_percent = result.get("support_percent", 0.0)
     strength_percent = result.get("strength_percent", 50.0)
     day_gan = bazi["day"]["gan"]
+    
+    # 用于标记“转折点大运”（只看大运地支的好运/一般变化）
+    prev_dayun_zhi_good: Optional[bool] = None
 
+    # ===== 打印所有大运信息 =====
     for group in luck["groups"]:
         dy = group["dayun"]
         lns = group["liunian"]
 
+        # 初始化缓冲区
+        header_lines: List[str] = []
+        fact_lines: List[str] = []
+        axis_lines: List[str] = []  # 主轴/天干区（原tone_lines）
+        tip_lines: List[str] = []
+
+        # ===== Header =====
         # 大运判词：用神=好运，非用神=一般
         if dy.get("zhi_good", False):
             label = "好运"
@@ -1290,29 +1420,31 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         gan_flag = "✓" if dy["gan_good"] else "×"
         zhi_flag = "✓" if dy["zhi_good"] else "×"
 
-        print(
+        header_lines.append(
             f"【大运 {dy['index'] + 1}】 {dy['gan']}{dy['zhi']} "
             f"(起运年份 {dy['start_year']}, 虚龄 {dy['start_age']} 岁) → {label}  "
             f"[干 {dy['gan_element'] or '-'} {gan_flag} / "
             f"支 {dy['zhi_element'] or '-'} {zhi_flag}]"
         )
         
-        # ===== 用神互换提示（只打印，不影响计算） =====
-        from .yongshen_swap import should_print_yongshen_swap_hint, format_yongshen_swap_hint
-        
+        # ===== 大运十神打印（方案A结构层级） =====
+        dayun_gan = dy.get("gan", "")
         dayun_zhi = dy.get("zhi", "")
-        hint_info = should_print_yongshen_swap_hint(
-            day_gan=day_gan,
-            strength_percent=strength_percent,
-            support_percent=support_percent,
-            yongshen_elements=yong,
-            dayun_zhi=dayun_zhi,
-        )
-        if hint_info:
-            hint_line = format_yongshen_swap_hint(hint_info)
-            print(f"    {hint_line}")
         
-        # 大运六合（只解释，不计分）
+        # 计算大运天干十神和用神
+        dayun_gan_shishen = get_shishen(day_gan, dayun_gan) if dayun_gan else None
+        dayun_gan_element = dy.get("gan_element", "")
+        dayun_gan_yongshen = dayun_gan_element in yongshen_elements if dayun_gan_element else False
+        dayun_gan_label = get_shishen_label(dayun_gan_shishen, dayun_gan_yongshen) if dayun_gan_shishen else ""
+        
+        # 计算大运地支主气十神和用神
+        dayun_zhi_main_gan = get_branch_main_gan(dayun_zhi) if dayun_zhi else None
+        dayun_zhi_shishen = get_shishen(day_gan, dayun_zhi_main_gan) if dayun_zhi_main_gan else None
+        dayun_zhi_element = dy.get("zhi_element", "")
+        dayun_zhi_yongshen = dayun_zhi_element in yongshen_elements if dayun_zhi_element else False
+        dayun_zhi_label = get_shishen_label(dayun_zhi_shishen, dayun_zhi_yongshen) if dayun_zhi_shishen else ""
+        
+        # ===== 事实区：大运六合（只解释，不计分） =====
         dayun_liuhe_lines = []
         dayun_banhe_lines = []
         for ev in dy.get("harmonies_natal", []) or []:
@@ -1337,12 +1469,12 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                     dayun_banhe_lines.append(line)
         if dayun_liuhe_lines:
             for line in sorted(set(dayun_liuhe_lines)):
-                print(line)
+                fact_lines.append(line)
         if dayun_banhe_lines:
             for line in sorted(set(dayun_banhe_lines)):
-                print(line)
+                fact_lines.append(line)
         
-        # 大运完整三合局
+        # ===== 事实区：大运完整三合局 =====
         for ev in dy.get("sanhe_complete", []) or []:
             if ev.get("subtype") != "sanhe":
                 continue
@@ -1386,9 +1518,9 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             
             # 用逗号连接各部分
             result = "，".join(parts)
-            print(f"    {result}。")
+            fact_lines.append(f"    {result}。")
         
-        # 大运完整三会局
+        # ===== 事实区：大运完整三会局 =====
         for ev in dy.get("sanhui_complete", []) or []:
             if ev.get("subtype") != "sanhui":
                 continue
@@ -1398,11 +1530,6 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             
             # 构建输出句子
             parts = []
-            
-            # 开头：大运信息
-            dayun_index = ev.get("dayun_index")
-            if dayun_index is not None:
-                parts.append(f"大运{dayun_index + 1}")
             
             # 按三会局的顺序列出每个字的来源
             matched_branches = ev.get("matched_branches", [])
@@ -1435,13 +1562,14 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             
             # 用空格连接各部分（按regression格式）
             result = " ".join(parts)
-            print(f"    {result}。")
+            fact_lines.append(f"    {result}。")
         
-        # ===== 大运天干五合（只识别+打印，不影响风险） =====
+        # ===== 事实区：大运天干五合（只识别+打印，不影响风险） =====
         dayun_gan = dy.get("gan", "")
         if dayun_gan:
+            from .gan_wuhe import GanPosition, detect_gan_wuhe, format_gan_wuhe_event
             dayun_shishen = get_shishen(day_gan, dayun_gan) or "-"
-            # 大运入口使用"年干"格式（不是"年柱天干"），且本行不再重复打印“大运6，庚辰大运”
+            # 大运入口使用"年干"格式（不是"年柱天干"），且本行不再重复打印"大运6，庚辰大运"
             dayun_gan_positions = []
             pillar_labels_dayun = {"year": "年干", "month": "月干", "day": "日干", "hour": "时干"}
             for pillar in ["year", "month", "day", "hour"]:
@@ -1465,11 +1593,75 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                     # 只打印涉及大运天干的五合
                     dayun_involved = any(pos.source == "dayun" for pos in ev["many_side"] + ev["few_side"])
                     if dayun_involved:
-                        # 行内只保留“年干，月干，时干 乙 争合 大运天干 庚 ...”
+                        # 行内只保留"年干，月干，时干 乙 争合 大运天干 庚 ..."
                         line = format_gan_wuhe_event(ev, incoming_shishen=dayun_shishen)
-                        print(f"    {line}")
+                        fact_lines.append(f"    {line}")
         
-        # ===== 天干五合争合/双合婚恋提醒（大运层） =====
+        # ===== 事实区：大运本身与命局的冲 =====
+        for ev in dy.get("clashes_natal", []):
+            if not ev:
+                continue
+            fact_lines.append("    命局冲（大运）：" + _format_clash_natal(ev))
+            
+            # 打印大运与命局天克地冲详细信息
+            tkdc_targets = ev.get("tkdc_targets", [])
+            if tkdc_targets:
+                from .config import PILLAR_PALACE
+                flow_branch = ev.get("flow_branch", "")
+                flow_gan = ev.get("flow_gan", "")
+                for target in tkdc_targets:
+                    target_pillar = target.get("pillar", "")
+                    target_gan = target.get("target_gan", "")
+                    palace = PILLAR_PALACE.get(target_pillar, target_pillar)
+                    pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
+                    fact_lines.append(f"    天克地冲：大运 {flow_gan}{flow_branch} 与 命局{pillar_name}（{palace}）{target_gan}{ev.get('target_branch', '')} 天克地冲")
+        
+        # ===== 主轴区：大运主轴（地支定调） =====
+        axis_lines.append("    大运主轴（地支定调）：")
+        dayun_zhi_yongshen_str = "是" if dayun_zhi_yongshen else "否"
+        if dayun_zhi_shishen:
+            dayun_zhi_label_str = f"｜标签：{dayun_zhi_label}" if dayun_zhi_label else ""
+            axis_lines.append(f"    地支 {dayun_zhi}｜十神 {dayun_zhi_shishen}｜用神 {dayun_zhi_yongshen_str}{dayun_zhi_label_str}")
+        else:
+            axis_lines.append(f"    地支 {dayun_zhi}｜十神 -｜用神 {dayun_zhi_yongshen_str}")
+        
+        # ===== 主轴区：天干补充（不翻盘） =====
+        axis_lines.append("    天干补充（不翻盘）：")
+        dayun_gan_yongshen_str = "是" if dayun_gan_yongshen else "否"
+        if dayun_gan_shishen:
+            dayun_gan_label_str = f"｜标签：{dayun_gan_label}" if dayun_gan_label else ""
+            axis_lines.append(f"    天干 {dayun_gan}｜十神 {dayun_gan_shishen}｜用神 {dayun_gan_yongshen_str}{dayun_gan_label_str}")
+        else:
+            axis_lines.append(f"    天干 {dayun_gan}｜十神 -｜用神 {dayun_gan_yongshen_str}")
+
+        # ===== 提示汇总区：转折点 =====
+        current_zhi_good = dy.get("zhi_good", False)
+        if prev_dayun_zhi_good is not None and prev_dayun_zhi_good != current_zhi_good:
+            start_year = dy.get("start_year")
+            if prev_dayun_zhi_good and not current_zhi_good:
+                from_state, to_state, change_type = "好运", "一般", "转弱"
+            else:
+                from_state, to_state, change_type = "一般", "好运", "转好"
+            tip_lines.append(f"    这是大运转折点：{start_year} 年：{from_state} → {to_state}（{change_type}）")
+        prev_dayun_zhi_good = current_zhi_good
+        
+        # ===== 提示汇总区：用神互换提示（只打印，不影响计算） =====
+        from .yongshen_swap import should_print_yongshen_swap_hint, format_yongshen_swap_hint
+        
+        dayun_zhi = dy.get("zhi", "")
+        hint_info = should_print_yongshen_swap_hint(
+            day_gan=day_gan,
+            strength_percent=strength_percent,
+            support_percent=support_percent,
+            yongshen_elements=yong,
+            dayun_zhi=dayun_zhi,
+        )
+        if hint_info:
+            hint_line = format_yongshen_swap_hint(hint_info)
+            tip_lines.append(f"    {hint_line}")
+        
+        # ===== 提示汇总区：天干五合争合/双合婚恋提醒（大运层） =====
+        from .marriage_wuhe import detect_marriage_wuhe_hints
         # 收集大运层天干：原局四柱天干 + 当前大运天干
         dayun_layer_gans = [
             bazi["year"]["gan"],
@@ -1484,26 +1676,20 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         
         dayun_wuhe_hints = detect_marriage_wuhe_hints(dayun_layer_gans, day_gan, is_male, trigger_gans=trigger_gans_dayun)
         for hint in dayun_wuhe_hints:
-            print(f"    婚恋变化提醒（如恋爱）：{hint['hint_text']}")
+            tip_lines.append(f"    婚恋变化提醒（如恋爱）：{hint['hint_text']}")
         
-        # 大运本身与命局的冲
-        for ev in dy.get("clashes_natal", []):
-            if not ev:
-                continue
-            print("    命局冲（大运）：", _format_clash_natal(ev))
-            
-            # 打印大运与命局天克地冲详细信息
-            tkdc_targets = ev.get("tkdc_targets", [])
-            if tkdc_targets:
-                from .config import PILLAR_PALACE
-                flow_branch = ev.get("flow_branch", "")
-                flow_gan = ev.get("flow_gan", "")
-                for target in tkdc_targets:
-                    target_pillar = target.get("pillar", "")
-                    target_gan = target.get("target_gan", "")
-                    palace = PILLAR_PALACE.get(target_pillar, target_pillar)
-                    pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
-                    print(f"      天克地冲：大运 {flow_gan}{flow_branch} 与 命局{pillar_name}（{palace}）{target_gan}{ev.get('target_branch', '')} 天克地冲")
+        # ===== 按顺序打印所有内容 =====
+        for line in header_lines:
+            print(line)
+        for line in fact_lines:
+            print(line)
+        # 分隔线（在事实区之后、主轴区之前）
+        if fact_lines:  # 如果事实区有内容，打印分隔线
+            print("    ——————————")
+        for line in axis_lines:
+            print(line)
+        for line in tip_lines:
+            print(line)
 
         # 该大运下面的十个流年
         print("    —— 该大运对应的流年 ——")
@@ -1533,6 +1719,10 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             # 跟踪合类引动和冲类感情标志（用于组合提示）
             has_love_merge = False  # 是否出现婚姻宫/夫妻宫的合引动提示
             has_love_clash = False  # 是否出现婚姻宫/夫妻宫的冲摘要
+            has_liuyuan = False  # 是否出现流年财官杀缘分提示（新增）
+            
+            # 提示汇总列表（新增）
+            hints_summary = []
             
             for ev in ln.get("harmonies_natal", []) or []:
                 if ev.get("type") != "branch_harmony":
@@ -1569,13 +1759,13 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                     if key not in seen_lines:
                         seen_lines[key] = palace
                 
-                # 按行文本排序后打印
+                # 按行文本排序后打印（事件行，不打印提示）
                 sorted_items = sorted(seen_lines.items(), key=lambda x: x[0])
                 for (line, _), palace in sorted_items:
                     print(line)
-                    # 如果是婚姻宫或夫妻宫，且该宫位尚未提示过，则追加提示行
+                    # 如果是婚姻宫或夫妻宫，且该宫位尚未提示过，则收集到提示汇总
                     if palace in ("婚姻宫", "夫妻宫") and palace not in hinted_palaces:
-                        print(f"        提示：{palace}引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）")
+                        hints_summary.append(f"提示：{palace}引动（单身：更容易出现暧昧/推进；有伴侣：关系推进或波动）")
                         hinted_palaces.add(palace)
                         has_love_merge = True  # 标记出现了合类引动
             
@@ -1667,11 +1857,22 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                 result = " ".join(parts)
                 print(f"        {result}。")
             
-            # ===== 流年天干五合（只识别+打印，不影响风险） =====
+            # 先计算流年天干和地支十神（用于缘分提示判断和十神行打印）
             liunian_gan = ln.get("gan", "")
+            liunian_zhi = ln.get("zhi", "")
+            gan_shishen = get_shishen(day_gan, liunian_gan) if liunian_gan else None
+            gan_element = ln.get("gan_element", "")
+            is_gan_yongshen = gan_element in yongshen_elements if gan_element else False
+            
+            zhi_main_gan = get_branch_main_gan(liunian_zhi) if liunian_zhi else None
+            zhi_shishen = get_shishen(day_gan, zhi_main_gan) if zhi_main_gan else None
+            zhi_element = ln.get("zhi_element", "")
+            is_zhi_yongshen = zhi_element in yongshen_elements if zhi_element else False
+            
+            # ===== 流年天干五合（只识别+打印，不影响风险） =====
             if liunian_gan:
-                liunian_shishen = get_shishen(day_gan, liunian_gan) or "-"
-                # 流年入口使用"年干"格式（不是"年柱天干"），本行不再重复打印“2050年”等年份
+                liunian_shishen = gan_shishen or "-"
+                # 流年入口使用"年干"格式（不是"年柱天干"），本行不再重复打印"2050年"等年份
                 liunian_gan_positions = []
                 pillar_labels_liunian = {"year": "年干", "month": "月干", "day": "日干", "hour": "时干"}
                 for pillar in ["year", "month", "day", "hour"]:
@@ -1718,6 +1919,7 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                 bazi["day"]["gan"],
                 bazi["hour"]["gan"],
             ]
+            dayun_gan = dy.get("gan", "")
             if dayun_gan:
                 liunian_layer_gans.append(dayun_gan)
             if liunian_gan:
@@ -1730,8 +1932,7 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                 trigger_gans_liunian.append(liunian_gan)  # 只检查流年天干引动
             
             liunian_wuhe_hints = detect_marriage_wuhe_hints(liunian_layer_gans, day_gan, is_male, trigger_gans=trigger_gans_liunian)
-            for hint in liunian_wuhe_hints:
-                print(f"        婚恋变化提醒（如恋爱）：{hint['hint_text']}")
+            # 注意：婚恋变化提醒已移动到提示汇总区，这里不再打印
             
             # ===== 冲摘要（流年地支冲命局宫位） =====
             # 允许进入摘要的宫位集合（匹配PILLAR_PALACE中的值）
@@ -1796,10 +1997,9 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                     palace_str = "/".join(sorted_palaces)
                     print(f"        冲：{clash_name}（{palace_str}）")
             
-            # 打印识别提示
-            # 先打印感情提示（如果命中婚姻宫或夫妻宫）
+            # 收集感情提示到提示汇总（如果命中婚姻宫或夫妻宫）
             if "婚姻宫" in clash_palaces_hit or "夫妻宫" in clash_palaces_hit:
-                print("        提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）")
+                hints_summary.append("提示：感情（单身：更易暧昧/受阻；有伴侣：争执起伏）")
                 has_love_clash = True  # 标记出现了冲类感情
             
             # 检查是否命中时柱天克地冲（用于决定是否替换家庭变动提示）
@@ -1825,13 +2025,9 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                 if has_hour_tkdc:
                     break
             
-            # 再打印家庭变动提示（如果命中事业家庭宫，且未命中时柱天克地冲）
+            # 收集家庭变动提示到提示汇总（如果命中事业家庭宫，且未命中时柱天克地冲）
             if "事业家庭宫" in clash_palaces_hit and not has_hour_tkdc:
-                print("        提示：家庭变动（搬家/换工作/家庭节奏变化）")
-            
-            # 组合提示：当同一年内同时满足合类引动和冲类感情时
-            if has_love_merge and has_love_clash:
-                print("        提示：感情线合冲同现（进展易受阻/反复拉扯/不宜急定）")
+                hints_summary.append("提示：家庭变动（搬家/换工作/家庭节奏变化）")
             
             # ===== 运年天克地冲摘要 =====
             # 检查运年相冲中的天克地冲
@@ -1846,17 +2042,50 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                     dayun_ganzhi = f"{dayun_gan}{dayun_branch}"
                     liunian_ganzhi = f"{liunian_gan}{liunian_branch}"
                     print(f"        天克地冲：大运 {dayun_ganzhi} ↔ 流年 {liunian_ganzhi}")
-                    print("        提示：运年天克地冲（家人去世/生活环境变化剧烈，如出国上学打工）")
+                    hints_summary.append("提示：运年天克地冲（家人去世/生活环境变化剧烈，如出国上学打工）")
                     break  # 每年只打印一次
             
             # ===== 时柱天克地冲摘要 =====
-            # 如果命中时柱天克地冲，打印强提示
+            # 如果命中时柱天克地冲，打印事件行，收集提示到提示汇总
             if has_hour_tkdc and hour_tkdc_info:
                 print(f"        天克地冲：流年 {hour_tkdc_info['liunian_ganzhi']} ↔ 时柱 {hour_tkdc_info['hour_ganzhi']}")
-                print("        提示：事业家庭宫天克地冲（着重注意工作变动/有可能搬家）")
+                hints_summary.append("提示：事业家庭宫天克地冲（工作变动概率上升/可能出现搬家窗口）")
+            
+            # 收集婚恋变化提醒到提示汇总（流年层）
+            for hint in liunian_wuhe_hints:
+                hints_summary.append(f"婚恋变化提醒（如恋爱）：{hint['hint_text']}")
+            
+            # 新增：流年"财官杀缘分"提示
+            if is_male:
+                # 男命：看财星（正财/偏财）
+                if gan_shishen and gan_shishen in ("正财", "偏财"):
+                    hints_summary.append("提示：缘分（天干）：暧昧推进")
+                    has_liuyuan = True
+                if zhi_shishen and zhi_shishen in ("正财", "偏财"):
+                    hints_summary.append("提示：缘分（地支）：易遇合适伴侣（良缘）")
+                    has_liuyuan = True
+            else:
+                # 女命：看官杀（正官/七杀）
+                if gan_shishen and gan_shishen in ("正官", "七杀"):
+                    hints_summary.append("提示：缘分（天干）：暧昧推进")
+                    has_liuyuan = True
+                if zhi_shishen and zhi_shishen in ("正官", "七杀"):
+                    hints_summary.append("提示：缘分（地支）：易遇合适伴侣（良缘）")
+                    has_liuyuan = True
+            
+            # 组合提示：当同一年内同时满足 has_love_clash && (has_love_merge || has_liuyuan)
+            if has_love_clash and (has_love_merge or has_liuyuan):
+                hints_summary.append("提示：感情线合冲同现（进展易受阻/反复拉扯；仓促定论的稳定性更低）")
             
             # 事件区结束后固定只留 1 个空行
             print()
+            
+            # ===== 提示汇总区（新增） =====
+            if hints_summary:
+                print("        提示汇总：")
+                for hint in hints_summary:
+                    print(f"        - {hint}")
+                print()
             
             # ===== 危险系数块（新格式） =====
             total_risk = ln.get("total_risk_percent", 0.0)
@@ -1864,56 +2093,33 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             risk_from_zhi = ln.get("risk_from_zhi", 0.0)
             tkdc_risk = ln.get("tkdc_risk_percent", 0.0)
             
-            # 计算流年天干十神和用神
-            liunian_gan = ln.get("gan", "")
-            gan_shishen = get_shishen(day_gan, liunian_gan) if liunian_gan else None
-            gan_element = ln.get("gan_element", "")
-            is_gan_yongshen = gan_element in yongshen_elements if gan_element else False
+            # 获取标签（已在上面计算过）
             gan_label = get_shishen_label(gan_shishen, is_gan_yongshen) if gan_shishen else ""
-            
-            # 计算流年地支主气十神和用神
-            liunian_zhi = ln.get("zhi", "")
-            zhi_main_gan = get_branch_main_gan(liunian_zhi) if liunian_zhi else None
-            zhi_shishen = get_shishen(day_gan, zhi_main_gan) if zhi_main_gan else None
-            zhi_element = ln.get("zhi_element", "")
-            is_zhi_yongshen = zhi_element in yongshen_elements if zhi_element else False
             zhi_label = get_shishen_label(zhi_shishen, is_zhi_yongshen) if zhi_shishen else ""
             
             # 打印总危险系数（带分隔线）
             print(f"        --- 总危险系数：{total_risk:.1f}% ---")
             
-            # 如果 Y >= 40，打印建议行
+            # 如果 Y >= 40，打印风险管理选项
             if should_print_suggestion:
-                print("        建议：买保险/不投机/守法/不轻易辞职/控制情绪/三思后行")
+                print("        风险管理选项（供参考）：保险/预案；投机回撤风险更高；合规优先；职业变动成本更高；情绪波动时更易误判；重大决定适合拉长周期")
             
-            # 打印天干十神行
+            # 打印天干十神行（移除感情字段）
             gan_yongshen_str = "是" if is_gan_yongshen else "否"
-            # 判断是否需要追加感情字段（天干行）
-            gan_love_str = ""
-            if gan_shishen:
-                if (is_male and gan_shishen in ("正财", "偏财")) or (not is_male and gan_shishen in ("正官", "七杀")):
-                    gan_love_str = "｜感情：暧昧推进"
-            
             if gan_shishen:
                 label_str = f"｜标签：{gan_label}" if gan_label else ""
-                print(f"        天干 {liunian_gan}｜十神 {gan_shishen}｜用神 {gan_yongshen_str}{label_str}{gan_love_str}")
+                print(f"        天干 {liunian_gan}｜十神 {gan_shishen}｜用神 {gan_yongshen_str}{label_str}")
             else:
                 print(f"        天干 {liunian_gan}｜十神 -｜用神 {gan_yongshen_str}")
             
             # 打印上半年危险系数
             print(f"        - 上半年危险系数（天干引起）：{risk_from_gan:.1f}%")
             
-            # 打印地支十神行
+            # 打印地支十神行（移除感情字段）
             zhi_yongshen_str = "是" if is_zhi_yongshen else "否"
-            # 判断是否需要追加感情字段（地支行）
-            zhi_love_str = ""
-            if zhi_shishen:
-                if (is_male and zhi_shishen in ("正财", "偏财")) or (not is_male and zhi_shishen in ("正官", "七杀")):
-                    zhi_love_str = "｜感情：易遇合适伴侣"
-            
             if zhi_shishen:
                 label_str = f"｜标签：{zhi_label}" if zhi_label else ""
-                print(f"        地支 {liunian_zhi}｜十神 {zhi_shishen}｜用神 {zhi_yongshen_str}{label_str}{zhi_love_str}")
+                print(f"        地支 {liunian_zhi}｜十神 {zhi_shishen}｜用神 {zhi_yongshen_str}{label_str}")
             else:
                 print(f"        地支 {liunian_zhi}｜十神 -｜用神 {zhi_yongshen_str}")
             

@@ -84,13 +84,13 @@ def format_yongshen_swap_hint(hint_info: Dict[str, Any]) -> str:
     """格式化用神互换提示字符串。
     
     格式：
-    【用神互换提示】原局用神：{原局全部用神五行}；{身弱/身强}；生扶力量={xx%}；运支={地支}(火/水) → 可从事：{目标五行}行业。注意转行，工作变动。
+    【用神互换提示】原局用神：{原局全部用神五行}；{身弱/身强}；生扶力量={xx%}；运支={地支}(火/水) → 更匹配的行业方向：{目标五行}。职业路径上更可能出现调整/变动窗口。
     """
     return (
         f"【用神互换提示】原局用神：{hint_info['yongshen_list']}；"
         f"{hint_info['shen_status']}；"
         f"生扶力量={hint_info['support_percent']:.0f}%；"
         f"运支={hint_info['dayun_zhi']}({hint_info['yun_type']}) → "
-        f"可从事：{hint_info['target_industry']}行业。注意转行，工作变动。"
+        f"更匹配的行业方向：{hint_info['target_industry']}。职业路径上更可能出现调整/变动窗口。"
     )
 
