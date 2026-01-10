@@ -1200,7 +1200,11 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
     
     swap_events: List[Dict[str, Any]] = []
     for idx, group in enumerate(luck["groups"]):
-        dy = group["dayun"]
+        dy = group.get("dayun")
+        # 大运开始之前的流年组，dayun 为 None，跳过互换判断
+        if dy is None:
+            continue
+        
         dayun_zhi = dy.get("zhi", "")
         start_year = dy.get("start_year")
         
@@ -1217,8 +1221,10 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             # 获取下一步大运的起运年份（用于计算区间终点）
             next_start_year = None
             if idx + 1 < len(luck["groups"]):
-                next_dy = luck["groups"][idx + 1]["dayun"]
-                next_start_year = next_dy.get("start_year")
+                next_group = luck["groups"][idx + 1]
+                next_dy = next_group.get("dayun")
+                if next_dy:
+                    next_start_year = next_dy.get("start_year")
             
             swap_events.append({
                 "start_year": start_year,
@@ -1398,8 +1404,8 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
 
     # ===== 打印所有大运信息 =====
     for group in luck["groups"]:
-        dy = group["dayun"]
-        lns = group["liunian"]
+        dy = group.get("dayun")
+        lns = group.get("liunian", [])
 
         # 初始化缓冲区
         header_lines: List[str] = []
@@ -1407,7 +1413,283 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         axis_lines: List[str] = []  # 主轴/天干区（原tone_lines）
         tip_lines: List[str] = []
 
+        # ===== 处理大运开始之前的流年 =====
+        if dy is None:
+            # 大运开始之前，只打印流年，不打印大运信息
+            print("    —— 大运开始之前的流年 ——")
+            for ln in lns:
+                # 计算年度标题行（新逻辑）
+                total_risk = ln.get("total_risk_percent", 0.0)
+                risk_from_gan = ln.get("risk_from_gan", 0.0)
+                risk_from_zhi = ln.get("risk_from_zhi", 0.0)
+                gan_element = ln.get("gan_element", "")
+                zhi_element = ln.get("zhi_element", "")
+                is_gan_yongshen = gan_element in yongshen_elements if gan_element else False
+                is_zhi_yongshen = zhi_element in yongshen_elements if zhi_element else False
+                
+                title_line, should_print_suggestion = _calc_year_title_line(
+                    total_risk, risk_from_gan, risk_from_zhi,
+                    is_gan_yongshen, is_zhi_yongshen
+                )
+                
+                print(
+                    f"    {ln['year']} 年 {ln['gan']}{ln['zhi']}（虚龄 {ln['age']} 岁）：{title_line}"
+                )
+                
+                # 打印流年事件（与大运下的流年相同的逻辑，但没有大运相关信息）
+                # 流年六合 / 半合
+                liunian_lines = []
+                for ev in ln.get("harmonies_natal", []) or []:
+                    if ev.get("type") != "branch_harmony":
+                        continue
+                    subtype = ev.get("subtype")
+                    if subtype not in ("liuhe", "banhe"):
+                        continue
+                    flow_branch = ev.get("flow_branch", ln.get("zhi", ""))
+                    for t in ev.get("targets", []):
+                        palace = t.get("palace", "")
+                        target_branch = t.get("target_branch", "")
+                        if not palace or not target_branch:
+                            continue
+                        if subtype == "liuhe":
+                            pair_str = f"{flow_branch}{target_branch}合"
+                            line = f"        流年和{palace}合（{pair_str}）"
+                        else:
+                            matched = ev.get("matched_branches", [])
+                            if len(matched) >= 2:
+                                pair_str = f"{matched[0]}{matched[1]}半合"
+                            else:
+                                pair_str = f"{flow_branch}{target_branch}半合"
+                            line = f"        流年 与 {palace} 半合（{pair_str}）"
+                        liunian_lines.append((line, palace))
+                
+                if liunian_lines:
+                    seen_lines = {}
+                    for line, palace in liunian_lines:
+                        key = (line, palace)
+                        if key not in seen_lines:
+                            seen_lines[key] = palace
+                    sorted_items = sorted(seen_lines.items(), key=lambda x: x[0])
+                    for (line, _), palace in sorted_items:
+                        print(line)
+                
+                # 流年完整三合局（没有大运参与）
+                for ev in ln.get("sanhe_complete", []) or []:
+                    if ev.get("subtype") != "sanhe":
+                        continue
+                    sources = ev.get("sources", [])
+                    if not sources:
+                        continue
+                    parts = []
+                    matched_branches = ev.get("matched_branches", [])
+                    for zhi in matched_branches:
+                        zhi_sources = [s for s in sources if s.get("zhi") == zhi]
+                        zhi_parts = []
+                        for src in zhi_sources:
+                            src_type = src.get("source_type")
+                            if src_type == "liunian":
+                                zhi_parts.append(f"流年 {zhi}")
+                            elif src_type == "natal":
+                                pillar_name = src.get("pillar_name", "")
+                                palace = src.get("palace", "")
+                                if pillar_name and palace:
+                                    zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
+                                elif pillar_name:
+                                    zhi_parts.append(f"{pillar_name}{zhi}")
+                        if zhi_parts:
+                            for zp in zhi_parts:
+                                parts.append(zp)
+                    group = ev.get("group", "")
+                    matched_str = "".join(matched_branches)
+                    parts.append(f"{matched_str}三合{group}")
+                    result = "，".join(parts)
+                    print(f"        {result}。")
+                
+                # 流年完整三会局（没有大运参与）
+                for ev in ln.get("sanhui_complete", []) or []:
+                    if ev.get("subtype") != "sanhui":
+                        continue
+                    sources = ev.get("sources", [])
+                    if not sources:
+                        continue
+                    parts = []
+                    matched_branches = ev.get("matched_branches", [])
+                    for zhi in matched_branches:
+                        zhi_sources = [s for s in sources if s.get("zhi") == zhi]
+                        zhi_parts = []
+                        for src in zhi_sources:
+                            src_type = src.get("source_type")
+                            if src_type == "liunian":
+                                zhi_parts.append(f"流年 {zhi}")
+                            elif src_type == "natal":
+                                pillar_name = src.get("pillar_name", "")
+                                palace = src.get("palace", "")
+                                if pillar_name and palace:
+                                    zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
+                                elif pillar_name:
+                                    zhi_parts.append(f"{pillar_name}{zhi}")
+                        if zhi_parts:
+                            for zp in zhi_parts:
+                                parts.append(zp)
+                    group = ev.get("group", "")
+                    matched_str = "".join(matched_branches)
+                    parts.append(f"{matched_str}三会{group.replace('会', '局')}")
+                    result = " ".join(parts)
+                    print(f"        {result}。")
+                
+                # 流年天干五合（没有大运参与）
+                liunian_gan = ln.get("gan", "")
+                if liunian_gan:
+                    from .gan_wuhe import GanPosition, detect_gan_wuhe, format_gan_wuhe_event
+                    gan_shishen = get_shishen(day_gan, liunian_gan) if liunian_gan else None
+                    liunian_shishen = gan_shishen or "-"
+                    liunian_gan_positions = []
+                    pillar_labels_liunian = {"year": "年干", "month": "月干", "day": "日干", "hour": "时干"}
+                    for pillar in ["year", "month", "day", "hour"]:
+                        gan = bazi[pillar]["gan"]
+                        shishen = get_shishen(day_gan, gan) or "-"
+                        liunian_gan_positions.append(GanPosition(
+                            source="natal",
+                            label=pillar_labels_liunian[pillar],
+                            gan=gan,
+                            shishen=shishen
+                        ))
+                    # 大运开始之前，没有大运天干
+                    liunian_gan_positions.append(GanPosition(
+                        source="liunian",
+                        label="流年天干",
+                        gan=liunian_gan,
+                        shishen=liunian_shishen
+                    ))
+                    liunian_wuhe_events = detect_gan_wuhe(liunian_gan_positions)
+                    if liunian_wuhe_events:
+                        for ev in liunian_wuhe_events:
+                            liunian_involved = any(pos.source == "liunian" for pos in ev["many_side"] + ev["few_side"])
+                            if liunian_involved:
+                                line = format_gan_wuhe_event(ev, incoming_shishen=liunian_shishen)
+                                print(f"        {line}")
+                
+                # 冲摘要
+                allowed_palaces = {"婚姻宫", "夫妻宫", "事业家庭宫（工作 / 子女 / 后期家庭）"}
+                palace_name_map = {
+                    "婚姻宫": "婚姻宫",
+                    "夫妻宫": "夫妻宫",
+                    "事业家庭宫（工作 / 子女 / 后期家庭）": "事业家庭宫"
+                }
+                clash_summary_lines = []
+                for ev in ln.get("clashes_natal", []) or []:
+                    if not ev:
+                        continue
+                    flow_branch = ev.get("flow_branch", "")
+                    target_branch = ev.get("target_branch", "")
+                    if not flow_branch or not target_branch:
+                        continue
+                    hit_palaces = []
+                    targets = ev.get("targets", [])
+                    for target in targets:
+                        palace = target.get("palace", "")
+                        if palace in allowed_palaces:
+                            simple_palace = palace_name_map.get(palace, palace)
+                            hit_palaces.append(simple_palace)
+                    if hit_palaces:
+                        palace_order = {"婚姻宫": 0, "夫妻宫": 1, "事业家庭宫": 2}
+                        hit_palaces_sorted = sorted(hit_palaces, key=lambda p: palace_order.get(p, 99))
+                        palace_str = "/".join(hit_palaces_sorted)
+                        clash_name = f"{flow_branch}{target_branch}冲"
+                        clash_summary_lines.append((clash_name, palace_str))
+                
+                if clash_summary_lines:
+                    clash_groups = {}
+                    for clash_name, palace_str in clash_summary_lines:
+                        if clash_name not in clash_groups:
+                            clash_groups[clash_name] = set()
+                        clash_groups[clash_name].add(palace_str)
+                    for clash_name in sorted(clash_groups.keys()):
+                        all_palaces = set()
+                        for palace_str in clash_groups[clash_name]:
+                            all_palaces.update(palace_str.split("/"))
+                        palace_order = {"婚姻宫": 0, "夫妻宫": 1, "事业家庭宫": 2}
+                        sorted_palaces = sorted(all_palaces, key=lambda p: palace_order.get(p, 99))
+                        palace_str = "/".join(sorted_palaces)
+                        print(f"        冲：{clash_name}（{palace_str}）")
+                
+                # 检查时柱天克地冲
+                has_hour_tkdc = False
+                hour_tkdc_info = None
+                for ev_clash in ln.get("clashes_natal", []) or []:
+                    if not ev_clash:
+                        continue
+                    tkdc_targets = ev_clash.get("tkdc_targets", [])
+                    if tkdc_targets:
+                        flow_branch = ev_clash.get("flow_branch", "")
+                        flow_gan = ev_clash.get("flow_gan", "")
+                        for target in tkdc_targets:
+                            if target.get("pillar") == "hour":
+                                has_hour_tkdc = True
+                                target_gan = target.get("target_gan", "")
+                                target_branch = ev_clash.get("target_branch", "")
+                                hour_tkdc_info = {
+                                    "liunian_ganzhi": f"{flow_gan}{flow_branch}",
+                                    "hour_ganzhi": f"{target_gan}{target_branch}"
+                                }
+                                break
+                    if has_hour_tkdc:
+                        break
+                
+                if has_hour_tkdc and hour_tkdc_info:
+                    print(f"        天克地冲：流年 {hour_tkdc_info['liunian_ganzhi']} ↔ 时柱 {hour_tkdc_info['hour_ganzhi']}")
+                
+                print()
+                
+                # 提示汇总区
+                liunian_hints = ln.get("hints", [])
+                if liunian_hints:
+                    print("        提示汇总：")
+                    for hint in liunian_hints:
+                        print(f"        - {hint}")
+                    print()
+                
+                # 危险系数块
+                total_risk = ln.get("total_risk_percent", 0.0)
+                risk_from_gan = ln.get("risk_from_gan", 0.0)
+                risk_from_zhi = ln.get("risk_from_zhi", 0.0)
+                tkdc_risk = ln.get("tkdc_risk_percent", 0.0)
+                
+                liunian_gan = ln.get("gan", "")
+                liunian_zhi = ln.get("zhi", "")
+                gan_shishen = get_shishen(day_gan, liunian_gan) if liunian_gan else None
+                zhi_main_gan = get_branch_main_gan(liunian_zhi) if liunian_zhi else None
+                zhi_shishen = get_shishen(day_gan, zhi_main_gan) if zhi_main_gan else None
+                gan_label = get_shishen_label(gan_shishen, is_gan_yongshen) if gan_shishen else ""
+                zhi_label = get_shishen_label(zhi_shishen, is_zhi_yongshen) if zhi_shishen else ""
+                
+                print(f"        --- 总危险系数：{total_risk:.1f}% ---")
+                
+                gan_yongshen_str = "是" if is_gan_yongshen else "否"
+                if gan_shishen:
+                    label_str = f"｜标签：{gan_label}" if gan_label else ""
+                    print(f"        天干 {liunian_gan}｜十神 {gan_shishen}｜用神 {gan_yongshen_str}{label_str}")
+                else:
+                    print(f"        天干 {liunian_gan}｜十神 -｜用神 {gan_yongshen_str}")
+                
+                zhi_yongshen_str = "是" if is_zhi_yongshen else "否"
+                if zhi_shishen:
+                    label_str = f"｜标签：{zhi_label}" if zhi_label else ""
+                    print(f"        地支 {liunian_zhi}｜十神 {zhi_shishen}｜用神 {zhi_yongshen_str}{label_str}")
+                else:
+                    print(f"        地支 {liunian_zhi}｜十神 -｜用神 {zhi_yongshen_str}")
+                
+                if should_print_suggestion:
+                    print("        建议：买保险/不投机/守法/不轻易辞职/控制情绪/三思后行")
+            
+            # 跳过大运相关打印，继续下一个 group
+            continue
+
         # ===== Header =====
+        # 确保 dy 不为 None（防御性检查，虽然理论上不应该到达这里）
+        if dy is None:
+            continue
+        
         # 大运判词：用神=好运，非用神=一般
         if dy.get("zhi_good", False):
             label = "好运"
@@ -1847,8 +2129,8 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                         gan=gan,
                         shishen=shishen
                     ))
-                # 添加大运天干
-                dayun_gan = dy.get("gan", "")
+                # 添加大运天干（如果存在）
+                dayun_gan = dy.get("gan", "") if dy else None
                 if dayun_gan:
                     dayun_shishen = get_shishen(day_gan, dayun_gan) or "-"
                     liunian_gan_positions.append(GanPosition(

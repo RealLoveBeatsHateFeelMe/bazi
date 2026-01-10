@@ -518,6 +518,457 @@ def analyze_luck(
     dayun_objs = yun.getDaYun()
 
     groups: List[Dict[str, Any]] = []
+    
+    # ===== 大运开始之前的流年处理 =====
+    # 检查第一个大运是否有效（干支不为空）
+    first_valid_dayun_idx = None
+    first_valid_dayun_start_year = None
+    first_dayun = dayun_objs[0] if dayun_objs else None
+    first_dayun_start_year = first_dayun.getStartYear() if first_dayun else None
+    
+    # 找到第一个有效的大运（干支不为空）
+    for idx, dy in enumerate(dayun_objs[:max_dayun]):
+        gz_dy = dy.getGanZhi()
+        gan_dy, zhi_dy = _split_ganzhi(gz_dy)
+        if gan_dy is not None and zhi_dy is not None:
+            first_valid_dayun_idx = idx
+            first_valid_dayun_start_year = dy.getStartYear()
+            break
+    
+    # 生成大运开始之前的流年，有两种情况：
+    # 1. 第一个大运从出生年份开始但被跳过（干支为空），需要生成第一个大运对应的流年
+    # 2. 第一个有效大运的起始年份 > 出生年份，生成出生年份到第一个有效大运起始年份之间的流年
+    should_generate_pre_dayun = False
+    pre_dayun_start_year = birth_dt.year
+    pre_dayun_end_year = None
+    use_first_dayun_liunian = False
+    first_dayun_ln_objs = None
+    
+    if first_dayun_start_year == birth_dt.year and first_dayun:
+        # 情况1：第一个大运从出生年份开始，检查是否会被跳过
+        gz_dy = first_dayun.getGanZhi()
+        gan_dy, zhi_dy = _split_ganzhi(gz_dy)
+        if gan_dy is None or zhi_dy is None:
+            # 第一个大运会被跳过，但第一个大运的流年对象已经包含了这些流年
+            # 直接使用第一个大运的流年对象，而不是自己生成
+            should_generate_pre_dayun = True
+            # 获取第一个大运的流年对象
+            first_dayun_ln_objs = first_dayun.getLiuNian()
+            if first_dayun_ln_objs and len(first_dayun_ln_objs) > 0:
+                # 使用第一个大运的最后一个流年 + 1 作为结束年份
+                pre_dayun_end_year = first_dayun_ln_objs[-1].getYear() + 1
+                # 直接使用第一个大运的流年对象，而不是自己生成
+                # 这样可以确保流年干支与 lunar_python 返回的一致
+                use_first_dayun_liunian = True
+            elif first_valid_dayun_start_year:
+                # 如果没有流年，使用第一个有效大运的起始年份
+                pre_dayun_end_year = first_valid_dayun_start_year
+                use_first_dayun_liunian = False
+            else:
+                # 如果都没有，不生成（这种情况不应该出现）
+                should_generate_pre_dayun = False
+    elif first_valid_dayun_start_year and first_valid_dayun_start_year > birth_dt.year:
+        # 情况2：第一个有效大运的起始年份 > 出生年份
+        should_generate_pre_dayun = True
+        pre_dayun_end_year = first_valid_dayun_start_year
+        use_first_dayun_liunian = False
+    
+    if should_generate_pre_dayun and pre_dayun_end_year:
+        pre_dayun_liunian_list: List[Dict[str, Any]] = []
+        
+        # 准备流年年份列表和干支映射
+        years_to_process: List[int] = []
+        year_ganzhi_map: Dict[int, Tuple[str, str]] = {}  # year -> (gan, zhi)
+        
+        # 如果可以直接使用第一个大运的流年对象，直接使用（确保干支一致）
+        if use_first_dayun_liunian and first_dayun_ln_objs:
+            # 直接使用第一个大运的流年对象
+            for ln_obj in first_dayun_ln_objs:
+                year = ln_obj.getYear()
+                gz_ln = ln_obj.getGanZhi()
+                gan_ln, zhi_ln = _split_ganzhi(gz_ln)
+                if gan_ln is None or zhi_ln is None:
+                    continue
+                years_to_process.append(year)
+                year_ganzhi_map[year] = (gan_ln, zhi_ln)
+        else:
+            # 否则，生成出生年份到 pre_dayun_end_year 之间的流年（不包括 pre_dayun_end_year）
+            # 使用第一个大运的流年对象作为参考，确保干支正确
+            year_ln_map = {}  # year -> ln_obj
+            if first_dayun and first_dayun_start_year == birth_dt.year:
+                first_dayun_ln_objs_temp = first_dayun.getLiuNian()
+                if first_dayun_ln_objs_temp:
+                    for ln_obj_temp in first_dayun_ln_objs_temp:
+                        year_ln_map[ln_obj_temp.getYear()] = ln_obj_temp
+            
+            for year in range(pre_dayun_start_year, pre_dayun_end_year):
+                gan_ln = None
+                zhi_ln = None
+                gz_ln = None
+                
+                # 优先使用第一个大运的流年对象（如果有）
+                if year in year_ln_map:
+                    ln_obj = year_ln_map[year]
+                    gz_ln = ln_obj.getGanZhi()
+                    gan_ln, zhi_ln = _split_ganzhi(gz_ln)
+                    if gan_ln is None or zhi_ln is None:
+                        continue
+                else:
+                    # 否则，自己生成（使用年柱干支）
+                    try:
+                        solar = Solar(year, 1, 1, 0, 0, 0)
+                        lunar = solar.getLunar()
+                        ec_year = lunar.getEightChar()
+                        gan_ln = ec_year.getYearGan()
+                        zhi_ln = ec_year.getYearZhi()
+                    except Exception:
+                        continue
+                    
+                    if not gan_ln or not zhi_ln:
+                        continue
+                    
+                    gz_ln = gan_ln + zhi_ln
+                
+                # 确保所有变量都已设置
+                if gan_ln and zhi_ln and gz_ln:
+                    years_to_process.append(year)
+                    year_ganzhi_map[year] = (gan_ln, zhi_ln)
+        
+        # 遍历所有需要处理的年份，生成流年数据
+        for year in years_to_process:
+            gan_ln, zhi_ln = year_ganzhi_map[year]
+            gz_ln = gan_ln + zhi_ln
+            
+            gan_el_ln = GAN_WUXING.get(gan_ln)
+            zhi_el_ln = ZHI_WUXING.get(zhi_ln)
+            
+            gan_good_ln = bool(gan_el_ln and gan_el_ln in yongshen_elements)
+            zhi_good_ln = bool(zhi_el_ln and zhi_el_ln in yongshen_elements)
+            
+            # 计算虚龄（从出生年份开始计算）
+            age = year - birth_dt.year + 1
+            
+            # 流年支 与 命局地支 的冲（大运开始之前，没有大运，所以没有运年相冲）
+            clash_ln_natal = detect_branch_clash(
+                bazi=bazi,
+                flow_branch=zhi_ln,
+                flow_type="liunian",
+                flow_year=year,
+                flow_label=gz_ln,
+                flow_gan=gan_ln,  # 传入天干用于天克地冲检测
+            )
+            
+            # 流年支 与 命局地支 的刑
+            punishments_ln = detect_branch_punishments(
+                bazi=bazi,
+                flow_branch=zhi_ln,
+                flow_type="liunian",
+                flow_year=year,
+                flow_label=gz_ln,
+            )
+            
+            # 大运开始之前，没有大运，所以没有运年相冲、静态冲/刑激活等
+            clash_dayun_liunian = None
+            static_clash_activation_risk = 0.0
+            static_tkdc_activation_risk_zhi = 0.0
+            static_tkdc_activation_risk_gan = 0.0
+            static_punish_activation_risk = 0.0
+            
+            # 流年支与原局的六合/三合（只解释，不计分）
+            harmonies_ln = detect_flow_harmonies(
+                bazi=bazi,
+                flow_branch=zhi_ln,
+                flow_type="liunian",
+                flow_year=year,
+                flow_label=gz_ln,
+            )
+            
+            # 检测流年+原局的完整三合局（没有大运参与）
+            sanhe_ln = detect_sanhe_complete(
+                bazi=bazi,
+                dayun_branch=None,  # 大运开始之前，没有大运
+                dayun_label=None,
+                dayun_index=None,
+                liunian_branch=zhi_ln,
+                liunian_year=year,
+                liunian_label=gz_ln,
+            )
+            
+            # 检测流年+原局的完整三会局（没有大运参与）
+            sanhui_ln = detect_sanhui_complete(
+                bazi=bazi,
+                dayun_branch=None,  # 大运开始之前，没有大运
+                dayun_label=None,
+                dayun_index=None,
+                liunian_branch=zhi_ln,
+                liunian_year=year,
+                liunian_label=gz_ln,
+            )
+            
+            # ===== §5.3.3 流年模式检测（没有大运参与） =====
+            pattern_events_ln = detect_liunian_patterns(
+                bazi=bazi,
+                day_gan=day_gan,
+                dayun_gan=None,  # 大运开始之前，没有大运
+                dayun_zhi=None,  # 大运开始之前，没有大运
+                liunian_gan=gan_ln,
+                liunian_zhi=zhi_ln,
+                yongshen_elements=yongshen_elements,
+            )
+            
+            # 为模式事件添加 flow_year 和 flow_label
+            for pat_ev in pattern_events_ln:
+                pat_ev["flow_year"] = year
+                pat_ev["flow_label"] = gz_ln
+            
+            # ===== §6.2 检查模式是否与冲事件重叠 =====
+            pattern_events_filtered: List[Dict[str, Any]] = []
+            clash_pattern_bonus = 0.0
+            
+            if clash_ln_natal:
+                clash_target_branch = clash_ln_natal.get("target_branch")
+                clash_flow_branch = clash_ln_natal.get("flow_branch")
+                
+                for pat_ev in pattern_events_ln:
+                    if pat_ev.get("kind") != "zhi":
+                        pattern_events_filtered.append(pat_ev)
+                        continue
+                    
+                    pos1 = pat_ev.get("pos1", {})
+                    pos2 = pat_ev.get("pos2", {})
+                    liunian_char = pos1.get("char") if pos1.get("source") == "liunian" else pos2.get("char")
+                    other_char = pos2.get("char") if pos1.get("source") == "liunian" else pos1.get("char")
+                    other_pillar = pos2.get("pillar") if pos1.get("source") == "liunian" else pos1.get("pillar")
+                    
+                    if (liunian_char == clash_flow_branch and 
+                        other_char == clash_target_branch and
+                        other_pillar in ("year", "month", "day", "hour")):
+                        clash_pattern_bonus = 10.0
+                        old_risk = clash_ln_natal.get("risk_percent", 0.0)
+                        clash_ln_natal["risk_percent"] = old_risk + clash_pattern_bonus
+                        clash_ln_natal["pattern_bonus_percent"] = clash_pattern_bonus
+                        clash_ln_natal["is_pattern_overlap"] = True
+                        clash_ln_natal["overlap_pattern_type"] = pat_ev.get("pattern_type")
+                    else:
+                        pattern_events_filtered.append(pat_ev)
+            else:
+                pattern_events_filtered = pattern_events_ln
+            
+            # 收集基础事件（用于线运计算）
+            base_events: List[Dict[str, Any]] = []
+            if clash_ln_natal:
+                base_events.append(clash_ln_natal)
+            for punish_ev in punishments_ln:
+                if clash_ln_natal:
+                    clash_target = clash_ln_natal.get("target_branch")
+                    if punish_ev.get("target_branch") == clash_target:
+                        continue
+                base_events.append(punish_ev)
+            base_events.extend(pattern_events_filtered)
+            
+            # ===== §9 静态模式被流年激活检测（只有原局静态模式，没有大运静态模式） =====
+            from .config import PATTERN_GAN_RISK_STATIC, PATTERN_ZHI_RISK_STATIC
+            
+            liunian_patterns_by_type: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+            for pat_ev in pattern_events_filtered:
+                pattern_type = pat_ev.get("pattern_type")
+                kind = pat_ev.get("kind")
+                if pattern_type not in liunian_patterns_by_type:
+                    liunian_patterns_by_type[pattern_type] = {"gan": [], "zhi": []}
+                liunian_patterns_by_type[pattern_type][kind].append(pat_ev)
+            
+            natal_patterns_by_type: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+            for pattern_group in natal_patterns:
+                pattern_type = pattern_group.get("pattern_type")
+                pairs = pattern_group.get("pairs", [])
+                if pattern_type not in natal_patterns_by_type:
+                    natal_patterns_by_type[pattern_type] = {"gan": [], "zhi": []}
+                for pair in pairs:
+                    pos1 = pair.get("pos1", {})
+                    kind = pos1.get("kind")
+                    natal_patterns_by_type[pattern_type][kind].append(pair)
+            
+            static_activation_events: List[Dict[str, Any]] = []
+            
+            for pattern_type in ["hurt_officer", "pianyin_eatgod"]:
+                liunian_gan_pairs = liunian_patterns_by_type.get(pattern_type, {}).get("gan", [])
+                liunian_zhi_pairs = liunian_patterns_by_type.get(pattern_type, {}).get("zhi", [])
+                natal_gan_pairs = natal_patterns_by_type.get(pattern_type, {}).get("gan", [])
+                natal_zhi_pairs = natal_patterns_by_type.get(pattern_type, {}).get("zhi", [])
+                
+                activated_natal_gan_pairs: List[Dict[str, Any]] = []
+                if len(liunian_gan_pairs) > 0:
+                    for liunian_pair in liunian_gan_pairs:
+                        liunian_chars = {liunian_pair["pos1"]["char"], liunian_pair["pos2"]["char"]}
+                        for natal_pair in natal_gan_pairs:
+                            natal_chars = {natal_pair["pos1"]["char"], natal_pair["pos2"]["char"]}
+                            if natal_chars == liunian_chars:
+                                if natal_pair not in activated_natal_gan_pairs:
+                                    activated_natal_gan_pairs.append(natal_pair)
+                
+                activated_natal_zhi_pairs: List[Dict[str, Any]] = []
+                if len(liunian_zhi_pairs) > 0:
+                    for liunian_pair in liunian_zhi_pairs:
+                        liunian_chars = {liunian_pair["pos1"]["char"], liunian_pair["pos2"]["char"]}
+                        for natal_pair in natal_zhi_pairs:
+                            natal_chars = {natal_pair["pos1"]["char"], natal_pair["pos2"]["char"]}
+                            if natal_chars == liunian_chars:
+                                if natal_pair not in activated_natal_zhi_pairs:
+                                    activated_natal_zhi_pairs.append(natal_pair)
+                
+                if pattern_type in ("pianyin_eatgod", "hurt_officer"):
+                    static_risk_gan = 5.0 * len(activated_natal_gan_pairs)
+                    static_risk_zhi = 5.0 * len(activated_natal_zhi_pairs)
+                else:
+                    static_risk_gan = PATTERN_GAN_RISK_STATIC * len(activated_natal_gan_pairs)
+                    static_risk_zhi = PATTERN_ZHI_RISK_STATIC * len(activated_natal_zhi_pairs)
+                
+                if static_risk_gan > 0.0 or static_risk_zhi > 0.0:
+                    static_activation_events.append({
+                        "type": "pattern_static_activation",
+                        "pattern_type": pattern_type,
+                        "risk_percent": static_risk_gan + static_risk_zhi,
+                        "risk_from_gan": static_risk_gan,
+                        "risk_from_zhi": static_risk_zhi,
+                        "activated_natal_gan_pairs": activated_natal_gan_pairs,
+                        "activated_dayun_gan_pairs": [],
+                        "activated_natal_zhi_pairs": activated_natal_zhi_pairs,
+                        "activated_dayun_zhi_pairs": [],
+                        "liunian_pairs_trigger_gan": liunian_gan_pairs,
+                        "liunian_pairs_trigger_zhi": liunian_zhi_pairs,
+                        "flow_year": year,
+                        "flow_label": gz_ln,
+                    })
+            
+            # 计算线运加成
+            lineyun_event = _compute_lineyun_bonus(age, base_events, static_activation_events)
+            lineyun_bonus = lineyun_event.get("risk_percent", 0.0) if lineyun_event else 0.0
+            lineyun_bonus_gan = lineyun_event.get("lineyun_bonus_gan", 0.0) if lineyun_event else 0.0
+            lineyun_bonus_zhi = lineyun_event.get("lineyun_bonus_zhi", 0.0) if lineyun_event else 0.0
+            
+            # ===== 三合/三会逢冲额外加分 =====
+            clash_events_for_bonus: List[Dict[str, Any]] = []
+            if clash_ln_natal:
+                clash_events_for_bonus.append(clash_ln_natal)
+            
+            sanhe_sanhui_clash_bonus_event = _detect_sanhe_sanhui_clash_bonus(
+                clash_events=clash_events_for_bonus,
+                sanhe_events=sanhe_ln,
+                sanhui_events=sanhui_ln,
+                yongshen_elements=yongshen_elements,
+                flow_year=year,
+            )
+            sanhe_sanhui_clash_bonus = sanhe_sanhui_clash_bonus_event.get("risk_percent", 0.0) if sanhe_sanhui_clash_bonus_event else 0.0
+            
+            # ===== §6.1 风险拆分 =====
+            risk_from_zhi = 0.0
+            risk_from_gan = 0.0
+            tkdc_risk = 0.0
+            
+            if clash_ln_natal:
+                base_power = clash_ln_natal.get("base_power_percent", 0.0)
+                grave_bonus = clash_ln_natal.get("grave_bonus_percent", 0.0)
+                pattern_bonus = clash_ln_natal.get("pattern_bonus_percent", 0.0)
+                risk_from_zhi += base_power + grave_bonus + pattern_bonus
+                tkdc_bonus = clash_ln_natal.get("tkdc_bonus_percent", 0.0)
+                if tkdc_bonus > 0.0:
+                    tkdc_risk += tkdc_bonus
+            
+            for punish_ev in punishments_ln:
+                if clash_ln_natal:
+                    clash_target = clash_ln_natal.get("target_branch")
+                    if punish_ev.get("target_branch") == clash_target:
+                        continue
+                risk_from_zhi += punish_ev.get("risk_percent", 0.0)
+            
+            for pat_ev in pattern_events_filtered:
+                if pat_ev.get("kind") == "zhi":
+                    risk_from_zhi += pat_ev.get("risk_percent", 0.0)
+                elif pat_ev.get("kind") == "gan":
+                    risk_from_gan += pat_ev.get("risk_percent", 0.0)
+            
+            for static_ev in static_activation_events:
+                risk_from_gan += static_ev.get("risk_from_gan", 0.0)
+                risk_from_zhi += static_ev.get("risk_from_zhi", 0.0)
+            
+            risk_from_gan += lineyun_bonus_gan
+            risk_from_zhi += lineyun_bonus_zhi
+            risk_from_zhi += sanhe_sanhui_clash_bonus
+            
+            total_risk_percent = risk_from_gan + risk_from_zhi + tkdc_risk
+            
+            # ===== §4.4 流年好运判断 =====
+            is_good_ln = False
+            if (gan_good_ln or zhi_good_ln) and total_risk_percent <= 15.0:
+                is_good_ln = True
+            
+            # 构建年度事件列表
+            all_events: List[Dict[str, Any]] = []
+            if clash_ln_natal:
+                all_events.append(clash_ln_natal)
+            for punish_ev in punishments_ln:
+                if clash_ln_natal:
+                    clash_target = clash_ln_natal.get("target_branch")
+                    if punish_ev.get("target_branch") == clash_target:
+                        continue
+                all_events.append(punish_ev)
+            all_events.extend(pattern_events_filtered)
+            all_events.extend(static_activation_events)
+            if lineyun_event:
+                all_events.append(lineyun_event)
+            if sanhe_sanhui_clash_bonus_event:
+                all_events.append(sanhe_sanhui_clash_bonus_event)
+            
+            liunian_dict = {
+                "hints": [],
+                "year": year,
+                "age": age,
+                "gan": gan_ln,
+                "zhi": zhi_ln,
+                "gan_element": gan_el_ln,
+                "zhi_element": zhi_el_ln,
+                "first_half_good": gan_good_ln,
+                "second_half_good": zhi_good_ln,
+                "is_good": is_good_ln,
+                "risk_from_gan": risk_from_gan,
+                "risk_from_zhi": risk_from_zhi,
+                "tkdc_risk_percent": tkdc_risk,
+                "clashes_natal": [clash_ln_natal] if clash_ln_natal else [],
+                "clashes_dayun": [],  # 大运开始之前，没有大运
+                "punishments_natal": punishments_ln,
+                "patterns_liunian": pattern_events_filtered,
+                "patterns_static_activation": static_activation_events,
+                "harmonies_natal": harmonies_ln,
+                "harmonies_dayun": [],
+                "sanhe_complete": sanhe_ln,
+                "sanhui_complete": sanhui_ln,
+                "lineyun_bonus": lineyun_bonus,
+                "lineyun_bonus_gan": lineyun_bonus_gan,
+                "lineyun_bonus_zhi": lineyun_bonus_zhi,
+                "sanhe_sanhui_clash_bonus": sanhe_sanhui_clash_bonus,
+                "sanhe_sanhui_clash_bonus_event": sanhe_sanhui_clash_bonus_event,
+                "total_risk_percent": total_risk_percent,
+                "all_events": all_events,
+            }
+            
+            pre_dayun_liunian_list.append(liunian_dict)
+        
+        # 如果有大运开始之前的流年，添加一个特殊的组（dayun 为 None）
+        if pre_dayun_liunian_list:
+            groups.append(
+                {
+                    "dayun": None,  # 大运开始之前，没有大运
+                    "liunian": pre_dayun_liunian_list,
+                }
+            )
+    
+    # 还要处理另一种情况：如果第一个大运从出生年份开始，但流年不足10年
+    # 这种情况下，第一个大运的流年可能只有几年，需要补充剩余的年份
+    # 但是，根据测试结果，第一个大运的干支为空，所以会被跳过
+    # 这种情况下，应该已经通过上面的逻辑处理了
+    
+    # 但是，如果第一个大运的干支不为空，但流年不足10年，也可能需要处理
+    # 不过，根据用户的需求，主要是处理"大运开始之前"的情况，所以先不考虑这种情况
 
     for idx, dy in enumerate(dayun_objs[:max_dayun]):
         # ===== 当前这一步大运 =====
@@ -1379,6 +1830,17 @@ def analyze_luck(
         )
 
     # 按大运起运年份排序（保险起见）
-    groups.sort(key=lambda g: g["dayun"]["start_year"])
+    # 注意：大运开始之前的流年组（dayun 为 None）应该排在最前面
+    def get_sort_key(group):
+        dayun = group.get("dayun")
+        if dayun is None:
+            # 大运开始之前的流年组，使用第一个流年的年份作为排序键（减一个很大的数确保排在最前面）
+            liunian_list = group.get("liunian", [])
+            if liunian_list:
+                return liunian_list[0].get("year", 0) - 10000  # 确保排在最前面
+            return -10000
+        return dayun.get("start_year", 0)
+    
+    groups.sort(key=get_sort_key)
 
     return {"groups": groups}

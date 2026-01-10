@@ -583,7 +583,11 @@ def compute_turning_points(groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     prev_zhi_good: Optional[bool] = None
     
     for group in groups:
-        dy = group.get("dayun", {})
+        dy = group.get("dayun")
+        # 如果 dayun 为 None，说明是大运开始之前的流年，不参与转折点计算
+        if dy is None:
+            continue
+        
         current_zhi_good = dy.get("zhi_good", False)
         
         if prev_zhi_good is not None and prev_zhi_good != current_zhi_good:

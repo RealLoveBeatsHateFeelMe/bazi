@@ -116,6 +116,388 @@
 
 ---
 
+## §1.5 数据结构：hints 列表系统（统一真相源）
+
+**设计原则：**
+
+系统采用"单一真相源"（Single Source of Truth）设计，所有用户可见的关键提示句子只在 `hints` 列表中生成一次，CLI/LLM/API 全部只读 `hints`，不允许在别处重复拼接同类文案。
+
+**数据结构字段：**
+
+1. **`natal["hints"]`** (List[str])
+   - 类型：字符串列表
+   - 内容：原局层面的提示句子列表（婚恋结构提示等）
+   - 说明：这是原局提示的唯一真相源，CLI 从该列表读取并格式化输出
+
+2. **`natal["marriage_hint"]`** (str)
+   - 类型：字符串
+   - 内容：婚配倾向提示句子（例如："更容易匹配：虎兔蛇马；或 木，火旺的人。"）
+   - 说明：独立的婚配倾向字段，不包含"【婚配倾向】"前缀，前缀由 CLI 输出时添加
+
+3. **`dayun_group["hints"]`** (List[str])
+   - 类型：字符串列表
+   - 内容：大运层面的提示句子列表（用神互换提示、大运层婚恋提醒等）
+   - 说明：大运提示的唯一真相源
+
+4. **`year["hints"]`** (List[str])
+   - 类型：字符串列表
+   - 内容：流年层面的提示句子列表（流年层婚恋提醒、风险提示等）
+   - 说明：流年提示的唯一真相源
+
+**数据生成位置：**
+
+- `bazi/enrich.py`：所有 `hints` 的生成逻辑集中在此文件
+  - `enrich_natal()`：生成原局 hints 和 marriage_hint
+  - `enrich_dayun()`：生成大运 hints
+  - `enrich_liunian()`：生成流年 hints
+
+**输出格式要求：**
+
+- CLI 输出时只从 `hints` 列表读取，不允许硬编码提示句子
+- LLM 上下文构建时只从 `hints` 列表取文本
+- API 返回时原样返回 `hints` 列表，不进行二次拼接
+
+---
+
+## §1.6 数据结构：Indexes 系统（Dayun Index + Relationship Index）
+
+**设计原则：**
+
+系统提供索引（Indexes）系统，用于快速查询和筛选特定类型的事件。**重要：Index 只是 Router 的目录页（辅助决策），不是内容真理源。facts 是唯一真相源，Index 仅用于快速查询和筛选，不用于生成模块内容。**
+
+**体系口径（必须严格遵守）：**
+
+- **facts 是唯一真相源**：所有关键内容和结论必须来自 `natal`、`luck`、`turning_points` 等 facts 数据
+- **Index 只是 Router 的辅助目录**：Index 仅用于解释 Router 决策，不用于生成模块内容
+- **"看到的 = API = 模型吃到的"对齐的是 presenter/打印层当前产出的那份产品输出（模块化输出对象），不是 Index**
+- **打印层（presenter）是"内容生产/模块组装"的主体**：
+  - UI 展示的任何关键内容必须来自 API 返回对象（facts 数据）
+  - LLM 输入也必须使用同一份 API 返回对象中的模块输出
+  - 允许 presenter 组装模块输出，但禁止出现"只在打印层临时推导、API/LLM 不存在"的隐藏结论
+- **Index 可以作为 trace/审计字段返回**：但仅用于解释 Router 决策，不用于生成模块内容
+
+**`analyze_complete()` 返回结构：**
+
+`analyze_complete()` 函数返回完整的分析结果，包含以下字段：
+
+```python
+{
+    "schema_version": "1.0.0",  # 数据格式版本号
+    "natal": {...},              # 原局数据（包含 hints、marriage_hint 等）
+    "luck": {...},               # 大运/流年数据（包含 hints 等）
+    "turning_points": [...],     # 大运转折点列表
+    "indexes": {                 # 索引系统（Router 辅助目录，不用于生成模块内容）
+        "dayun": {...},          # Dayun Index (Index-3)：用神互换变动窗口信号
+        "relationship": {...},   # Relationship Index (Index-5)：感情变动窗口信号
+    }
+}
+```
+
+**Dayun Index (Index-3) 字段结构：**
+
+```python
+{
+    "yongshen_shift": {
+        "hit": bool,                    # 是否存在用神互换窗口（默认 false）
+        "windows": List[Dict],          # 用神互换窗口列表（排序稳定，按大运顺序）
+    }
+}
+```
+
+**window 结构（只包含可审计的最小信息，禁止写建议或行业方向）：**
+
+```python
+{
+    "dayun_seq": int,                   # 第几步大运（从0开始）
+    "year_range": {
+        "start_year": int,              # 窗口起始年份
+        "end_year": int,                # 窗口结束年份
+    },
+    "from_elements": List[str],         # 互换前用神五行集合（排序稳定，例如 ["木", "火"]）
+    "to_elements": List[str],           # 互换后用神五行集合（排序稳定，例如 ["金", "水"]）
+}
+```
+
+**字段说明：**
+
+1. **`hit`** (bool)
+   - 说明：整体命中开关，表示是否存在任何用神互换窗口
+   - 计算：`hit = len(windows) > 0`
+   - 默认值：`false`
+
+2. **`windows`** (List[Dict])
+   - 说明：用神互换窗口列表（排序稳定，按大运顺序/年份顺序固定）
+   - 排序：按 `dayun_seq` 排序（升序），确保每次生成顺序一致
+   - 合并规则：连续触发的大运（年份连续且 from_elements/to_elements 相同）会被合并为一个窗口
+   - 默认值：空列表 `[]`
+
+3. **`dayun_seq`** (int)
+   - 说明：第几步大运（从0开始，即大运索引），用于唯一定位该大运
+   - 示例：`3` 表示第4步大运（大运索引为3）
+
+4. **`year_range`** (Dict)
+   - 说明：窗口的年份范围
+   - `start_year`：窗口起始年份（大运起始年份）
+   - `end_year`：窗口结束年份（下一个大运起始年份 - 1，或当前大运起始年份 + 9）
+
+5. **`from_elements`** (List[str])
+   - 说明：互换前用神五行集合（排序稳定，例如 `["木", "火"]`）
+   - 排序：按五行顺序排序，确保每次生成顺序一致
+
+6. **`to_elements`** (List[str])
+   - 说明：互换后用神五行集合（排序稳定，例如 `["金", "水"]`）
+   - 注意：只记录五行信息，不包含"应该从事XX工作/行业"等建议性内容
+   - 排序：按五行顺序排序，确保每次生成顺序一致
+
+**数据生成位置：**
+
+- `bazi/dayun_index.py::generate_dayun_index()`：Dayun Index 的生成逻辑
+- `bazi/lunar_engine.py::analyze_complete()`：在主入口函数中调用并生成 Dayun Index
+
+**Facts 原子信息依赖：**
+
+Dayun Index 的生成依赖于以下 facts 原子信息（均在大运数据中）：
+
+1. **大运数据**：`luck.groups[].dayun` - 大运列表
+2. **用神互换信息**：`dayun.yongshen_swap_hint` - 用神互换提示信息（已在 `enrich_dayun` 中生成）
+3. **原局用神**：`natal.yongshen_elements` - 原局用神五行列表
+
+**输出口径约束：**
+
+- **Index 只记录"变动事实"**：发生在哪步大运、年份范围、从哪些用神五行侧重 → 到哪些五行侧重
+- **严禁在 Index 中写"应该从事什么工作/行业"等建议性内容**
+- **Overview 场景只允许输出一句轻提示**："存在用神侧重变化窗口（仅提示变动，不展开原因；需要可继续追问）"
+- **禁止输出"应该从事XX工作/行业"等建议性内容**
+- **追问才允许 detail 模块解释原因与范围**（仍必须趋势/范围表达，不下单事件断言）
+
+---
+
+**Relationship Index (Index-5) 字段结构：**
+
+```python
+{
+    "hit": bool,                    # 整体命中开关
+    "types": List[str],             # 枚举类型列表（排序稳定）
+                                   # 允许值：palace_clash, competing_combine_official_kill, competing_combine_wealth
+    "years": List[int],             # 命中的年份列表（排序稳定，升序）
+    "last5_hit": bool,              # 近5年是否命中（用于快速回答）
+    "last5_years": List[int],       # 近5年命中的年份列表（排序稳定，升序）
+}
+```
+
+**字段说明：**
+
+1. **`hit`** (bool)
+   - 说明：整体命中开关，表示是否存在任何感情变动窗口
+   - 计算：`hit = len(years) > 0`
+
+2. **`types`** (List[str])
+   - 说明：命中的类型列表（去重、排序稳定）
+   - 允许值：
+     - `"palace_clash"`：冲到婚姻宫/夫妻宫
+     - `"competing_combine_official_kill"`：天干争合官杀（女命）
+     - `"competing_combine_wealth"`：天干争合财星（男命）
+   - 排序：按字母顺序排序（`sorted()`），确保每次生成顺序一致
+
+3. **`years`** (List[int])
+   - 说明：所有命中年份的列表（排序稳定，升序）
+   - 计算：收集所有满足触发条件的年份，去重后排序
+
+4. **`last5_hit`** (bool)
+   - 说明：近5年是否命中（用于"前五年回放/最近几年"场景快速回答）
+   - 计算：`last5_hit = len(last5_years) > 0`
+   - 近5年定义：包含当前年份往前推5年（不包括当前年份）
+   - 例如：如果 `current_year = 2024`，则近5年为 `[2019, 2020, 2021, 2022, 2023]`
+
+5. **`last5_years`** (List[int])
+   - 说明：近5年命中年份的列表（排序稳定，升序）
+   - 计算：从 `years` 中筛选出在近5年范围内的年份，排序
+
+**数据生成位置：**
+
+- `bazi/relationship_index.py::generate_relationship_index()`：Relationship Index 的生成逻辑
+- `bazi/lunar_engine.py::analyze_complete()`：在主入口函数中调用并生成 Relationship Index
+
+**Facts 原子信息依赖：**
+
+Relationship Index 的生成依赖于以下 facts 原子信息（均在流年数据中）：
+
+1. **流年天干**：`liunian.gan` - 用于检测天干争合
+2. **流年地支**：`liunian.zhi` - 用于检测冲
+3. **冲信息**：`liunian.clashes_natal`（流年与命局的冲），`liunian.all_events`（所有事件，包含 `targets` 和 `pillar` 信息）
+4. **争合信息**：`liunian.wuhe_events`（天干五合事件，包含 `is_zhenghe`、`few_side`、`many_side`、十神信息）
+
+**输出口径约束：**
+
+- **Index 只记录"变动事实"**：命中哪些年份、哪些类型
+- **严禁在 Index 中写建议性内容**
+- **Overview 场景**：只提示"有感情变动窗口"，不展开原因
+- **Detail 场景**：用户追问时才展开具体原因（使用 `relationship.types` 和 `relationship.years`）
+- **打印层禁止推导（硬约束）**：
+  - 打印层必须只做"展示"，不得新增任何业务逻辑分支来决定是否提示、提示什么年份、命中什么类型
+  - 所有关键结论/提示/命中结果必须在 facts 或 index 的字段中；打印层只能渲染这些字段，不得再推导新结论
+
+---
+
+## §1.7 Chat API：统一返回壳（answer/index/trace/error）
+
+**设计原则：**
+
+Chat API 提供统一的返回结构，确保前端能同时展示 LLM 的回答、Request Index v0（摘要目录页）和全链路 trace。
+
+**关键边界：**
+
+- **facts（用户建档生成的全量事实）仍是唯一真相源**：不要把推理散落到打印层
+- **Index 是请求级派生快照**：随 base_year（服务器本地年）变化，尤其 last5/last3。可以做缓存，但语义必须等价于每次请求派生
+- **Router 做决策只读 index**：不要扫 facts 全书
+
+**统一返回壳（API 合同必须固定）：**
+
+无论任何问题、任何模块、未来是否超限，都必须返回同一个外壳：
+
+```python
+{
+    "answer": "string",           # 给用户看的自然语言
+    "index": { /* Request Index v0 */ },  # 本次请求派生出来的 Index v0
+    "trace": { /* 全审计 */ },    # 审计链路
+    "error": null                 # MVP 先固定为 null（以后扩展）
+}
+```
+
+**Request Index v0（字段契约：少、稳定、可空、可 diff）：**
+
+Index 只做抽取/汇总，不做解释，不扫 events 大段文本；字段缺失必须保守默认（空列表/false/空字符串），字段名稳定不改。
+
+**index.meta（必须有）：**
+
+- `index_version`: "0.1.0"（固定存在，版本化）
+- `base_year`: int（服务器本地年份）
+- `last5_years`: 包含当年，固定为 `[base_year, base_year-1, base_year-2, base_year-3, base_year-4]`
+- `last3_years`: `[base_year, base_year-1, base_year-2]`
+
+最近几年默认=last5；用户明确说"三年"才用 last3。
+
+**index.dayun（必须有）：**
+
+- `current_dayun`: object（当前大运摘要，至少包含起止年 + 一个好运/一般/坏运标签）
+- `yongshen_swap`: 稳定结构，永远存在
+  - `has_swap`: bool
+  - `items`: list（无互换则 []）
+  - `hint`: string（无互换则 ""）
+
+验收要点：黄金A 若涉及用神互换：has_swap=true 且 items 非空（能被 Router/前端稳定捕捉）；不涉及互换的人：has_swap=false 且 items=[]，不得影响流程。
+
+**index.turning_points（必须有）：**
+
+- `all`: list（可空，但字段必须存在）
+- `nearby`: list（all 裁剪到窗口 `[base_year-3, base_year+3]`，包含今年，前后各三年）
+- `should_mention`: bool（nearby 非空即 true）
+
+窗口规则："临近才提"：窗口为 `[base_year-3, base_year+3]`（包含今年，前后各三年）。
+
+**index.year_grade（近五年回放：必须含当年 + 必须展示上下半年条件）：**
+
+- `last5`: 长度=5，顺序严格按 `meta.last5_years` 排序（year 从大到小）
+
+每一项结构至少：
+- `year`: int
+- `Y`: float（= total_risk_percent）
+- `year_label`: string
+
+`year_label` 规则（必须按用户最新口径）：
+- `Y >= 40.0` → `"全年 凶（棘手/意外）"`
+- `25.0 <= Y < 40.0` → `"全年 明显变动（可克服）"`
+- `Y < 25.0` → 必须输出上下半年（回放里就显示，不等追问）
+
+当 `Y < 25` 时，必须额外输出两个 half：
+- `half1`: {H, half_label} 其中 `H = risk_from_gan`
+- `half2`: {H, half_label} 其中 `H = risk_from_zhi`
+
+`half_label` 规则（必须按用户最新口径）：
+- `H <= 10.0`：用神 → `"好运"`；非用神 → `"一般"`
+- `10.0 < H < 20.0`：`"有轻微变动"`
+- `H >= 20.0`：`"凶（棘手/意外）"`
+
+用神/非用神的判断：沿用已有体系（Index 只存结果，不解释推导）。
+
+**index.relationship（只提示"窗口"，不展开）：**
+
+- `hit`: bool
+- `years_hit`: list[int]（命中列表）
+- `last5_years_hit`: list[int]（years_hit 与 meta.last5_years 的交集，保持排序与 last5_years 一致）
+
+MVP 不需要精确解释"为什么命中"，只要能识别并提示"有变动窗口"。
+
+**Router（只读 index 决策 + 输出可审计结果）：**
+
+Router 输入：用户 query + index
+Router 输出必须写入 trace，并决定 modules：
+
+**intent 识别最低限度（MVP）：**
+
+至少识别这些意图：
+- `overall_recent`（整体/最近几年/模糊时间）→ 默认 years=last5
+- `recent_3_years`（用户明确说"三年/近三年"）→ years=last3
+- `named_year`（点名某年）→ years=[that_year]（是否补 dayun 背景由 Router 决定，但 trace 必须说明）
+
+**叙述口径（必须贯彻）：**
+
+"大运是气候、流年是天气"：
+- 整体/最近几年：先引用 `index.dayun.current_dayun`（气候）+ 若 `turning_points.should_mention=true` 则提 nearby turning point；再用 `year_grade.last5` 做天气回放索引。
+- 点名某年：可直接讲该年，但允许一句话带 dayun 背景（从 index.dayun 取，不扫 facts）。
+
+**Modules（只做 facts 切片，不推理）：**
+
+Modules 的职责：按计划切片 facts 或 index，喂给 LLM；不负责计算四档、不负责生成 turning points、不负责决定 years。
+
+MVP 至少要支持这几个 module 名称（可以合并，但 trace 里必须能看出内容来源）：
+- `DAYUN_OVERVIEW`（从 index.dayun / turning_points 取需要的摘要）
+- `LAST5_YEAR_GRADE`（从 index.year_grade.last5 取）
+- `RELATIONSHIP_WINDOW`（从 index.relationship 取）
+
+**Trace（必须"全部都显示"）：**
+
+trace 必须完整可视化审计链路，至少包含：
+
+```python
+{
+    "router": {
+        "intent": "...",
+        "base_year": 2025,
+        "years_used": [2025,2024,2023,2022,2021],
+        "reasons": ["..."]   # 简短原因列表
+    },
+    "modules": [
+        {"name": "DAYUN_OVERVIEW"},
+        {"name": "LAST5_YEAR_GRADE"},
+        {"name": "RELATIONSHIP_WINDOW"}
+    ],
+    "module_inputs": {
+        "DAYUN_OVERVIEW": ["index.dayun.current_dayun", "index.dayun.yongshen_swap", "index.turning_points.nearby"],
+        "LAST5_YEAR_GRADE": ["index.year_grade.last5"],
+        "RELATIONSHIP_WINDOW": ["index.relationship"]
+    },
+    "backend_called": true,
+    "token_usage": {"prompt": null, "completion": null, "total": null}
+}
+```
+
+- `backend_called`: MVP 先固定 true（未来做超限时会变 false）
+- `token_usage`: MVP 可以 null 占位，但字段必须存在（保持接口稳定）
+
+**必须修正的口径冲突（写进 BAZI_RULES & 行为一致）：**
+
+`last5_years` 包含当年（全局统一：meta.last5_years、year_grade.last5、relationship.last5_years_hit 都一致）。
+
+**实现文件：**
+
+- `bazi/request_index.py::generate_request_index()`：Request Index v0 生成逻辑
+- `bazi/router.py::route()`：Router 决策逻辑（只读 index）
+- `bazi/modules.py`：Modules 组装逻辑
+- `bazi/chat_api.py::chat_api()`：Chat API 主入口
+
+---
+
 ## §2. 位置权重与宫位定义
 
 ### §2.1 位置权重表
@@ -141,6 +523,35 @@
 ---
 
 ## §3. 流年/大运与命局的相互作用
+
+### §3.0 流年明细覆盖范围
+
+**流年明细覆盖范围：**
+
+流年明细覆盖范围从**出生年**（或建模定义的起始年）一直到 `year_range` 终点（第十步大运结束年）。其中**"起运前的年份"**（出生年到第一个有效大运起始年份之前的年份）也会生成流年条目。
+
+**数据层面说明：**
+
+- `luck.groups` 列表中，第一个组可能为 `{"dayun": None, "liunian": [...]}`，表示"大运开始之前的流年"组
+- 后续组为正常的大运组：`{"dayun": {...}, "liunian": [...]}`
+- 所有流年条目的数据结构与计算逻辑完全一致，只是"起运前的流年"没有对应的大运信息
+
+**年份合法范围校验：**
+
+Router/Time Index 校验年份 `year` 合法时，起点不再是 `luck.groups[0].dayun.start_year`（如果第一个组是"起运前的流年"组，则 `groups[0].dayun` 为 `None`），而是**"流年明细的最早年份"**（通常就是出生年）。
+
+获取流年明细最早年份的方法：
+- 遍历 `luck.groups` 中的所有 `liunian` 列表
+- 找到最早年份：`earliest_year = min(ln["year"] for group in luck["groups"] for ln in group.get("liunian", []))`
+- 或从第一个非空流年组中获取：`earliest_year = luck["groups"][0]["liunian"][0]["year"]`
+
+**叙述策略不变：**
+
+- **大运仍然是"气候"**：大运代表长期运势趋势（十年周期）
+- **流年是"天气"**：流年代表短期运势变化（一年周期）
+- 只是在**数据层面**补齐了起运前的流年条目，使得流年明细覆盖从出生年开始，叙述策略和业务逻辑保持不变
+
+---
 
 ### §3.1 冲（branch_clash）
 
@@ -658,7 +1069,61 @@ basic["dominant_traits"] = [  # 若无任何有效类别，可为空列表
 
 #### 4.6.6 六亲助力（liuqin_zhuli）
 
-#### 4.6.7 天干五合争合/双合婚恋提醒（marriage_wuhe_hints）
+#### 4.6.7 CLI 输出格式：原局信息 sections
+
+**输出格式说明：**
+
+在 CLI 输出中，原局信息按以下独立 sections 组织，每个 section 使用统一的标题格式（"—— 标题 ——"）：
+
+1. **"—— 用神信息 ——" section**
+   - 位置：在性格信息之后
+   - 内容：
+     - `用神五行（候选）： {五行列表}`（只包含用神五行，不夹带婚配倾向）
+     - `用神（五行→十神）：...`（如果存在）
+     - `用神落点：...`（如果存在）
+     - `原局六合：...`（如果存在，格式：宫位和宫位合（XX合））
+     - `原局半合：...`（如果存在，格式：宫位 与 宫位 半合（XX半合））
+     - `原局天干五合：...`（如果存在）
+   - 说明：所有"合类结构事实"（半合/六合/三会/三合/天干五合）都在此 section，不在"婚配倾向"section
+
+2. **"—— 婚配倾向 ——" section**
+   - 位置：在用神信息之后
+   - 内容：
+     - `更容易匹配：{生肖串}；或 {五行列表}旺的人。`
+   - 说明：此 section 只包含匹配倾向句子，不包含任何原局结构事实（如半合/六合/三会/三合/天干五合等）
+
+3. **"—— 婚恋结构 ——" section**
+   - 位置：在婚配倾向之后
+   - 内容：
+     - 列表形式，每条提示一行（不包含"婚恋结构提示："前缀）
+     - 包含内容：官杀混杂、正偏财混杂、原局层天干五合婚恋提醒等
+   - 说明：
+     - 所有原局婚恋结构提示统一在此 section 展示
+     - 从 `natal["hints"]` 列表中读取，去除"婚恋结构提示："前缀后输出
+     - 保持中立口吻（例如："官杀混杂，桃花多，易再婚，找不对配偶难走下去"）
+
+4. **"—— 用神互换 ——" section**
+   - 位置：在婚恋结构之后，大运信息之前
+   - 内容：
+     - `{起始年份}-{结束年份}年：{行业方向描述}`
+     - 多段区间时，每段一行
+   - 标题格式：统一使用"—— 用神互换 ——"（前后各两个破折号）
+   - 说明：汇总所有大运中触发的用神互换区间，按年份范围合并展示
+
+**Section 顺序：**
+
+```
+—— 用神信息 ——
+  （用神五行、用神落点、原局六合/半合/天干五合等）
+—— 婚配倾向 ——
+  （匹配倾向句子）
+—— 婚恋结构 ——
+  （婚恋结构提示列表）
+—— 用神互换 ——
+  （用神互换区间汇总）
+```
+
+#### 4.6.8 天干五合争合/双合婚恋提醒（marriage_wuhe_hints）
 
 **功能概述：**
 
@@ -733,15 +1198,20 @@ basic["dominant_traits"] = [  # 若无任何有效类别，可为空列表
 - 女命：`婚恋变化提醒（如恋爱）：命主合两个官杀星，{合名}，注意，防止陷入三角恋`
 - 男命：`婚恋变化提醒（如恋爱）：命主合两个财星，{合名}，注意，防止陷入三角恋`
 
-**打印位置要求：**
+**数据结构与输出位置：**
 
-1. **原局层命中**：打印在"婚恋结构提示"区域（和"正偏财混杂/官杀混杂"同一块）
-   - 文案前缀用：`婚恋结构提示：...`
-   - 如果同一个命盘原局里同时出现多条提示（比如既有混杂又有争合/双合），分两行/多行打印；第一行带`婚恋结构提示：`，后续行按缩进对齐
+1. **原局层命中**：
+   - 数据存储：添加到 `natal["hints"]` 列表中，格式为 `"婚恋结构提示：{hint_text}"`
+   - CLI 输出：在独立的"—— 婚恋结构 ——" section 中打印，去除"婚恋结构提示："前缀，每条提示一行
+   - 输出格式：与其他原局婚恋结构提示（如官杀混杂、正偏财混杂）合并，统一在"—— 婚恋结构 ——" section 中以列表形式展示
 
-2. **大运层命中**：打印在对应大运批注的最下面，每命中一条就打一行；若A与B同时命中，两行都打
+2. **大运层命中**：
+   - 数据存储：添加到对应 `dayun_group["hints"]` 列表中
+   - CLI 输出：打印在对应大运批注的最下面，每命中一条就打一行；若A与B同时命中，两行都打
 
-3. **流年层命中**：打印在对应流年批注的最下面（在"总危险系数"之前），每命中一条就打一行；若A与B同时命中，两行都打
+3. **流年层命中**：
+   - 数据存储：添加到对应 `year["hints"]` 列表中
+   - CLI 输出：打印在对应流年批注的最下面（在"总危险系数"之前），每命中一条就打一行；若A与B同时命中，两行都打
 
 **分层打印隔离规则：**
 
@@ -762,6 +1232,97 @@ basic["dominant_traits"] = [  # 若无任何有效类别，可为空列表
 - 如果某年同时满足"他人争合"和"命主三角恋"的条件
 - 则打印两行提醒，顺序建议先"被争合"再"三角恋"
 
+
+---
+
+### §4.6.9 Relationship Index (Index-5)：感情变动窗口白名单
+
+**功能概述：**
+
+Relationship Index (Index-5) 用于识别和汇总感情变动窗口，基于两类触发条件生成稳定的索引数据，供 Router 快速查询使用。
+
+**触发条件（relationship_hit 判定规则）：**
+
+Relationship Index 只由以下两类触发条件决定（任意命中即 `hit=true`）：
+
+**A. 冲到婚姻宫/夫妻宫**
+
+只要出现"冲"并且目标落点命中用户的婚姻宫/夫妻宫，就判定为感情变动窗口。
+
+- **婚姻宫/夫妻宫定义**：
+  - 月柱 = 婚姻宫
+  - 日柱 = 夫妻宫
+  - 使用项目中已定义的宫位口径（`PILLAR_PALACE`），复用现有字段/函数
+
+- **检测逻辑**：
+  - 检查流年与命局的冲（`liunian.all_events` 中的 `type="branch_clash"` 事件）
+  - 检查冲事件的 `targets` 列表中是否包含 `pillar="month"` 或 `pillar="day"`
+  - 如果命中，则标记该年为感情变动窗口，类型为 `palace_clash`
+
+- **注意**：运年相冲（大运与流年相冲）不直接命中命局宫位，因此不纳入检测范围。
+
+**B. 天干争合官杀或财星**
+
+只要检测到"天干争合"事件，并且争合目标在十神分类里属于官杀（女命）或财星（男命），就判定为感情变动窗口。
+
+- **争合定义**：
+  - 必须是争合（`is_zhenghe=True`），不是普通1对1合
+  - 争合中，`few_side`（少的一侧）是被争合的目标，`many_side`（多的一侧）是争合的一方
+
+- **检测逻辑**：
+  - 复用现有的 `gan_wuhe` 检测能力（`liunian.wuhe_events`）
+  - 遍历所有五合事件，查找争合（`is_zhenghe=True`）
+  - 检查 `few_side`（被争合的目标）的天干是否是配偶星 X（官杀/财星）
+  - 使用 `marriage_wuhe.get_spouse_star_and_competitor()` 获取配偶星 X：
+    - 女命：X = 官杀（例如：日主为木，X=庚）
+    - 男命：X = 财星（例如：日主为木，X=己）
+  - 验证十神类别：使用 `shishen.classify_shishen_category()` 验证 `few_side` 的十神是否为官杀（女命）或财星（男命）
+  - 如果命中，则标记该年为感情变动窗口，类型为：
+    - 女命：`competing_combine_official_kill`（天干争合官杀）
+    - 男命：`competing_combine_wealth`（天干争合财星）
+
+- **复用现有能力**：
+  - 使用 `gan_wuhe.detect_gan_wuhe()` 的结果，不重复实现
+  - 使用 `marriage_wuhe.get_spouse_star_and_competitor()` 获取配偶星映射
+  - 使用 `shishen.classify_shishen_category()` 判断十神类别
+
+**类型枚举值：**
+
+Relationship Index 支持以下三种类型（在 `types` 列表中枚举，排序稳定）：
+
+1. **`palace_clash`**：冲到婚姻宫/夫妻宫
+2. **`competing_combine_official_kill`**：天干争合官杀（女命）
+3. **`competing_combine_wealth`**：天干争合财星（男命）
+
+**生成函数：**
+
+- **函数**：`bazi/relationship_index.py::generate_relationship_index()`
+- **参数**：
+  - `luck_data`：`analyze_luck` 返回的 luck 数据
+  - `bazi`：八字字典
+  - `day_gan`：日主天干
+  - `is_male`：是否为男性
+  - `current_year`：当前年份（用于计算 `last5_hit` 和 `last5_years`），如果为 None 则使用当前系统年份
+
+- **返回**：Relationship Index 字典（见 §1.6 数据结构说明）
+
+**集成位置：**
+
+- `bazi/lunar_engine.py::analyze_complete()`：在主入口函数的步骤 6-7 中生成 Relationship Index
+- 返回结果：`facts["indexes"]["relationship"]`
+
+**实现文件：**
+
+- `bazi/relationship_index.py`：Relationship Index 生成逻辑
+  - `generate_relationship_index()`：主生成函数
+  - `_check_clash_hits_marriage_palace()`：检查冲是否命中婚姻宫/夫妻宫
+  - `_check_competing_combine_hits_spouse_star()`：检查天干争合是否命中官杀/财星
+  - `_is_marriage_palace()`：判断柱位是否是婚姻宫或夫妻宫
+
+**输出口径约束：**
+
+- **Overview 场景**：只提示"有感情变动窗口"，不展开原因
+- **Detail 场景**：用户追问时才展开具体原因（使用 `relationship.types` 和 `relationship.years`）
 
 ---
 
@@ -1310,6 +1871,79 @@ basic["dominant_traits"] = [  # 若无任何有效类别，可为空列表
 
 ## §8. 大运好坏判定逻辑（重地支，用同一危险系数标准）
 
+### §8.0 大运数量配置
+
+**参数说明：**
+
+`analyze_complete()` 和 `analyze_luck()` 函数支持 `max_dayun` 参数，用于控制计算的大运数量。
+
+- **默认值**：`max_dayun = 10`
+- **说明**：每个大运持续 10 年，默认计算 10 个大运（共 100 年）
+- **可调整范围**：理论上可以设置任意数量，取决于 `lunar_python` 库返回的大运数量（通常足够多）
+- **使用位置**：
+  - `bazi/lunar_engine.py::analyze_complete()`：主入口函数参数
+  - `bazi/luck.py::analyze_luck()`：大运分析函数参数
+  - `bazi/cli.py::run_cli()`：CLI 调用时的参数
+
+### §8.0.1 回归样本快照生成
+
+**功能概述：**
+
+回归样本快照生成用于创建稳定的 facts JSON 快照，用于回归测试和版本化对比。
+
+**文件位置：**
+
+- **样本输入文件**：`tests/regression/samples.json` - 包含3个测试样本的定义
+- **快照生成脚本**：`scripts/generate_facts_snapshots.py` - 快照生成脚本
+- **快照输出目录**：`tests/regression/snapshots/facts/` - 生成的 JSON 快照文件存放目录
+
+**样本定义（固定3个）：**
+
+1. **黄金A**：2005-09-20 10:00，时区：Asia/Shanghai，性别：男
+2. **黄金B**：2007-01-28 12:00，时区：Asia/Shanghai，性别：男
+3. **2006-12-17_1200_M**：2006-12-17 12:00，时区：Asia/Shanghai，性别：男
+
+**流年明细覆盖范围（重要变更）：**
+
+从本版本开始，流年明细覆盖范围从**出生年**开始，不再从第一个有效大运起始年份开始。快照中包含：
+
+- **起运前的流年**：出生年到第一个有效大运起始年份之前的年份（在 `luck.groups[0]` 中，`dayun` 为 `None`）
+- **大运期间的流年**：每个大运下的10年流年（在后续 `luck.groups` 中，`dayun` 不为 `None`）
+
+**验证要点：**
+
+- 快照中第一个组 `luck.groups[0]` 可能为 `{"dayun": None, "liunian": [...]}`，表示"大运开始之前的流年"
+- 流年明细最早年份应为出生年（或接近出生年）
+- 例如：黄金A（2005年出生）的快照中，第一个流年条目应为 2005 年或更早
+
+**功能特性：**
+
+- **使用生产路径**：直接调用 `analyze_complete()` 生成 facts，不重复实现规则
+- **稳定化处理**：
+  - JSON 格式统一（缩进、编码、键排序）
+  - 过滤不稳定字段（时间戳、trace_id、随机数等）
+  - 保证每次生成结果一致（可 diff）
+- **运行模式**：
+  - 默认模式：跳过已存在的快照文件
+  - 强制模式（`--force`）：覆盖所有快照文件
+- **输出验证**：生成的快照文件包含完整的 facts 结构（natal、luck、turning_points、indexes 等）
+
+**使用方法：**
+
+```bash
+# 默认模式：跳过已存在的快照
+python scripts/generate_facts_snapshots.py
+
+# 强制覆盖所有快照
+python scripts/generate_facts_snapshots.py --force
+```
+
+**输出文件：**
+
+- `tests/regression/snapshots/facts/黄金A.facts.json`
+- `tests/regression/snapshots/facts/黄金B.facts.json`
+- `tests/regression/snapshots/facts/2006-12-17_1200_M.facts.json`
+
 ### §8.1 总原则
 
 本次重点是重新定义**每一步大运是"好运 / 一般 / 坏运"**的规则，不再使用"十年平均风险"一类的逻辑。
@@ -1775,82 +2409,252 @@ basic["dominant_traits"] = [  # 若无任何有效类别，可为空列表
 11. **test_sanhe_complete_2007_01_28** - 完整三合局检测回归：2007-01-28 12:00 男
 12. **test_sanhui_complete_2005_09_20** - 完整三会局检测回归：2005-09-20 10:00 男
 
+13. **test_global_element_distribution_case_A** - 全局五行占比回归用例A
+
+14. **test_global_element_distribution_case_B** - 全局五行占比回归用例B
+
+15. **test_marriage_suggestion_case_A** - 婚配倾向回归用例A：2005-09-20 10:00 男
+    - 期望：用神五行（候选）独立一行，不包含婚配倾向
+    - 期望：独立段落"—— 婚配倾向 ——"出现，包含"更容易匹配：虎兔蛇马；或 木，火旺的人。"
+    - 防漏改：婚配倾向 section 不应包含"原局半合"、"原局六合"、"原局天干五合"
+    - 防漏改：不应包含旧前缀"婚恋结构提示："
+
+16. **test_marriage_suggestion_case_B** - 婚配倾向回归用例B：2007-01-28 12:00 男
+    - 期望：用神五行（候选）独立一行，不包含婚配倾向
+    - 期望：独立段落"—— 婚配倾向 ——"出现，包含"更容易匹配：猪鼠猴鸡虎兔；或 金，水，木旺的人。"
+    - 防漏改：同用例A
+
+17. **test_gan_wuhe_case_A** - 天干五合检测回归用例A
+
+18. **test_gan_wuhe_case_B** - 天干五合检测回归用例B
+
+19. **test_yongshen_swap_case_1969** - 用神互换回归用例：1969-02-07 00:00 男
+
+20. **test_traits_format_case_A** - 性格打印格式回归用例A
+
+21. **test_traits_format_case_B** - 性格打印格式回归用例B
+
+22. **test_traits_new_format_case_A** - 性格新格式回归用例A
+
+23. **test_traits_new_format_case_B** - 性格新格式回归用例B
+
+24. **test_traits_new_format_case_C** - 性格新格式回归用例C：2006-3-22 14:00 女
+
+25. **test_traits_new_format_case_D** - 性格新格式回归用例D：1972-12-20 4:00 男
+
+26. **test_traits_new_format_case_E** - 性格新格式回归用例E
+
+27. **test_liuqin_zhuli_case_A** - 六亲助力回归用例A
+
+28. **test_liuqin_zhuli_case_B** - 六亲助力回归用例B
+
+29. **test_liuqin_zhuli_case_C** - 六亲助力回归用例C
+
+30. **test_natal_issues_format** - 原局问题打印格式回归测试
+    - 验证原局问题 section 的格式和内容
+
+31. **test_marriage_structure_hint** - 婚恋结构回归测试
+    - 1990-5-26 8:00 女：断言输出包含独立 section "—— 婚恋结构 ——" 和内容"官杀混杂，桃花多，易再婚，找不对配偶难走下去"
+    - 2007-1-11 2:00 男：断言输出包含独立 section "—— 婚恋结构 ——" 和内容"正偏财混杂，桃花多，易再婚，找不对配偶难走下去"
+    - 防漏改：NOT contains "婚恋结构提示："
+
+32. **test_natal_punish_zu_shang_marriage_explanation** - 原局刑解释回归测试：祖上宫-婚姻宫 刑
+    - 2007-1-28 12:00 男：断言输出包含"祖上宫-婚姻宫 丑戌刑 成长过程中波折较多，压力偏大"（或相反顺序/地支顺序）
+
 ### §12.2 黄金回归用例（main函数后单独运行）
 
 #### 例A（2005-09-20 10:00 男）
 
-13. **test_golden_case_A_2021** - 2021年
+#### 例A（2005-09-20 10:00 男）
+
+33. **test_golden_case_A_2021** - 2021年
     - 期望：总风险=65%（丑未冲35=10+5+20；运年相冲15=10+5；天克地冲20；墓库加成必须出现两次）
 
-14. **test_golden_case_A_2033** - 2033年（已更新为包含三合/三会逢冲额外加分）
+34. **test_golden_case_A_2033** - 2033年（已更新为包含三合/三会逢冲额外加分）
     - 期望：总风险70%
     - 丑戌冲 15%
     - 日柱天克地冲 20%
     - 新规则：巳午未三会里的未，冲了巳酉丑三合里的丑，额外 35%（两个字都在局/会里）
 
-15. **test_golden_case_A_2059** - 2059年
+35. **test_golden_case_A_2059** - 2059年
     - 期望：core_total=203.5（不含线运）加上线运6% = 209.5
+
+36. **test_golden_case_A_marriage_hints** - 婚姻宫/夫妻宫合事件提示断言
+    - 2024年：辰酉合 合进婚姻宫 → 提示一次
+    - 2025年：巳酉半合 合进婚姻宫 → 提示一次
+    - 2026年：午未合 合进夫妻宫 → 提示一次
+    - 验证：每年每宫位只提示一次
+
+37. **test_golden_case_A_shishen_labels** - 十神标签回归测试
+
+38. **test_golden_case_A_year_labels** - 流年标签回归测试
+
+39. **test_golden_case_A_clash_summary** - 冲摘要回归测试
+
+40. **test_golden_case_A_dayun_shishen** - 大运十神回归测试
+
+41. **test_golden_case_A_turning_points** - 大运转折点回归测试
+
+42. **test_golden_case_A_yongshen_swap_intervals** - 用神互换区间汇总回归测试
+    - 验证原局模块中的用神互换区间汇总
+    - 大运4（壬午，2029起）和大运5（辛巳，2039起）都触发用神互换
+    - 应合并为区间：2029-2048年
+    - 标题应为"—— 用神互换 ——"（统一格式）
+    - 位置应在大运转折点之后、大运模块之前
+
+43. **test_golden_case_A_dayun_printing_order** - 大运打印顺序回归测试
+    - 验证单条大运打印顺序：Header → 事实 → 分隔线 → 主轴/天干 → 提示汇总
+    - 验证缩进统一为4空格，分隔线位置正确
+
+44. **test_golden_case_A_liuyuan** - 流年回归测试
+
+45. **test_golden_case_A_tkdc_summary** - 天克地冲摘要回归测试
+
+46. **test_golden_case_A_merge_clash_combo** - 合冲组合提示回归测试
+    - 2023年：夫妻宫半合 + 婚姻宫冲 → 组合识别
+    - 2009年：夫妻宫冲 + 婚姻宫半合 → 组合识别
+    - 验证组合提示行只出现1次
 
 #### 例B（2007-01-28 12:00 男）
 
-16. **test_golden_case_B_2021** - 2021年
+47. **test_golden_case_B_2021** - 2021年
     - 期望：core_total=40（丑未冲25=10+5+10；运年相冲15=10+5；墓库加成必须出现两次）
 
-17. **test_golden_case_B_2012** - 2012年（新增：包含三合/三会逢冲额外加分）
+48. **test_golden_case_B_2012** - 2012年（新增：包含三合/三会逢冲额外加分）
     - 期望：核心风险45%
     - 辰戌冲：基础冲20% + 墓库10%（5%×2个柱） = 30%
     - 新规则：寅午戌三合局被冲（辰戌冲），辰不是用神 → 额外 15%
 
-18. **test_golden_case_B_2016** - 2016年（新增：包含三合/三会逢冲额外加分）
+49. **test_golden_case_B_2016** - 2016年（新增：包含三合/三会逢冲额外加分）
     - 期望：总风险80%
     - 运年天克地冲 20%
     - 寅申冲 10%
     - 寅申枭神夺食 15%
     - 新规则：寅午戌三合冲申，额外 35%（申是用神）
 
-19. **test_golden_case_B_2030** - 2030年
+50. **test_golden_case_B_2030** - 2030年
     - 期望：core_total≈82（当前实现值，未单独扣除线运）（丑戌刑6+静态刑6=12；辰戌冲15+静态冲15+TKDC10=40，运年天克地冲再加10% = 50%，其余地支层风险合计约32）
+
+51. **test_golden_case_B_shishen_labels** - 十神标签回归测试
+
+52. **test_golden_case_B_2023** - 2023年回归测试
+
+53. **test_golden_case_B_year_labels** - 流年标签回归测试
+
+54. **test_golden_case_B_marriage_hints** - 婚姻宫/夫妻宫合事件提示断言（2007-1-18）
+    - 注意：这是新的黄金案例B（2007-1-18），与之前的2007-1-28不同
+
+55. **test_golden_case_B_clash_summary** - 冲摘要回归测试
+
+56. **test_golden_case_B_turning_points** - 大运转折点回归测试
+
+57. **test_golden_case_B_liuyuan** - 流年回归测试
+
+58. **test_golden_case_B_tkdc_summary** - 天克地冲摘要回归测试
+
+59. **test_golden_case_B_love_field_OLD** - 黄金案例B情感领域（旧格式）回归测试
+
+#### 例C（用例C）
+
+60. **test_golden_case_C_2025** - 2025年回归测试
+
+61. **test_golden_case_C_turning_points** - 大运转折点回归测试
+
+62. **test_case_C_new_format** - 用例C新格式回归测试
 
 ### §12.3 原局问题回归用例（main函数后单独运行）
 
-20. **test_natal_punishment_case_A** - 原局刑回归用例A：2005-09-20 10:00，酉酉自刑（只有1个，5%）
+63. **test_natal_punishment_case_A** - 原局刑回归用例A：2005-09-20 10:00，酉酉自刑（只有1个，5%）
 
-21. **test_natal_punishment_case_B** - 原局刑回归用例B：2007-01-28 12:00，丑戌刑两次（各6%，共12%）
+64. **test_natal_punishment_case_A_output** - 原局刑输出格式回归测试
 
-22. **test_marriage_wuhe_hints_case_A** - 天干五合争合/双合婚恋提醒回归用例A：2006-3-22 14:00 女
-    - 原局：应识别1次（在"婚恋结构提示"里出现一行，包含被争合或命主合两个之一；并包含具体合名）
+65. **test_natal_punishment_case_2026** - 原局刑2026年回归测试
+
+66. **test_natal_punishment_case_B** - 原局刑回归用例B：2007-01-28 12:00，丑戌刑两次（各6%，共12%）
+
+67. **test_marriage_wuhe_hints_case_A** - 天干五合争合/双合婚恋提醒回归用例A：2006-3-22 14:00 女
+    - 原局：应识别1次（在"—— 婚恋结构 ——" section 里出现一行，包含被争合或命主合两个之一；并包含具体合名）
     - 流年2026：应识别1次，断言包含第三者介入，并包含合名
     - 流年2021：应识别1次，断言包含第三者介入，并包含合名
 
-23. **test_marriage_wuhe_hints_case_B** - 天干五合争合/双合婚恋提醒回归用例B：2006-12-17 12:00 男
+68. **test_marriage_wuhe_hints_case_B** - 天干五合争合/双合婚恋提醒回归用例B：2006-12-17 12:00 男
     - 流年2025：应识别1次，断言包含第三者介入，并包含合名
     - 流年2035：应识别1次（若是争合则断言第三者介入；若是双合则断言三角恋；并包含合名）
 
-24. **test_marriage_wuhe_hints_case_C** - 天干五合争合/双合婚恋提醒回归用例C：1984-9-20 4:00 女
+69. **test_marriage_wuhe_hints_case_C** - 天干五合争合/双合婚恋提醒回归用例C：1984-9-20 4:00 女
     - 流年2022：断言包含防止陷入三角恋，并包含合名
     - 流年2037：断言包含第三者介入，并包含合名
     - 大运2：在"大运批注最下面"断言包含防止陷入三角恋，并包含合名
 
-25. **test_marriage_wuhe_hints_no_false_positive** - 天干五合争合/双合婚恋提醒回归测试（无引动不触发）
+70. **test_marriage_wuhe_hints_no_false_positive** - 天干五合争合/双合婚恋提醒回归测试（无引动不触发）
     - 2006-3-22 14:00 女在2080和2079年不能打印婚恋提醒（因为没有引动）
 
-26. **test_marriage_wuhe_hints_dayun_no_duplicate** - 天干五合争合/双合婚恋提醒回归测试（大运层不重复打印）
+71. **test_marriage_wuhe_hints_dayun_no_duplicate** - 天干五合争合/双合婚恋提醒回归测试（大运层不重复打印）
     - 2006-12-17 12:00 男在大运6里：
       - 2055年应该打印（流年天干引动）
       - 2054年不应该打印（只有大运引动，没有流年引动）
       - 2057年不应该打印（只有大运引动，没有流年引动）
 
-27. **test_marriage_wuhe_hints_dual_hints** - 天干五合争合/双合婚恋提醒回归测试（同一年两条提醒）
+72. **test_marriage_wuhe_hints_dual_hints** - 天干五合争合/双合婚恋提醒回归测试（同一年两条提醒）
     - 1996-6-13 10:00 女
     - 如果2040年流年层有提醒，则必须同时出现两条提醒（被争合 + 三角恋），且不串层
     - 如果2030年流年层有提醒，则必须同时出现两条提醒（被争合 + 三角恋），且不串层
 
-28. **test_natal_punish_zu_shang_marriage_explanation** - 原局刑解释回归测试：祖上宫-婚姻宫 刑
-    - 2007-1-28 12:00 男：断言输出包含"祖上宫-婚姻宫 丑戌刑 成长过程中波折较多，压力偏大"（或相反顺序/地支顺序）
+### §12.4 用神互换回归用例（main函数后单独运行）
+
+73. **test_yongshen_swap_intervals_no_swap** - 用神互换区间汇总回归测试：无互换时不显示section
+    - 使用一个不会触发用神互换的用例（1969-02-07 00:00 男）
+    - 验证：无互换时不应出现"—— 用神互换 ——" section
+
+### §12.5 大运转折点回归用例（main函数后单独运行）
+
+74. **test_turning_points_summary_format** - 原局模块大运转折点汇总格式测试
+    - 验证大运转折点汇总 section 的格式和内容
+
+### §12.6 Relationship Index 回归用例（main函数后单独运行）
+
+75. **test_relationship_index_structure** - Relationship Index 结构回归测试
+   - 断言：`facts["indexes"]["relationship"]` 存在且包含所有必需字段
+   - 断言：`hit`、`types`、`years`、`last5_hit`、`last5_years` 字段类型正确
+   - 断言：`types` 列表只包含允许的值（`palace_clash`、`competing_combine_official_kill`、`competing_combine_wealth`）
+   - 断言：`years` 和 `last5_years` 列表已排序（升序）
+
+76. **test_relationship_index_palace_clash** - Relationship Index 冲到婚姻宫/夫妻宫回归测试
+   - 使用一个已知会触发冲到婚姻宫/夫妻宫的用例（例如：2005-09-20 10:00 男）
+   - 断言：`relationship["hit"] == True`
+   - 断言：`relationship["types"]` 包含 `palace_clash`
+   - 断言：命中年份列表正确（例如：包含 2021、2023 等年份）
+
+77. **test_relationship_index_competing_combine** - Relationship Index 天干争合官杀/财星回归测试
+   - 使用一个已知会触发天干争合官杀/财星的用例
+   - 断言：`relationship["hit"] == True`
+   - 断言：`relationship["types"]` 包含对应的争合类型（`competing_combine_official_kill` 或 `competing_combine_wealth`）
+   - 断言：命中年份列表正确
+   - 断言：只检测争合（`is_zhenghe=True`），不检测普通1对1合
+
+78. **test_relationship_index_last5_years** - Relationship Index 近5年回归测试
+   - 使用一个已知的用例（例如：当前年份为 2024），验证 `last5_hit` 和 `last5_years` 的计算逻辑
+   - 断言：`last5_years` 只包含当前年份往前推5年（不包括当前年份）的年份（例如：2024 年时，只包含 [2019, 2020, 2021, 2022, 2023]）
+   - 断言：`last5_hit == (len(last5_years) > 0)`
+   - 断言：`last5_years` 列表已排序（升序）
+
+79. **test_relationship_index_golden_case_A** - Relationship Index 黄金案例A回归测试
+   - 2005-09-20 10:00 男：验证 Relationship Index 的完整功能
+   - 断言：`relationship["hit"] == True`
+   - 断言：`relationship["types"]` 包含 `palace_clash` 和 `competing_combine_wealth`
+   - 断言：`relationship["years"]` 包含预期的年份（例如：2009, 2011, 2021, 2023 等）
+   - 断言：`relationship["last5_hit"] == True`（假设当前年份 >= 2024）
+   - 断言：`relationship["last5_years"]` 包含近5年的命中年份
+
+### §12.7 其他回归用例（main函数后单独运行）
+
+80. **test_event_area_no_hints** - 事件区不应包含提示行回归测试
+   - 通用断言：事件区不应出现以"提示："开头的行
+    - 测试多个代表性年份，验证提示行只在"提示汇总："区域出现
 
 ---
 
-**总计：28个 regression 用例（随功能增加而更新）**
-- main函数中运行：16个（基础规则 + 合类/婚配/原局打印等）
-- main函数后单独运行：12个（黄金回归7个 + 原局问题2个 + 天干五合婚恋提醒6个 + 原局刑解释1个）
+**总计：80个 regression 用例（随功能增加而更新）**
+- main函数中运行：32个（基础规则 + 合类/婚配/原局打印/格式测试等）
+- main函数后单独运行：48个（黄金回归用例 + 原局问题 + 天干五合婚恋提醒 + 用神互换 + 大运转折点 + Relationship Index + 其他）
 

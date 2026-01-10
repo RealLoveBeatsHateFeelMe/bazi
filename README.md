@@ -34,8 +34,24 @@
 - `main.py`：入口脚本（CLI）
 - `bazi/config.py`：权重表、五行映射等常量配置
 - `bazi/strength.py`：日主强弱计算核心函数
-- `bazi/lunar_engine.py`：封装 `lunar_python` 排盘 + 大运流年基础
+- `bazi/lunar_engine.py`：封装 `lunar_python` 排盘 + 大运流年基础 + 完整分析入口
 - `bazi/cli.py`：命令行交互逻辑
+- `bazi/relationship_index.py`：Relationship Index (Index-5) 生成：感情变动窗口白名单口径
+- `bazi/enrich.py`：数据丰富化：将打印层逻辑结构化回填到结果对象中
+- `bazi/luck.py`：大运/流年排盘 + 好运/坏运 + 冲信息
+- `bazi/clash.py`：地支冲检测
+- `bazi/punishment.py`：地支刑检测
+- `bazi/harmony.py`：地支合类检测（六合、三合、半合、三会）
+- `bazi/gan_wuhe.py`：天干五合检测
+- `bazi/marriage_wuhe.py`：天干五合争合/双合婚恋提醒检测
+- `bazi/patterns.py`：十神模式检测（枭神夺食、伤官见官）
+- `bazi/shishen.py`：十神计算与分类
+- `bazi/yongshen.py`：用神计算
+- `bazi/yongshen_swap.py`：用神互换检测
+- `bazi/regress.py`：回归测试用例
+- `scripts/generate_facts_snapshots.py`：回归样本 facts 快照生成脚本
+- `tests/regression/samples.json`：回归样本输入文件
+- `tests/regression/snapshots/facts/`：回归样本 facts 快照目录
 
 ## 关于大运 / 流年
 

@@ -248,10 +248,10 @@ def detect_dayun_patterns(
 def detect_liunian_patterns(
     bazi: Dict[str, Dict[str, str]],
     day_gan: str,
-    dayun_gan: str,
-    dayun_zhi: str,
-    liunian_gan: str,
-    liunian_zhi: str,
+    dayun_gan: Optional[str] = None,
+    dayun_zhi: Optional[str] = None,
+    liunian_gan: str = "",
+    liunian_zhi: str = "",
     yongshen_elements: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """检测流年动态模式（§5.3.3），并计算风险。

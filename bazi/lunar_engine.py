@@ -443,39 +443,78 @@ def analyze_complete(
     support_percent = natal.get("support_percent", 0.0)
     
     for group in luck.get("groups", []):
-        # 丰富大运数据
-        dayun = group.get("dayun", {})
-        dayun_enriched = enrich_dayun(
-            dayun=dayun,
-            bazi=bazi,
-            day_gan=day_gan,
-            strength_percent=strength_percent,
-            support_percent=support_percent,
-            yongshen_elements=yongshen_elements,
-            is_male=is_male,
-        )
-        dayun.update(dayun_enriched)
-        
-        # 丰富流年数据
+        dayun = group.get("dayun")
         liunian_list = group.get("liunian", [])
-        dayun_gan = dayun.get("gan", "")
-        for liunian in liunian_list:
-            liunian_enriched = enrich_liunian(
-                liunian=liunian,
+        
+        # 如果 dayun 为 None，说明是大运开始之前的流年，只丰富流年数据
+        if dayun is None:
+            # 大运开始之前，没有大运，dayun_gan 为 None
+            for liunian in liunian_list:
+                liunian_enriched = enrich_liunian(
+                    liunian=liunian,
+                    bazi=bazi,
+                    day_gan=day_gan,
+                    is_male=is_male,
+                    dayun_gan=None,  # 大运开始之前，没有大运天干
+                )
+                liunian.update(liunian_enriched)
+        else:
+            # 正常大运组，丰富大运和流年数据
+            dayun_enriched = enrich_dayun(
+                dayun=dayun,
                 bazi=bazi,
                 day_gan=day_gan,
+                strength_percent=strength_percent,
+                support_percent=support_percent,
+                yongshen_elements=yongshen_elements,
                 is_male=is_male,
-                dayun_gan=dayun_gan,
             )
-            liunian.update(liunian_enriched)
+            dayun.update(dayun_enriched)
+            
+            # 丰富流年数据
+            dayun_gan = dayun.get("gan", "")
+            for liunian in liunian_list:
+                liunian_enriched = enrich_liunian(
+                    liunian=liunian,
+                    bazi=bazi,
+                    day_gan=day_gan,
+                    is_male=is_male,
+                    dayun_gan=dayun_gan,
+                )
+                liunian.update(liunian_enriched)
     
     # 5. 计算转折点
     turning_points = compute_turning_points(luck.get("groups", []))
     
-    # 6. 组装最终结果
+    # 6. 生成 Relationship Index (Index-5)
+    from .relationship_index import generate_relationship_index
+    # 使用当前系统年份计算 last5_hit 和 last5_years
+    # 注意：为了快照稳定，快照生成脚本应该使用固定基准年份（见 generate_facts_snapshots.py）
+    from datetime import datetime as dt
+    current_year = dt.now().year
+    relationship_index = generate_relationship_index(
+        luck_data=luck,
+        bazi=bazi,
+        day_gan=day_gan,
+        is_male=is_male,
+        current_year=current_year,
+    )
+    
+    # 7. 生成 Dayun Index (Index-3)
+    from .dayun_index import generate_dayun_index
+    dayun_index = generate_dayun_index(
+        luck_data=luck,
+        natal_yongshen_elements=yongshen_elements,
+    )
+    
+    # 8. 组装最终结果
     return {
         "schema_version": "1.0.0",  # 数据格式版本号
         "natal": natal,
         "luck": luck,
         "turning_points": turning_points,
+        "indexes": {
+            "dayun": dayun_index,          # Index-3: Dayun Index（用神互换变动窗口）
+            "relationship": relationship_index,  # Index-5: Relationship Index（感情变动窗口）
+        },
     }
