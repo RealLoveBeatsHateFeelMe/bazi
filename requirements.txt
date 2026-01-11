@@ -1,1 +1,2 @@
 lunar_python==1.4.8
+flask==3.0.0

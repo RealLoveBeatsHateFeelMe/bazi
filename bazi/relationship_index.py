@@ -226,9 +226,10 @@ def generate_relationship_index(
     sorted_types = sorted(list(relationship_types))
     
     # 计算 last5_hit 和 last5_years
-    # 近5年：包含当前年份往前推5年（不包括当前年份）
-    # 例如：如果 current_year = 2024，则 last5_years 包含 [2019, 2020, 2021, 2022, 2023]
-    last5_years_list = [y for y in sorted_years if y >= (current_year - 5) and y < current_year]
+    # 近5年：包含当前年份往前推5年（包含当前年份）
+    # 例如：如果 current_year = 2024，则 last5_years 包含 [2024, 2023, 2022, 2021, 2020]（last5_years = [base_year, base_year-1, base_year-2, base_year-3, base_year-4]）
+    last5_years_range = set(range(current_year - 4, current_year + 1))  # [current_year-4, current_year] 包含两端
+    last5_years_list = [y for y in sorted_years if y in last5_years_range]
     last5_hit = len(last5_years_list) > 0
     
     return {

@@ -14,6 +14,7 @@ from datetime import datetime
 from .request_index import generate_request_index
 from .router import route
 from .modules import get_module_inputs_trace
+from .extract_findings import extract_findings_from_facts
 
 
 def chat_api(
@@ -71,11 +72,15 @@ def chat_api(
     # 5. 生成 answer（MVP 简化版：只做模板填充，不做真实 LLM 调用）
     answer = _generate_answer(query, intent, index, modules, years_used)
     
-    # 6. 组装统一返回壳
+    # 6. 提取 findings（facts/hints/links）
+    findings = extract_findings_from_facts(facts)
+    
+    # 7. 组装统一返回壳
     return {
         "answer": answer,
         "index": index,
         "trace": trace,
+        "findings": findings,  # 新增：findings（facts/hints/links）
         "error": None,  # MVP 先固定为 null
     }
 

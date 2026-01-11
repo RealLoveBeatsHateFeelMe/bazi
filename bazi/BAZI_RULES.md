@@ -306,8 +306,8 @@ Dayun Index 的生成依赖于以下 facts 原子信息（均在大运数据中�
 4. **`last5_hit`** (bool)
    - 说明：近5年是否命中（用于"前五年回放/最近几年"场景快速回答）
    - 计算：`last5_hit = len(last5_years) > 0`
-   - 近5年定义：包含当前年份往前推5年（不包括当前年份）
-   - 例如：如果 `current_year = 2024`，则近5年为 `[2019, 2020, 2021, 2022, 2023]`
+   - 近5年定义：包含当前年份往前推5年（包含当前年份）
+   - 例如：如果 `base_year = 2024`，则近5年为 `[2024, 2023, 2022, 2021, 2020]`（last5_years = [base_year, base_year-1, base_year-2, base_year-3, base_year-4]）
 
 5. **`last5_years`** (List[int])
    - 说明：近5年命中年份的列表（排序稳定，升序）
@@ -360,6 +360,7 @@ Chat API 提供统一的返回结构，确保前端能同时展示 LLM 的回答
     "answer": "string",           # 给用户看的自然语言
     "index": { /* Request Index v0 */ },  # 本次请求派生出来的 Index v0
     "trace": { /* 全审计 */ },    # 审计链路
+    "findings": { /* Findings（facts/hints/links） */ },  # 结构化产物（可选附件）
     "error": null                 # MVP 先固定为 null（以后扩展）
 }
 ```
@@ -495,6 +496,114 @@ trace 必须完整可视化审计链路，至少包含：
 - `bazi/router.py::route()`：Router 决策逻辑（只读 index）
 - `bazi/modules.py`：Modules 组装逻辑
 - `bazi/chat_api.py::chat_api()`：Chat API 主入口
+
+---
+
+## §1.8 Findings：结构化产物（facts/hints/links）
+
+**设计原则：**
+
+Findings 是从 facts 中提取的结构化产物，包含 `facts[]`（原子事实）、`hints[]`（提示）、`links[]`（因果链接）。Findings 是可选附件，缺省或为空时不影响 API/router 正常工作。
+
+**关键边界：**
+
+- **Findings 是可选附件**：缺省或为空时，API 返回与未来 router 都能正常工作
+- **单点生成原则**：Findings 只能由 `extract_findings_from_facts(facts)->findings` 产出；API/router 只能调用，不得各自拼 hints
+- **只加不改原则**：不删除/不改已有字段语义，只新增 findings 字段或内部结构
+- **ID确定性原则**：fact_id/hint_id 不用随机数；同一输入重复跑 ID 不变；拼接/哈希的 key_fields 必须排序稳定
+- **trace 默认关闭原则**：trace 不参与业务逻辑；router 不读 trace；模型输入默认不含 trace
+
+**Findings 固定结构：**
+
+```python
+{
+    "facts": [
+        {
+            "fact_id": "string",  # 稳定的 fact_id（12位十六进制）
+            "type": "string",      # fact 类型（如 "branch_clash", "pattern"）
+            "kind": "string",      # kind 类别（如 "clash", "pattern"）
+            "scope": "string",     # 作用域（如 "natal", "liunian_2024"）
+            "label": "string",     # 简短标签
+            # ... 其他 key_fields 字段
+        }
+    ],
+    "hints": [
+        {
+            "hint_id": "string",   # 稳定的 hint_id（12位十六进制）
+            "domain": "string",    # 领域（如 "relationship", "career"）
+            "level": "string",     # 级别（如 "light", "moderate", "serious"）
+            "label": "string",     # 提示文本
+            # ... 其他 key_fields 字段（可选）
+        }
+    ],
+    "links": [
+        {
+            "hint_id": "string",   # 指向的 hint_id
+            "fact_ids": ["string"], # 关联的 fact_id 列表
+            "rule_id": "string"    # 可选，规则标识
+        }
+    ],
+    "meta": {}  # 可选，元信息
+}
+```
+
+**字段说明：**
+
+1. **`facts`** (List[Dict])
+   - 说明：原子事实列表（可为空）
+   - 每条 fact 有 `fact_id`、`type`、`kind`、`scope`、`label` 等字段
+   - `fact_id` 使用 `hashlib.md5` 生成，确保稳定（同一输入重复跑 ID 不变）
+
+2. **`hints`** (List[Dict])
+   - 说明：提示列表（可为空）
+   - 每条 hint 有 `hint_id`、`domain`、`level`、`label` 等字段
+   - `hint_id` 使用 `hashlib.md5` 生成，确保稳定
+
+3. **`links`** (List[Dict])
+   - 说明：因果链接列表（可为空）
+   - 每条 link 包含 `hint_id`（指向的 hint）、`fact_ids[]`（关联的 fact ID 列表）、`rule_id`（可选）
+   - 每条 hint 必须能在 links 里找到对应的 fact_id[]
+
+4. **`meta`** (Dict, 可选)
+   - 说明：元信息（可选，可以缺失）
+
+**Findings 缺省或为空时的处理：**
+
+- Findings 可以为空结构：`{"facts": [], "hints": [], "links": []}`
+- Findings 字段可以缺失（向后兼容）
+- Findings 缺省或为空时，API 返回与未来 router 都能正常工作
+- Router 不读 findings，只读 index
+
+**数据生成位置：**
+
+- `bazi/extract_findings.py::extract_findings_from_facts()`：Findings 提取逻辑（单点生成）
+- `bazi/findings_collector.py::FindingsCollector`：Findings 收集器，ID 生成逻辑
+- `bazi/chat_api.py::chat_api()`：在主入口函数中调用 `extract_findings_from_facts` 并添加到返回
+
+**Facts 原子信息依赖：**
+
+Findings 的生成依赖于以下 facts 原子信息（均在 luck 数据中）：
+- 流年事件：`luck.groups[].liunian[].all_events` - 所有事件列表
+- 冲事件：`all_events` 中的 `type="branch_clash"` 事件
+- 模式事件：`all_events` 中的 `type="pattern"` 事件（如"枭神夺食"、"伤官见官"）
+
+**输出口径约束：**
+
+- **Findings 只记录"结构化事实"**：原子事实、提示、因果链接
+- **严禁在 Findings 中写建议性内容**
+- **Findings 是可选附件**：缺省或为空时不影响 API/router 正常工作
+
+**核心原则（必须严格遵守）：**
+
+1. **单点生成原则**：Findings 只能由 `extract_findings_from_facts(facts)->findings` 产出；API/router 只能调用，不得各自拼 hints
+
+2. **附件原则**：Findings 是可选附件；Findings 缺省或为空时，API 返回与未来 router 都能正常工作
+
+3. **只加不改原则**：不删除/不改已有字段语义，只新增 findings 字段或内部结构
+
+4. **ID确定性原则**：fact_id/hint_id 不用随机数；同一输入重复跑 ID 不变；拼接/哈希的 key_fields 必须排序稳定（使用 `sorted(key_fields.items())`）
+
+5. **trace 默认关闭原则**：trace 不参与业务逻辑；router 不读 trace；模型输入默认不含 trace
 
 ---
 
