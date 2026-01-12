@@ -1919,37 +1919,6 @@
             "patterns_static_activation": [],
             "punishments_natal": [
               {
-                "base_power_percent": 35.0,
-                "flow_branch": "未",
-                "flow_label": "乙未",
-                "flow_type": "liunian",
-                "flow_year": 2015,
-                "is_grave": true,
-                "risk_percent": 6.0,
-                "role": "punisher",
-                "shishens": {
-                  "flow_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  },
-                  "target_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  }
-                },
-                "target_branch": "丑",
-                "targets": [
-                  {
-                    "branch_gan": "己",
-                    "branch_shishen": "正官",
-                    "palace": "婚姻宫",
-                    "pillar": "month",
-                    "position_weight": 0.35
-                  }
-                ],
-                "type": "punishment"
-              },
-              {
                 "base_power_percent": 10.0,
                 "flow_branch": "未",
                 "flow_label": "乙未",
@@ -2007,6 +1976,37 @@
                     "palace": "夫妻宫",
                     "pillar": "day",
                     "position_weight": 0.1
+                  }
+                ],
+                "type": "punishment"
+              },
+              {
+                "base_power_percent": 35.0,
+                "flow_branch": "未",
+                "flow_label": "乙未",
+                "flow_type": "liunian",
+                "flow_year": 2015,
+                "is_grave": true,
+                "risk_percent": 6.0,
+                "role": "punisher",
+                "shishens": {
+                  "flow_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  },
+                  "target_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  }
+                },
+                "target_branch": "丑",
+                "targets": [
+                  {
+                    "branch_gan": "己",
+                    "branch_shishen": "正官",
+                    "palace": "婚姻宫",
+                    "pillar": "month",
+                    "position_weight": 0.35
                   }
                 ],
                 "type": "punishment"
@@ -4618,37 +4618,6 @@
             "patterns_static_activation": [],
             "punishments_natal": [
               {
-                "base_power_percent": 35.0,
-                "flow_branch": "未",
-                "flow_label": "丁未",
-                "flow_type": "liunian",
-                "flow_year": 2027,
-                "is_grave": true,
-                "risk_percent": 6.0,
-                "role": "punisher",
-                "shishens": {
-                  "flow_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  },
-                  "target_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  }
-                },
-                "target_branch": "丑",
-                "targets": [
-                  {
-                    "branch_gan": "己",
-                    "branch_shishen": "正官",
-                    "palace": "婚姻宫",
-                    "pillar": "month",
-                    "position_weight": 0.35
-                  }
-                ],
-                "type": "punishment"
-              },
-              {
                 "base_power_percent": 10.0,
                 "flow_branch": "未",
                 "flow_label": "丁未",
@@ -4706,6 +4675,37 @@
                     "palace": "夫妻宫",
                     "pillar": "day",
                     "position_weight": 0.1
+                  }
+                ],
+                "type": "punishment"
+              },
+              {
+                "base_power_percent": 35.0,
+                "flow_branch": "未",
+                "flow_label": "丁未",
+                "flow_type": "liunian",
+                "flow_year": 2027,
+                "is_grave": true,
+                "risk_percent": 6.0,
+                "role": "punisher",
+                "shishens": {
+                  "flow_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  },
+                  "target_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  }
+                },
+                "target_branch": "丑",
+                "targets": [
+                  {
+                    "branch_gan": "己",
+                    "branch_shishen": "正官",
+                    "palace": "婚姻宫",
+                    "pillar": "month",
+                    "position_weight": 0.35
                   }
                 ],
                 "type": "punishment"
@@ -6858,37 +6858,6 @@
             "patterns_static_activation": [],
             "punishments_natal": [
               {
-                "base_power_percent": 35.0,
-                "flow_branch": "未",
-                "flow_label": "己未",
-                "flow_type": "liunian",
-                "flow_year": 2039,
-                "is_grave": true,
-                "risk_percent": 6.0,
-                "role": "punisher",
-                "shishens": {
-                  "flow_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  },
-                  "target_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  }
-                },
-                "target_branch": "丑",
-                "targets": [
-                  {
-                    "branch_gan": "己",
-                    "branch_shishen": "正官",
-                    "palace": "婚姻宫",
-                    "pillar": "month",
-                    "position_weight": 0.35
-                  }
-                ],
-                "type": "punishment"
-              },
-              {
                 "base_power_percent": 10.0,
                 "flow_branch": "未",
                 "flow_label": "己未",
@@ -6946,6 +6915,37 @@
                     "palace": "夫妻宫",
                     "pillar": "day",
                     "position_weight": 0.1
+                  }
+                ],
+                "type": "punishment"
+              },
+              {
+                "base_power_percent": 35.0,
+                "flow_branch": "未",
+                "flow_label": "己未",
+                "flow_type": "liunian",
+                "flow_year": 2039,
+                "is_grave": true,
+                "risk_percent": 6.0,
+                "role": "punisher",
+                "shishens": {
+                  "flow_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  },
+                  "target_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  }
+                },
+                "target_branch": "丑",
+                "targets": [
+                  {
+                    "branch_gan": "己",
+                    "branch_shishen": "正官",
+                    "palace": "婚姻宫",
+                    "pillar": "month",
+                    "position_weight": 0.35
                   }
                 ],
                 "type": "punishment"
@@ -9067,37 +9067,6 @@
             "patterns_static_activation": [],
             "punishments_natal": [
               {
-                "base_power_percent": 35.0,
-                "flow_branch": "未",
-                "flow_label": "辛未",
-                "flow_type": "liunian",
-                "flow_year": 2051,
-                "is_grave": true,
-                "risk_percent": 6.0,
-                "role": "punisher",
-                "shishens": {
-                  "flow_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  },
-                  "target_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  }
-                },
-                "target_branch": "丑",
-                "targets": [
-                  {
-                    "branch_gan": "己",
-                    "branch_shishen": "正官",
-                    "palace": "婚姻宫",
-                    "pillar": "month",
-                    "position_weight": 0.35
-                  }
-                ],
-                "type": "punishment"
-              },
-              {
                 "base_power_percent": 10.0,
                 "flow_branch": "未",
                 "flow_label": "辛未",
@@ -9155,6 +9124,37 @@
                     "palace": "夫妻宫",
                     "pillar": "day",
                     "position_weight": 0.1
+                  }
+                ],
+                "type": "punishment"
+              },
+              {
+                "base_power_percent": 35.0,
+                "flow_branch": "未",
+                "flow_label": "辛未",
+                "flow_type": "liunian",
+                "flow_year": 2051,
+                "is_grave": true,
+                "risk_percent": 6.0,
+                "role": "punisher",
+                "shishens": {
+                  "flow_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  },
+                  "target_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  }
+                },
+                "target_branch": "丑",
+                "targets": [
+                  {
+                    "branch_gan": "己",
+                    "branch_shishen": "正官",
+                    "palace": "婚姻宫",
+                    "pillar": "month",
+                    "position_weight": 0.35
                   }
                 ],
                 "type": "punishment"
@@ -11409,37 +11409,6 @@
             "patterns_static_activation": [],
             "punishments_natal": [
               {
-                "base_power_percent": 35.0,
-                "flow_branch": "未",
-                "flow_label": "癸未",
-                "flow_type": "liunian",
-                "flow_year": 2063,
-                "is_grave": true,
-                "risk_percent": 6.0,
-                "role": "punisher",
-                "shishens": {
-                  "flow_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  },
-                  "target_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  }
-                },
-                "target_branch": "丑",
-                "targets": [
-                  {
-                    "branch_gan": "己",
-                    "branch_shishen": "正官",
-                    "palace": "婚姻宫",
-                    "pillar": "month",
-                    "position_weight": 0.35
-                  }
-                ],
-                "type": "punishment"
-              },
-              {
                 "base_power_percent": 10.0,
                 "flow_branch": "未",
                 "flow_label": "癸未",
@@ -11497,6 +11466,37 @@
                     "palace": "夫妻宫",
                     "pillar": "day",
                     "position_weight": 0.1
+                  }
+                ],
+                "type": "punishment"
+              },
+              {
+                "base_power_percent": 35.0,
+                "flow_branch": "未",
+                "flow_label": "癸未",
+                "flow_type": "liunian",
+                "flow_year": 2063,
+                "is_grave": true,
+                "risk_percent": 6.0,
+                "role": "punisher",
+                "shishens": {
+                  "flow_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  },
+                  "target_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  }
+                },
+                "target_branch": "丑",
+                "targets": [
+                  {
+                    "branch_gan": "己",
+                    "branch_shishen": "正官",
+                    "palace": "婚姻宫",
+                    "pillar": "month",
+                    "position_weight": 0.35
                   }
                 ],
                 "type": "punishment"
@@ -13453,37 +13453,6 @@
             "patterns_static_activation": [],
             "punishments_natal": [
               {
-                "base_power_percent": 35.0,
-                "flow_branch": "未",
-                "flow_label": "乙未",
-                "flow_type": "liunian",
-                "flow_year": 2075,
-                "is_grave": true,
-                "risk_percent": 6.0,
-                "role": "punisher",
-                "shishens": {
-                  "flow_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  },
-                  "target_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  }
-                },
-                "target_branch": "丑",
-                "targets": [
-                  {
-                    "branch_gan": "己",
-                    "branch_shishen": "正官",
-                    "palace": "婚姻宫",
-                    "pillar": "month",
-                    "position_weight": 0.35
-                  }
-                ],
-                "type": "punishment"
-              },
-              {
                 "base_power_percent": 10.0,
                 "flow_branch": "未",
                 "flow_label": "乙未",
@@ -13541,6 +13510,37 @@
                     "palace": "夫妻宫",
                     "pillar": "day",
                     "position_weight": 0.1
+                  }
+                ],
+                "type": "punishment"
+              },
+              {
+                "base_power_percent": 35.0,
+                "flow_branch": "未",
+                "flow_label": "乙未",
+                "flow_type": "liunian",
+                "flow_year": 2075,
+                "is_grave": true,
+                "risk_percent": 6.0,
+                "role": "punisher",
+                "shishens": {
+                  "flow_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  },
+                  "target_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  }
+                },
+                "target_branch": "丑",
+                "targets": [
+                  {
+                    "branch_gan": "己",
+                    "branch_shishen": "正官",
+                    "palace": "婚姻宫",
+                    "pillar": "month",
+                    "position_weight": 0.35
                   }
                 ],
                 "type": "punishment"
@@ -15654,37 +15654,6 @@
             "patterns_static_activation": [],
             "punishments_natal": [
               {
-                "base_power_percent": 35.0,
-                "flow_branch": "未",
-                "flow_label": "丁未",
-                "flow_type": "liunian",
-                "flow_year": 2087,
-                "is_grave": true,
-                "risk_percent": 6.0,
-                "role": "punisher",
-                "shishens": {
-                  "flow_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  },
-                  "target_branch": {
-                    "gan": "己",
-                    "shishen": "正官"
-                  }
-                },
-                "target_branch": "丑",
-                "targets": [
-                  {
-                    "branch_gan": "己",
-                    "branch_shishen": "正官",
-                    "palace": "婚姻宫",
-                    "pillar": "month",
-                    "position_weight": 0.35
-                  }
-                ],
-                "type": "punishment"
-              },
-              {
                 "base_power_percent": 10.0,
                 "flow_branch": "未",
                 "flow_label": "丁未",
@@ -15742,6 +15711,37 @@
                     "palace": "夫妻宫",
                     "pillar": "day",
                     "position_weight": 0.1
+                  }
+                ],
+                "type": "punishment"
+              },
+              {
+                "base_power_percent": 35.0,
+                "flow_branch": "未",
+                "flow_label": "丁未",
+                "flow_type": "liunian",
+                "flow_year": 2087,
+                "is_grave": true,
+                "risk_percent": 6.0,
+                "role": "punisher",
+                "shishens": {
+                  "flow_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  },
+                  "target_branch": {
+                    "gan": "己",
+                    "shishen": "正官"
+                  }
+                },
+                "target_branch": "丑",
+                "targets": [
+                  {
+                    "branch_gan": "己",
+                    "branch_shishen": "正官",
+                    "palace": "婚姻宫",
+                    "pillar": "month",
+                    "position_weight": 0.35
                   }
                 ],
                 "type": "punishment"
@@ -17663,11 +17663,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": null,
         "element": "土",
         "group": "官杀",
         "mix_label": "官杀混杂",
         "sub_label": "官杀混杂",
-        "total_percent": 55.0
+        "total_percent": 55.0,
+        "xiongshen_status": "split"
       },
       {
         "de_yueling": null,
@@ -17696,11 +17698,13 @@
             "stems_visible_count": 2
           }
         ],
+        "dominant_ten_god": null,
         "element": "火",
         "group": "财",
         "mix_label": "正偏财混杂",
         "sub_label": "正偏财混杂",
-        "total_percent": 35.0
+        "total_percent": 35.0,
+        "xiongshen_status": "split"
       },
       {
         "de_yueling": null,
@@ -17728,11 +17732,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": "正印",
         "element": "金",
         "group": "印",
         "mix_label": "纯正印",
         "sub_label": "正印",
-        "total_percent": 10.0
+        "total_percent": 10.0,
+        "xiongshen_status": "none"
       },
       {
         "de_yueling": null,
@@ -17758,11 +17764,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": null,
         "element": "木",
         "group": "食伤",
         "mix_label": "食伤",
         "sub_label": "",
-        "total_percent": 0.0
+        "total_percent": 0.0,
+        "xiongshen_status": "none"
       },
       {
         "de_yueling": null,
@@ -17788,11 +17796,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": null,
         "element": "水",
         "group": "比劫",
         "mix_label": "比劫",
         "sub_label": "",
-        "total_percent": 0.0
+        "total_percent": 0.0,
+        "xiongshen_status": "none"
       }
     ],
     "drain_percent": 90.0,
@@ -17831,11 +17841,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": "正印",
         "element": "金",
         "group": "印",
         "mix_label": "纯正印",
         "sub_label": "正印",
-        "total_percent": 10.0
+        "total_percent": 10.0,
+        "xiongshen_status": "none"
       },
       {
         "de_yueling": null,
@@ -17861,11 +17873,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": null,
         "element": "木",
         "group": "食伤",
         "mix_label": "食伤",
         "sub_label": "",
-        "total_percent": 0.0
+        "total_percent": 0.0,
+        "xiongshen_status": "none"
       },
       {
         "de_yueling": null,
@@ -17891,11 +17905,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": null,
         "element": "水",
         "group": "比劫",
         "mix_label": "比劫",
         "sub_label": "",
-        "total_percent": 0.0
+        "total_percent": 0.0,
+        "xiongshen_status": "none"
       }
     ],
     "marriage_hint": "更容易匹配：猪鼠猴鸡虎兔；或 金，水，木旺的人。",

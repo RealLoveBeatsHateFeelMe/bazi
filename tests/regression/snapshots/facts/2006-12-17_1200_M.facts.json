@@ -20557,11 +20557,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": "伤官",
         "element": "水",
         "group": "食伤",
         "mix_label": "食伤混杂",
         "sub_label": "食伤混杂",
-        "total_percent": 45.0
+        "total_percent": 45.0,
+        "xiongshen_status": "xiongshen_majority"
       },
       {
         "de_yueling": null,
@@ -20589,11 +20591,13 @@
             "stems_visible_count": 1
           }
         ],
+        "dominant_ten_god": null,
         "element": "火",
         "group": "官杀",
         "mix_label": "官杀混杂",
         "sub_label": "官杀混杂",
-        "total_percent": 25.0
+        "total_percent": 25.0,
+        "xiongshen_status": "split"
       },
       {
         "de_yueling": null,
@@ -20619,11 +20623,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": "偏印",
         "element": "土",
         "group": "印",
         "mix_label": "纯偏印",
         "sub_label": "偏印",
-        "total_percent": 20.0
+        "total_percent": 20.0,
+        "xiongshen_status": "pure_xiongshen"
       },
       {
         "de_yueling": null,
@@ -20651,11 +20657,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": "比肩",
         "element": "金",
         "group": "比劫",
         "mix_label": "纯比肩",
         "sub_label": "比肩",
-        "total_percent": 10.0
+        "total_percent": 10.0,
+        "xiongshen_status": "none"
       },
       {
         "de_yueling": null,
@@ -20681,11 +20689,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": null,
         "element": "木",
         "group": "财",
         "mix_label": "财星",
         "sub_label": "",
-        "total_percent": 0.0
+        "total_percent": 0.0,
+        "xiongshen_status": "none"
       }
     ],
     "drain_percent": 70.0,
@@ -20724,11 +20734,13 @@
             "stems_visible_count": 1
           }
         ],
+        "dominant_ten_god": null,
         "element": "火",
         "group": "官杀",
         "mix_label": "官杀混杂",
         "sub_label": "官杀混杂",
-        "total_percent": 25.0
+        "total_percent": 25.0,
+        "xiongshen_status": "split"
       },
       {
         "de_yueling": null,
@@ -20754,11 +20766,13 @@
             "stems_visible_count": 0
           }
         ],
+        "dominant_ten_god": null,
         "element": "木",
         "group": "财",
         "mix_label": "财星",
         "sub_label": "",
-        "total_percent": 0.0
+        "total_percent": 0.0,
+        "xiongshen_status": "none"
       }
     ],
     "marriage_hint": "更容易匹配：虎兔蛇马；或 木，火旺的人。",

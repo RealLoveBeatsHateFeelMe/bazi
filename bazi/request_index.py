@@ -152,6 +152,9 @@ def generate_request_index(
         "request_blocked": request_blocked,  # 本次请求是否被阻止
     }
     
+    # 8) index.personality（新增：性格轴索引）
+    personality_index = _build_personality_index(facts)
+    
     return {
         "meta": meta,
         "dayun": dayun_index,
@@ -160,6 +163,7 @@ def generate_request_index(
         "good_year_search": good_year_search_index,
         "relationship": relationship_index,
         "quota": quota_index,
+        "personality": personality_index,  # 新增：性格轴索引
     }
 
 
@@ -628,5 +632,42 @@ def _build_relationship_index(facts: Dict[str, Any], last5_years: List[int], fut
         "hit": hit,
         "years_hit": years_hit,        # 命中列表（免费用户已过滤未来年份）
         "last5_years_hit": last5_years_hit,  # years_hit 与 last5_years 的交集，保持排序与 last5_years 一致
+    }
+
+
+def _build_personality_index(facts: Dict[str, Any]) -> Dict[str, Any]:
+    """构建 personality 索引（性格轴摘要）。
+    
+    从 facts.natal.dominant_traits 派生，包含每个轴的关键字段：
+    - group: 大类名称（印 / 财 / 官杀 / 食伤 / 比劫）
+    - total_percent: 该大类的总占比
+    - dominant_ten_god: 主导十神（split 时为 None）
+    - xiongshen_status: 凶神状态（4态枚举：pure_xiongshen / xiongshen_majority / split / none）
+    """
+    natal = facts.get("natal", {})
+    dominant_traits = natal.get("dominant_traits", [])
+    
+    # 转换为 axis_summaries 列表
+    axis_summaries: List[Dict[str, Any]] = []
+    for trait in dominant_traits:
+        group = trait.get("group")
+        total_percent = trait.get("total_percent", 0.0)
+        
+        # 如果该轴力量为 0，跳过（不存在的轴不展示）
+        if total_percent == 0.0:
+            continue
+        
+        axis_summary = {
+            "group": group,
+            "total_percent": total_percent,
+            "dominant_ten_god": trait.get("dominant_ten_god"),
+            "xiongshen_status": trait.get("xiongshen_status", "none"),
+            "mix_label": trait.get("mix_label"),  # 保留兼容字段
+            "sub_label": trait.get("sub_label"),  # 保留兼容字段
+        }
+        axis_summaries.append(axis_summary)
+    
+    return {
+        "axis_summaries": axis_summaries,  # 性格轴摘要列表（按 total_percent 降序）
     }
 

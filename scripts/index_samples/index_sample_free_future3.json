@@ -1,0 +1,203 @@
+{
+  "dayun": {
+    "current_dayun_ref": {
+      "end_year": 2028,
+      "fortune_label": "一般",
+      "label": "癸未",
+      "start_year": 2019
+    },
+    "fortune_label": "一般",
+    "yongshen_swap": {
+      "has_swap": false,
+      "hint": "",
+      "items": []
+    }
+  },
+  "good_year_search": {
+    "checked_years": [],
+    "future3_good_years": [],
+    "has_good_in_future3": false,
+    "next_good_year": null,
+    "next_good_year_offset": null,
+    "rule": "half1_or_half2_label_is_好运"
+  },
+  "meta": {
+    "base_year": 2026,
+    "facts_max_year": 2098,
+    "future3_years": [
+      2026,
+      2027,
+      2028
+    ],
+    "index_version": "0.1.0",
+    "last3_years": [
+      2026,
+      2025,
+      2024
+    ],
+    "last5_years": [
+      2026,
+      2025,
+      2024,
+      2023,
+      2022
+    ],
+    "scan_horizon_end_year": 2036
+  },
+  "personality": {
+    "axis_summaries": [
+      {
+        "dominant_ten_god": "偏财",
+        "group": "财",
+        "mix_label": "纯偏财",
+        "sub_label": "偏财",
+        "total_percent": 45.0,
+        "xiongshen_status": "none"
+      },
+      {
+        "dominant_ten_god": "偏印",
+        "group": "印",
+        "mix_label": "纯偏印",
+        "sub_label": "偏印",
+        "total_percent": 30.0,
+        "xiongshen_status": "pure_xiongshen"
+      },
+      {
+        "dominant_ten_god": "劫财",
+        "group": "比劫",
+        "mix_label": "纯劫财",
+        "sub_label": "劫财",
+        "total_percent": 15.0,
+        "xiongshen_status": "pure_xiongshen"
+      },
+      {
+        "dominant_ten_god": "食神",
+        "group": "食伤",
+        "mix_label": "纯食神",
+        "sub_label": "食神",
+        "total_percent": 10.0,
+        "xiongshen_status": "none"
+      }
+    ]
+  },
+  "quota": {
+    "account_flags": [
+      "future_locked"
+    ],
+    "allowed_year_max": 2026,
+    "backend_allowed": true,
+    "blocked_reason": "future_locked",
+    "future_allowed": false,
+    "request_blocked": true,
+    "tier": "free",
+    "token_budget": {
+      "limit": null,
+      "remaining": null,
+      "reset_at": null
+    }
+  },
+  "relationship": {
+    "hit": true,
+    "last5_years_hit": [
+      2023
+    ],
+    "years_hit": [
+      2009,
+      2011,
+      2021,
+      2023
+    ]
+  },
+  "turning_points": {
+    "all": [],
+    "nearby": [],
+    "should_mention": false
+  },
+  "year_grade": {
+    "future3": [
+      {
+        "Y": null,
+        "half1": null,
+        "half2": null,
+        "locked": true,
+        "year": 2026,
+        "year_label": null
+      },
+      {
+        "Y": null,
+        "half1": null,
+        "half2": null,
+        "locked": true,
+        "year": 2027,
+        "year_label": null
+      },
+      {
+        "Y": null,
+        "half1": null,
+        "half2": null,
+        "locked": true,
+        "year": 2028,
+        "year_label": null
+      }
+    ],
+    "last5": [
+      {
+        "Y": 0.0,
+        "half1": {
+          "H": 0.0,
+          "half_label": "好运"
+        },
+        "half2": {
+          "H": 0.0,
+          "half_label": "好运"
+        },
+        "year": 2026,
+        "year_label": "上半年 好运，下半年 好运"
+      },
+      {
+        "Y": 0.0,
+        "half1": {
+          "H": 0.0,
+          "half_label": "好运"
+        },
+        "half2": {
+          "H": 0.0,
+          "half_label": "好运"
+        },
+        "year": 2025,
+        "year_label": "上半年 好运，下半年 好运"
+      },
+      {
+        "Y": 0.0,
+        "half1": {
+          "H": 0.0,
+          "half_label": "好运"
+        },
+        "half2": {
+          "H": 0.0,
+          "half_label": "一般"
+        },
+        "year": 2024,
+        "year_label": "上半年 好运，下半年 一般"
+      },
+      {
+        "Y": 71.0,
+        "year": 2023,
+        "year_label": "全年 凶（棘手/意外）"
+      },
+      {
+        "Y": 5.0,
+        "half1": {
+          "H": 0.0,
+          "half_label": "一般"
+        },
+        "half2": {
+          "H": 5.0,
+          "half_label": "好运"
+        },
+        "year": 2022,
+        "year_label": "上半年 一般，下半年 好运"
+      }
+    ]
+  }
+}

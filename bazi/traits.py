@@ -19,6 +19,10 @@ CATEGORY_SUBS: Dict[str, tuple[str, str]] = {
     "比劫": ("比肩", "劫财"),
 }
 
+# 凶神集合（硬编码）：偏印、七杀、伤官、劫财
+# 注意：偏财不算凶神
+XIONGSHEN_SET: Set[str] = {"偏印", "七杀", "伤官", "劫财"}
+
 
 def _group_label(cat: str) -> str:
     if cat == "印星":
@@ -264,6 +268,68 @@ def compute_dominant_traits(bazi: Dict[str, Dict[str, str]], day_gan: str) -> Li
         # 保留旧的 mix_label 用于兼容
         old_mix_label = _mix_label(cat, present_subs)
         
+        # 计算 xiongshen_status（4态枚举）
+        # 需要先计算：是否 split、dominant_ten_god
+        xiongshen_status = "none"  # 默认值
+        dominant_ten_god = None  # 主导十神
+        is_split = False  # 是否命中 split 区间
+        
+        # 获取正/偏两个子类的占比
+        subs_tuple = CATEGORY_SUBS[cat]
+        zheng_shishen = subs_tuple[0]  # 正印、正财、正官、食神、比肩
+        pian_shishen = subs_tuple[1]   # 偏印、偏财、七杀、伤官、劫财
+        
+        zheng_percent = 0.0
+        pian_percent = 0.0
+        for d in detail_items:
+            name = d.get("name")
+            pct = d.get("percent", 0.0)
+            if name == zheng_shishen:
+                zheng_percent = pct
+            elif name == pian_shishen:
+                pian_percent = pct
+        
+        # 计算 pian_ratio（偏占多少，仅在并存时有意义）
+        pian_ratio = None
+        if zheng_percent > 0.0 and pian_percent > 0.0:
+            total_sub_percent = zheng_percent + pian_percent
+            if total_sub_percent > 0.0:
+                pian_ratio = pian_percent / total_sub_percent
+                pian_ratio = round(pian_ratio + 0.0001, 1)  # 加小量避免浮点误差
+                if pian_ratio > 1.0:
+                    pian_ratio = 1.0
+        
+        # 判定顺序（严格）：先判 split，再判 dominant
+        if pian_ratio is not None and 0.30 < pian_ratio <= 0.60:
+            # split 区间命中
+            is_split = True
+            xiongshen_status = "split"
+            dominant_ten_god = None  # split 时不设 dominant
+        else:
+            # 不是 split，确定 dominant_ten_god
+            if pian_ratio is not None:
+                if pian_ratio > 0.60:
+                    dominant_ten_god = pian_shishen
+                else:  # pian_ratio <= 0.30
+                    dominant_ten_god = zheng_shishen
+            elif zheng_percent > 0.0 and pian_percent == 0.0:
+                # 纯正
+                dominant_ten_god = zheng_shishen
+            elif pian_percent > 0.0 and zheng_percent == 0.0:
+                # 纯偏
+                dominant_ten_god = pian_shishen
+            
+            # 判定 xiongshen_status
+            if dominant_ten_god and dominant_ten_god in XIONGSHEN_SET:
+                # dominant 是凶神
+                is_pure = (zheng_percent == 0.0 or pian_percent == 0.0)
+                if is_pure:
+                    xiongshen_status = "pure_xiongshen"
+                else:
+                    xiongshen_status = "xiongshen_majority"
+            else:
+                xiongshen_status = "none"
+        
         # 计算得月令：月支本气归类到十神子类，若该子类属于当前大类，则"得月令"
         month_zhi = bazi["month"]["zhi"]
         month_main_gan = get_branch_main_gan(month_zhi)
@@ -345,6 +411,8 @@ def compute_dominant_traits(bazi: Dict[str, Dict[str, str]], day_gan: str) -> Li
                 "detail": detail_items,
                 "de_yueling": de_yueling,  # 新增：得月令信息
                 "element": cat_element,  # 新增：大类对应的五行
+                "xiongshen_status": xiongshen_status,  # 新增：凶神状态（4态枚举）
+                "dominant_ten_god": dominant_ten_god,  # 新增：主导十神（split 时为 None）
             }
         )
 

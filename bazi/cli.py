@@ -481,13 +481,23 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             # 4.2 后续行（Bullet行）
             lines = [line1]
             
+            # 获取 xiongshen_status 并映射为展示短语
+            xiongshen_status = trait.get("xiongshen_status", "none")
+            xiongshen_display_map = {
+                "pure_xiongshen": "纯凶神",
+                "xiongshen_majority": "凶神占多数",
+                "split": "凶/非各半",
+                "none": "非凶神",
+            }
+            xiongshen_display = xiongshen_display_map.get(xiongshen_status, "非凶神")
+            
             if not is_pure and pian_ratio is not None:
                 # 并存：打印三行
                 lines.append(f"- 偏占多少：{pian_ratio:.1f}")
-                lines.append(f"- 混杂口径：{koujing}")
+                lines.append(f"- 混杂口径：{koujing} | 神性：{xiongshen_display}")
             elif is_pure:
                 # 纯：打印混杂口径（新增）
-                lines.append(f"- 混杂口径：纯{pure_shishen}，只有{pure_shishen}心性。")
+                lines.append(f"- 混杂口径：纯{pure_shishen}，只有{pure_shishen}心性。 | 神性：{xiongshen_display}")
             
             # 最后一行：五行和用神
             element = trait.get("element", "")
