@@ -1764,7 +1764,7 @@ def analyze_luck(
             gan_shishen_ln = get_shishen(day_gan, gan_ln) if gan_ln else None
             zhi_main_gan_ln = get_branch_main_gan(zhi_ln) if zhi_ln else None
             zhi_shishen_ln = get_shishen(day_gan, zhi_main_gan_ln) if zhi_main_gan_ln else None
-            
+
             liunian_dict = {
                 "hints": [],  # 初始化为空列表，enrich_liunian 会填充
                 "year": ln.getYear(),

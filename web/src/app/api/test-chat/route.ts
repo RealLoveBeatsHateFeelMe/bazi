@@ -40,6 +40,35 @@ interface RouterMeta {
   child_router?: RouterMeta | null
 }
 
+// Context Part（LLM 输入的每一段）
+interface ContextPart {
+  part_id: number
+  role: 'system' | 'developer' | 'user' | 'facts' | 'separator' | 'instruction'
+  block_id?: string
+  block_type?: string
+  year?: number
+  reason?: string
+  start_char: number
+  end_char: number
+  chars_total: number
+  preview: string  // 前 600 chars
+}
+
+// LLM 上下文全貌（用于 Debug 一眼定位）
+interface LLMContextFull {
+  full_text: string                // 完整 LLM 输入（system + user + facts + instructions）
+  full_text_preview?: string       // 前后各 3k chars（当 debug_context=false）
+  full_text_sha256?: string        // 当只返回 preview 时提供 hash
+  parts: ContextPart[]
+  token_est: number                // 估算 token（chars/2.5 for Chinese）
+  was_truncated: boolean
+  drilldown_summary?: {            // last5 下钻诊断
+    risky_years_detected: number[]
+    year_detail_blocks_added: string[]
+    drilldown_triggered: boolean
+  }
+}
+
 // Context Trace（权威的 LLM 上下文回放）
 interface ContextTrace {
   router: RouterMeta
@@ -57,6 +86,7 @@ interface ContextTrace {
     timing_ms: { router: number; engine: number; llm: number }
     llm_input_preview?: string
   }
+  context?: LLMContextFull  // 完整 LLM 上下文（debug 用）
 }
 
 // Python engine 返回的 findings.facts 结构
@@ -175,6 +205,12 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now()
   const timings = { router: 0, engine: 0, llm: 0 }
 
+  // 解析 Debug 开关
+  const url = new URL(request.url)
+  const debugContext = url.searchParams.get('debug_context') === 'true' 
+    || request.headers.get('X-Debug-Context') === '1'
+  const dryRun = url.searchParams.get('dry_run') === 'true'
+
   try {
     const body = await request.json()
     const { message, birth_date, birth_time, is_male } = body
@@ -248,10 +284,55 @@ export async function POST(request: NextRequest) {
     // ============================================================
     const usedBlocks: ContextBlock[] = []
     const contextOrder: string[] = []
-    const llmContextParts: string[] = []
     const selectedFactIds: string[] = []
-
-    llmContextParts.push(`【用户问题】${message}`)
+    
+    // Context Builder：追踪每一段的来源和位置
+    const contextParts: ContextPart[] = []
+    let currentCharPos = 0
+    let partIdCounter = 0
+    
+    // 辅助函数：添加一段内容到 LLM 上下文
+    function addContextPart(
+      text: string,
+      role: ContextPart['role'],
+      options: {
+        block_id?: string
+        block_type?: string
+        year?: number
+        reason?: string
+      } = {}
+    ): void {
+      const startChar = currentCharPos
+      currentCharPos += text.length + 1 // +1 for newline
+      
+      contextParts.push({
+        part_id: partIdCounter++,
+        role,
+        block_id: options.block_id,
+        block_type: options.block_type,
+        year: options.year,
+        reason: options.reason,
+        start_char: startChar,
+        end_char: currentCharPos - 1,
+        chars_total: text.length,
+        preview: text.slice(0, PREVIEW_MAX_CHARS),
+      })
+    }
+    
+    // 下钻诊断（用于 last5 debug）
+    const drilldownSummary = {
+      risky_years_detected: [] as number[],
+      year_detail_blocks_added: [] as string[],
+      drilldown_triggered: false,
+    }
+    
+    // 开始构建上下文
+    const llmContextParts: string[] = []
+    
+    // 用户问题
+    const userQuestion = `【用户问题】${message}`
+    llmContextParts.push(userQuestion)
+    addContextPart(userQuestion, 'user', { reason: 'user_query' })
 
     if (isYearScope && targetYear) {
       // === 年请求模式 ===
@@ -272,9 +353,18 @@ export async function POST(request: NextRequest) {
           reason: 'year_scope_requires_dayun_brief',
         })
         contextOrder.push('DAYUN_BRIEF')
-        llmContextParts.push('')
-        llmContextParts.push('=== 大运背景 ===')
+        
+        const separator1 = '\n--- FACTS block_id=dayun_brief_current block_type=DAYUN_BRIEF ---'
+        llmContextParts.push(separator1)
+        addContextPart(separator1, 'separator', { block_id: 'dayun_brief_current', block_type: 'DAYUN_BRIEF' })
+        
         llmContextParts.push(dayunText)
+        addContextPart(dayunText, 'facts', { 
+          block_id: 'dayun_brief_current', 
+          block_type: 'DAYUN_BRIEF', 
+          year: targetYear,
+          reason: 'year_scope_requires_dayun_brief' 
+        })
       }
 
       // 2. YEAR_DETAIL_TEXT（从 facts 中选出的流年详情，渲染为文本）
@@ -294,13 +384,23 @@ export async function POST(request: NextRequest) {
           reason: 'year_scope_requires_year_detail',
         })
         contextOrder.push('YEAR_DETAIL_TEXT')
-        llmContextParts.push('')
-        llmContextParts.push(`=== ${targetYear}年流年详情 ===`)
+        
+        const separator2 = `\n--- FACTS block_id=year_detail_${targetYear} block_type=YEAR_DETAIL_TEXT year=${targetYear} ---`
+        llmContextParts.push(separator2)
+        addContextPart(separator2, 'separator', { block_id: `year_detail_${targetYear}`, block_type: 'YEAR_DETAIL_TEXT', year: targetYear })
+        
         llmContextParts.push(yearDetailText)
+        addContextPart(yearDetailText, 'facts', { 
+          block_id: `year_detail_${targetYear}`, 
+          block_type: 'YEAR_DETAIL_TEXT', 
+          year: targetYear,
+          reason: 'year_scope_requires_year_detail' 
+        })
       }
 
-      llmContextParts.push('')
-      llmContextParts.push('【重要】只允许根据上述信息中的"提示汇总"讲解今年运势。如果提示汇总为空：写"今年暂无额外提示汇总"。')
+      const instruction = '\n【重要】只允许根据上述信息中的"提示汇总"讲解今年运势。如果提示汇总为空：写"今年暂无额外提示汇总"。'
+      llmContextParts.push(instruction)
+      addContextPart(instruction, 'instruction', { reason: 'year_detail_output_rule' })
 
     } else {
       // === 范围请求模式：固定 last5（当年+往前4年，旧->新）===
@@ -320,19 +420,33 @@ export async function POST(request: NextRequest) {
           reason: 'range_scope_last5_fixed',
         })
         contextOrder.push('FACTS_LAST5_COMPACT_BLOCK')
-        llmContextParts.push('')
-        llmContextParts.push('=== 最近5年运势概览（旧→新） ===')
+        
+        const separator = '\n--- FACTS block_id=facts_last5_compact block_type=FACTS_LAST5_COMPACT_BLOCK ---'
+        llmContextParts.push(separator)
+        addContextPart(separator, 'separator', { block_id: 'facts_last5_compact', block_type: 'FACTS_LAST5_COMPACT_BLOCK' })
+        
         llmContextParts.push(linesText)
+        addContextPart(linesText, 'facts', { 
+          block_id: 'facts_last5_compact', 
+          block_type: 'FACTS_LAST5_COMPACT_BLOCK',
+          reason: 'range_scope_last5_fixed' 
+        })
       }
 
-      // 下钻：year_category 为 凶/有变动（或半年含“凶/变动”）的全部追加 YEAR_DETAIL_TEXT
+      // 下钻：year_category 为 凶/有变动（或半年含"凶/变动"或 total_risk>=25）的全部追加 YEAR_DETAIL_TEXT
       for (const ln of liuniansUsed) {
-        if (isRiskyYear(ln)) {
+        const yearIsRisky = isRiskyYear(ln)
+        if (yearIsRisky) {
+          drilldownSummary.risky_years_detected.push(ln.year)
+          drilldownSummary.drilldown_triggered = true
+          
           const yd = renderYearDetail(ln, ln.year)
+          const blockId = `year_detail_${ln.year}`
+          
           usedBlocks.push({
             kind: 'facts',
             block_type: 'YEAR_DETAIL_TEXT',
-            block_id: `year_detail_${ln.year}`,
+            block_id: blockId,
             used: true,
             source: 'engine',
             chars_total: yd.length,
@@ -342,11 +456,31 @@ export async function POST(request: NextRequest) {
             reason: 'risky_year_auto_drill',
           })
           contextOrder.push(`YEAR_DETAIL_TEXT_${ln.year}`)
-          llmContextParts.push('')
-          llmContextParts.push(`=== ${ln.year}年流年详情 ===`)
+          drilldownSummary.year_detail_blocks_added.push(blockId)
+          
+          const drillSeparator = `\n--- FACTS block_id=${blockId} block_type=YEAR_DETAIL_TEXT year=${ln.year} reason=risky_year_drilldown ---`
+          llmContextParts.push(drillSeparator)
+          addContextPart(drillSeparator, 'separator', { 
+            block_id: blockId, 
+            block_type: 'YEAR_DETAIL_TEXT', 
+            year: ln.year,
+            reason: 'risky_year_drilldown' 
+          })
+          
           llmContextParts.push(yd)
+          addContextPart(yd, 'facts', { 
+            block_id: blockId, 
+            block_type: 'YEAR_DETAIL_TEXT', 
+            year: ln.year,
+            reason: `risky_year_auto_drill: total_risk=${ln.total_risk_percent || 0}` 
+          })
         }
       }
+      
+      // last5 写作规则
+      const last5Instruction = '\n【写作规则】请根据以上5年运势概览回答用户问题。对于标记为"凶"或"有变动"的年份，必须详细说明【具体表现与提示】中的要点。'
+      llmContextParts.push(last5Instruction)
+      addContextPart(last5Instruction, 'instruction', { reason: 'last5_output_rule' })
     }
 
     // 添加 index 使用的 blocks（仅用于 decide/定位，不作为事实正文）
@@ -368,8 +502,45 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const llmContext = llmContextParts.join('\n')
-    const llmInputPreview = llmContext.slice(0, 4000)
+    // 获取 System Prompt
+    const systemPrompt = isYearScope
+      ? getYearDetailSystemPrompt(targetYear || baseYear)
+      : getSystemPrompt(routerResult.trace.flags)
+    
+    // 将 System Prompt 加入跟踪（放在最前面）
+    const systemPart: ContextPart = {
+      part_id: -1, // 特殊标记：system prompt
+      role: 'system',
+      reason: isYearScope ? 'year_detail_system_prompt' : 'general_system_prompt',
+      start_char: 0,
+      end_char: systemPrompt.length,
+      chars_total: systemPrompt.length,
+      preview: systemPrompt.slice(0, PREVIEW_MAX_CHARS),
+    }
+    
+    // 组装完整 LLM 输入
+    const userContext = llmContextParts.join('\n')
+    const fullLLMInput = `--- SYSTEM ---\n${systemPrompt}\n\n--- USER ---\n${userContext}`
+    
+    // 估算 token（中文约 2.5 chars/token）
+    const tokenEst = Math.ceil(fullLLMInput.length / 2.5)
+    const wasTruncated = false // 目前不做截断
+    
+    // 计算 SHA256（当不返回 full_text 时）
+    const crypto = await import('crypto')
+    const fullTextSha256 = crypto.createHash('sha256').update(fullLLMInput).digest('hex')
+    
+    // 构建 LLMContextFull
+    // 开发期：full_text 始终返回，方便调试
+    const llmContextFull: LLMContextFull = {
+      full_text: fullLLMInput, // 开发期始终返回完整内容
+      full_text_preview: fullLLMInput.slice(0, 3000) + (fullLLMInput.length > 6000 ? '\n...[TRUNCATED]...\n' + fullLLMInput.slice(-3000) : ''),
+      full_text_sha256: fullTextSha256,
+      parts: [systemPart, ...contextParts],
+      token_est: tokenEst,
+      was_truncated: wasTruncated,
+      drilldown_summary: drilldownSummary,
+    }
 
     // 构建 router_meta
     const routerMeta: RouterMeta = {
@@ -377,7 +548,13 @@ export async function POST(request: NextRequest) {
       intent: routerResult.trace.intent,
       mode: isYearScope ? 'year' : 'range',
       reason: routerResult.trace.rules_matched.join(', '),
-      child_router: null, // 暂无 child_router
+      child_router: drilldownSummary.drilldown_triggered ? {
+        router_id: 'drilldown_router_v1',
+        intent: 'year_detail_drilldown',
+        mode: 'year',
+        reason: `risky_years: ${drilldownSummary.risky_years_detected.join(', ')}`,
+        child_router: null,
+      } : null,
     }
 
     // 构建 context_trace（权威）
@@ -395,17 +572,34 @@ export async function POST(request: NextRequest) {
       },
       run_meta: {
         timing_ms: timings,
-        llm_input_preview: llmInputPreview,
+        llm_input_preview: userContext.slice(0, 4000),
       },
+      context: llmContextFull, // 完整 LLM 上下文
+    }
+
+    // dry_run 模式：不调用 LLM，直接返回 trace
+    if (dryRun) {
+      timings.llm = 0
+      contextTrace.run_meta.timing_ms = timings
+      
+      return NextResponse.json({
+        llm_answer: '[DRY_RUN] LLM not called',
+        context_trace: contextTrace,
+        dry_run: true,
+        _debug: {
+          full_text_length: fullLLMInput.length,
+          parts_count: contextParts.length + 1, // +1 for system
+          facts_blocks_count: contextParts.filter(p => p.role === 'facts').length,
+          year_detail_blocks: drilldownSummary.year_detail_blocks_added,
+          contains_year_detail_text: fullLLMInput.includes('YEAR_DETAIL_TEXT'),
+          contains_具体表现与提示: fullLLMInput.includes('【具体表现与提示】'),
+        },
+      })
     }
 
     // 调用 LLM
     let assistantText = ''
     const llmStart = Date.now()
-
-    const systemPrompt = isYearScope
-      ? getYearDetailSystemPrompt(targetYear || baseYear)
-      : getSystemPrompt(routerResult.trace.flags)
 
     if (openai) {
       try {
@@ -413,7 +607,7 @@ export async function POST(request: NextRequest) {
           model: 'gpt-4o-mini',
           messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: llmContext },
+            { role: 'user', content: userContext },
           ],
           temperature: 0.7,
           max_tokens: 1200,

@@ -63,6 +63,34 @@ interface RouterMeta {
   child_router?: RouterMeta | null
 }
 
+// LLM Context Full（完整 LLM 输入追溯）
+interface LLMContextPart {
+  part_id: number
+  role: 'system' | 'separator' | 'facts' | 'user' | 'other'
+  block_id?: string
+  block_type?: string
+  year?: number
+  reason?: string
+  start_char: number
+  end_char: number
+  chars_total: number
+  preview: string
+}
+
+interface LLMContextFull {
+  full_text: string
+  full_text_preview: string
+  full_text_sha256: string
+  parts: LLMContextPart[]
+  token_est: number
+  was_truncated: boolean
+  drilldown_summary?: {
+    risky_years_detected: number[]
+    year_detail_blocks_added: string[]
+    drilldown_triggered: boolean
+  }
+}
+
 // Context Trace（权威的 LLM 上下文回放）
 interface ContextTrace {
   router: RouterMeta
@@ -80,6 +108,7 @@ interface ContextTrace {
     timing_ms: { router: number; engine: number; llm: number }
     llm_input_preview?: string
   }
+  context?: LLMContextFull  // 完整 LLM 输入
 }
 
 // Debug Data（前端只读 context_trace）
@@ -521,12 +550,122 @@ function DebugPanel({ data }: { data: DebugData }) {
   return (
     <Card className="mt-2 bg-slate-800 border-slate-600 text-sm">
       <CardContent className="p-3">
-        <Tabs defaultValue="router" className="w-full">
+        <Tabs defaultValue="llm-input" className="w-full">
           <TabsList className="bg-slate-700 h-8">
+            <TabsTrigger value="llm-input" className="text-xs h-6">LLM Input</TabsTrigger>
             <TabsTrigger value="router" className="text-xs h-6">Router</TabsTrigger>
             <TabsTrigger value="facts" className="text-xs h-6">Facts</TabsTrigger>
             <TabsTrigger value="index" className="text-xs h-6">Index</TabsTrigger>
           </TabsList>
+
+          {/* ===== LLM Input Tab（完整 LLM 输入文案）===== */}
+          <TabsContent value="llm-input" className="mt-3 space-y-3">
+            {ct.context ? (
+              <>
+                {/* Summary Stats */}
+                <div className="grid grid-cols-4 gap-2 text-xs">
+                  <div className="bg-slate-900 p-2 rounded text-center">
+                    <div className="text-slate-500">Total Chars</div>
+                    <div className="text-cyan-400 font-mono">{ct.context.full_text?.length || 0}</div>
+                  </div>
+                  <div className="bg-slate-900 p-2 rounded text-center">
+                    <div className="text-slate-500">Token Est</div>
+                    <div className="text-yellow-400 font-mono">{ct.context.token_est || 0}</div>
+                  </div>
+                  <div className="bg-slate-900 p-2 rounded text-center">
+                    <div className="text-slate-500">Parts</div>
+                    <div className="text-green-400 font-mono">{ct.context.parts?.length || 0}</div>
+                  </div>
+                  <div className="bg-slate-900 p-2 rounded text-center">
+                    <div className="text-slate-500">Truncated</div>
+                    <div className={`font-mono ${ct.context.was_truncated ? 'text-red-400' : 'text-green-400'}`}>
+                      {ct.context.was_truncated ? 'YES' : 'NO'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Drilldown Summary */}
+                {ct.context.drilldown_summary && (
+                  <div className="bg-slate-900 p-3 rounded">
+                    <div className="text-xs text-slate-500 mb-2">下钻诊断 (Drilldown Summary)</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-slate-500">触发下钻:</span>{' '}
+                        <span className={ct.context.drilldown_summary.drilldown_triggered ? 'text-green-400' : 'text-slate-400'}>
+                          {ct.context.drilldown_summary.drilldown_triggered ? 'YES' : 'NO'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">凶/变动年份:</span>{' '}
+                        <span className="text-yellow-400 font-mono">
+                          [{ct.context.drilldown_summary.risky_years_detected.join(', ')}]
+                        </span>
+                      </div>
+                    </div>
+                    {ct.context.drilldown_summary.year_detail_blocks_added.length > 0 && (
+                      <div className="mt-2 text-xs">
+                        <span className="text-slate-500">下钻 Blocks:</span>{' '}
+                        <span className="text-cyan-400 font-mono">
+                          {ct.context.drilldown_summary.year_detail_blocks_added.join(', ')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Parts List */}
+                {ct.context.parts && ct.context.parts.length > 0 && (
+                  <div className="bg-slate-900 p-3 rounded">
+                    <div className="text-xs text-slate-500 mb-2">LLM 输入段落分解 (Parts)</div>
+                    <div className="space-y-1 max-h-32 overflow-auto">
+                      {ct.context.parts.map((part, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs">
+                          <span className="text-slate-600 w-4">{part.part_id}</span>
+                          <span className={`px-1 rounded text-xs ${
+                            part.role === 'system' ? 'bg-purple-900/50 text-purple-300' :
+                            part.role === 'user' ? 'bg-blue-900/50 text-blue-300' :
+                            part.role === 'facts' ? 'bg-green-900/50 text-green-300' :
+                            part.role === 'separator' ? 'bg-slate-700 text-slate-400' :
+                            'bg-slate-800 text-slate-300'
+                          }`}>
+                            {part.role}
+                          </span>
+                          {part.block_type && (
+                            <span className="text-cyan-400 font-mono text-xs">{part.block_type}</span>
+                          )}
+                          {part.year && (
+                            <span className="text-yellow-400 text-xs">{part.year}年</span>
+                          )}
+                          <span className="text-slate-500 ml-auto">{part.chars_total} chars</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Full Text */}
+                <div className="bg-slate-900 p-3 rounded">
+                  <div className="text-xs text-slate-500 mb-2">
+                    完整 LLM 输入 (Full Text) - {ct.context.full_text?.length || 0} chars
+                  </div>
+                  <pre className="text-xs bg-slate-950 p-3 rounded text-slate-300 whitespace-pre-wrap break-words max-h-96 overflow-auto font-mono leading-relaxed">
+                    {ct.context.full_text || ct.context.full_text_preview || '(无数据)'}
+                  </pre>
+                </div>
+
+                {/* SHA256 */}
+                {ct.context.full_text_sha256 && (
+                  <div className="text-xs text-slate-600">
+                    SHA256: <span className="font-mono">{ct.context.full_text_sha256}</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="bg-slate-900 p-3 rounded text-center text-slate-500 text-xs">
+                本次请求无 LLM Context 数据（context_trace.context 为空）
+              </div>
+            )}
+          </TabsContent>
 
           {/* ===== Router Tab ===== */}
           <TabsContent value="router" className="mt-3 space-y-3">

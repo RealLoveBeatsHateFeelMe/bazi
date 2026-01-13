@@ -99,7 +99,7 @@ interface ContextTrace {
     intent: string
     mode: 'year' | 'range' | 'general'
     reason: string
-    child_router?: RouterMeta | null
+    child_router?: RouterMeta | null  // 下钻时会有
   }
   used_blocks: ContextBlock[]
   context_order: string[]
@@ -115,6 +115,7 @@ interface ContextTrace {
     timing_ms: { router, engine, llm }
     llm_input_preview?: string
   }
+  context?: LLMContextFull  // 完整 LLM 上下文（见下）
 }
 
 interface ContextBlock {
@@ -131,11 +132,64 @@ interface ContextBlock {
 }
 ```
 
+### 5.1 LLM Context Full（完整 LLM 输入追踪）
+
+用于 Debug 模式，一眼定位"某个 block 是否真的进了 LLM 输入"。
+
+```typescript
+interface LLMContextFull {
+  full_text: string              // 完整 LLM 输入（只在 debug_context=true 时返回）
+  full_text_preview?: string     // 前后各 3k chars（默认返回）
+  full_text_sha256?: string      // 用于验证一致性
+  parts: ContextPart[]           // 每一段的来源追踪
+  token_est: number              // 估算 token（chars/2.5）
+  was_truncated: boolean         // 是否被截断
+  drilldown_summary?: {          // last5 下钻诊断
+    risky_years_detected: number[]
+    year_detail_blocks_added: string[]
+    drilldown_triggered: boolean
+  }
+}
+
+interface ContextPart {
+  part_id: number
+  role: 'system' | 'developer' | 'user' | 'facts' | 'separator' | 'instruction'
+  block_id?: string
+  block_type?: string
+  year?: number
+  reason?: string
+  start_char: number
+  end_char: number
+  chars_total: number
+  preview: string
+}
+```
+
+### 5.2 Debug 开关
+
+| 参数 | 方式 | 效果 |
+|------|------|------|
+| `debug_context=true` | Query param 或 Header `X-Debug-Context: 1` | 返回完整 `full_text` |
+| `dry_run=true` | Query param | 不调用 LLM，只返回 context_trace + `_debug` 诊断信息 |
+
+### 5.3 full_text 分隔符格式
+
+```
+--- SYSTEM ---
+{system_prompt}
+
+--- USER ---
+{user_query}
+
+--- FACTS block_id=xxx block_type=YYY year=ZZZZ reason=RRR ---
+{facts_content}
+```
+
 ### Preview Rules
 
 - `preview` length unit: **chars** (string character count)
 - Default `PREVIEW_MAX_CHARS = 600`
-- `full_text`: Currently returned inline (not lazy-loaded)
+- `full_text`: 默认不返回（节省带宽），`debug_context=true` 时返回
 
 ### Deprecated Fields
 
@@ -150,13 +204,16 @@ interface ContextBlock {
 - Main chat UI: Clean (like ChatGPT)
 - Debug Drawer: **Closed by default**
 
-### Debug Drawer Tabs
+### Debug Drawer Tabs (4 tabs)
 
 | Tab | Data Source | Content |
 |-----|-------------|---------|
+| **LLM Input** ⭐ | `context_trace.context` | `full_text` 完整 LLM 输入、`parts[]` 段落分解、`drilldown_summary` 下钻诊断、`token_est`、`was_truncated` |
 | **Router** | `context_trace.router` | `router_id`, `intent`, `mode`, `reason`; `used_blocks` grouped by `kind` |
 | **Facts** | `context_trace.used_blocks` where `kind='facts'` | Each block: `block_type`, `chars_total`, `preview`, expandable `full_text` |
 | **Index** | `context_trace.used_blocks` where `kind='index'` + full `index` object | Used blocks + collapsible "Full Index (raw)" |
+
+> **LLM Input tab** 是调试核心：一眼看清 LLM 到底吃了什么。默认打开此 tab。
 
 ### Prohibitions
 - ❌ No "Evidence" tab
@@ -167,18 +224,37 @@ interface ContextBlock {
 
 ## 7. Regression / Acceptance Checklist
 
-### Fixed Test Queries
+### 7.1 Fixed Test Queries (使用 `dry_run=true` 测试)
 
-| # | Query | Expected Blocks | Expected Index Hits | Fail Condition |
-|---|-------|-----------------|---------------------|----------------|
-| 1 | "我的性格特点" | `PERSONALITY_FACTS_BLOCK` (if exists) | `INDEX_PERSONALITY` | Missing `INDEX_PERSONALITY` in `index_usage` |
-| 2 | "最近5年怎么样" | `FACTS_LAST5_COMPACT_BLOCK` + `YEAR_DETAIL_TEXT` for risky years | `INDEX_LAST5`, `INDEX_DAYUN` | Years not 2022-2026 ascending; risk% > 100 |
-| 3 | "2025年运势" | `DAYUN_BRIEF`, `YEAR_DETAIL_TEXT` | `INDEX_YEAR_GRADE` | Missing year_detail 4 sections |
+| # | Query | Expected Blocks | Expected in `full_text` | Fail Condition |
+|---|-------|-----------------|-------------------------|----------------|
+| 1 | "我的性格特点" | `PERSONALITY_FACTS_BLOCK` (if exists) | - | Missing `INDEX_PERSONALITY` in `index_usage` |
+| 2 | "最近5年怎么样" | `FACTS_LAST5_COMPACT_BLOCK` + `YEAR_DETAIL_TEXT` for risky years | `【具体表现与提示】` | `drilldown_summary.drilldown_triggered=true` 但 `year_detail_blocks_added` 为空 |
+| 3 | "2025年运势" | `DAYUN_BRIEF`, `YEAR_DETAIL_TEXT` | `【为什么会这样？】` | Missing year_detail 4 sections |
 | 4 | "今年运势" | Same as year_detail for current year | Same | Missing half-year risk explanation |
 | 5 | "什么是用神" | `GLOSSARY_BLOCK` or fallback | - | (optional, may fallback) |
-| 6 | "感情方面最近怎么样" | `FACTS_LAST5_COMPACT_BLOCK` or `RELATIONSHIP_FACTS_BLOCK` | `INDEX_RELATIONSHIP` | - |
+| 6 | "感情方面最近怎么样" | `FACTS_LAST5_COMPACT_BLOCK` or `RELATIONSHIP_FACTS_BLOCK` | - | - |
 
-### Invariants (Always True)
+### 7.2 last5 下钻诊断（关键）
+
+使用 `dry_run=true&debug_context=true` 测试 last5 请求：
+
+```bash
+# 检查 _debug 字段
+curl -X POST "http://localhost:3000/api/test-chat?dry_run=true&debug_context=true" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"最近5年怎么样","birth_date":"1985-03-10","birth_time":"14:00","is_male":true}'
+```
+
+**必须满足：**
+- `_debug.contains_year_detail_text = true`（如果有 risky year）
+- `_debug.contains_具体表现与提示 = true`（如果有 drilldown）
+- `context_trace.context.drilldown_summary.year_detail_blocks_added` 与 `risky_years_detected` 匹配
+
+**如果 `full_text` 包含 YEAR_DETAIL_TEXT 但 LLM 答案没复述**：
+→ 问题在 LLM 写作规则，而非选块/拼接
+
+### 7.3 Invariants (Always True)
 
 - [ ] `context_trace.used_blocks` is non-empty for any successful response
 - [ ] All `kind='facts'` blocks have `chars_total > 0`
@@ -188,6 +264,7 @@ interface ContextBlock {
 - [ ] last5 years are `[base_year-4 .. base_year]` in ascending order
 - [ ] Risk percentages in range `[0, 100]`
 - [ ] Risky years (`total_risk >= 25`) have `YEAR_DETAIL_TEXT` appended
+- [ ] `context_trace.context.was_truncated = false`（开发期）
 
 ---
 
@@ -195,5 +272,6 @@ interface ContextBlock {
 
 | Date | Change |
 |------|--------|
+| 2026-01-13 | Add LLM Input tab to Debug Drawer; full_text 默认返回（开发期） |
 | 2026-01-13 | Initial creation: router/index/context_trace contracts, blocks, regression |
 
