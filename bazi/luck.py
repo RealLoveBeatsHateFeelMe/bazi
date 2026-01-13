@@ -9,7 +9,7 @@ from lunar_python import Solar  # 依赖：pip install lunar_python
 
 from .config import GAN_WUXING, ZHI_WUXING, ZHI_CHONG, POSITION_WEIGHTS
 from .clash import detect_branch_clash
-from .shishen import get_branch_shishen
+from .shishen import get_branch_shishen, get_shishen, get_branch_main_gan
 from .harmony import detect_flow_harmonies, detect_sanhe_complete, detect_sanhui_complete
 from .punishment import detect_branch_punishments
 from .patterns import detect_liunian_patterns
@@ -919,6 +919,11 @@ def analyze_luck(
             if sanhe_sanhui_clash_bonus_event:
                 all_events.append(sanhe_sanhui_clash_bonus_event)
             
+            # ===== 计算十神信息（供前端展示）=====
+            gan_shishen_ln = get_shishen(day_gan, gan_ln) if gan_ln else None
+            zhi_main_gan_ln = get_branch_main_gan(zhi_ln) if zhi_ln else None
+            zhi_shishen_ln = get_shishen(day_gan, zhi_main_gan_ln) if zhi_main_gan_ln else None
+            
             liunian_dict = {
                 "hints": [],
                 "year": year,
@@ -927,6 +932,10 @@ def analyze_luck(
                 "zhi": zhi_ln,
                 "gan_element": gan_el_ln,
                 "zhi_element": zhi_el_ln,
+                "gan_shishen": gan_shishen_ln,  # 天干十神
+                "zhi_shishen": zhi_shishen_ln,  # 地支主气十神
+                "is_gan_yongshen": gan_good_ln,  # 天干是否用神
+                "is_zhi_yongshen": zhi_good_ln,  # 地支是否用神
                 "first_half_good": gan_good_ln,
                 "second_half_good": zhi_good_ln,
                 "is_good": is_good_ln,
@@ -1751,6 +1760,11 @@ def analyze_luck(
             if sanhe_sanhui_clash_bonus_event:
                 all_events.append(sanhe_sanhui_clash_bonus_event)
 
+            # ===== 计算十神信息（供前端展示）=====
+            gan_shishen_ln = get_shishen(day_gan, gan_ln) if gan_ln else None
+            zhi_main_gan_ln = get_branch_main_gan(zhi_ln) if zhi_ln else None
+            zhi_shishen_ln = get_shishen(day_gan, zhi_main_gan_ln) if zhi_main_gan_ln else None
+            
             liunian_dict = {
                 "hints": [],  # 初始化为空列表，enrich_liunian 会填充
                 "year": ln.getYear(),
@@ -1759,6 +1773,10 @@ def analyze_luck(
                 "zhi": zhi_ln,
                 "gan_element": gan_el_ln,
                 "zhi_element": zhi_el_ln,
+                "gan_shishen": gan_shishen_ln,  # 天干十神
+                "zhi_shishen": zhi_shishen_ln,  # 地支主气十神
+                "is_gan_yongshen": gan_good_ln,  # 天干是否用神
+                "is_zhi_yongshen": zhi_good_ln,  # 地支是否用神
                 "first_half_good": first_half_good,  # 保留兼容字段（是否用神）
                 "second_half_good": second_half_good,  # 保留兼容字段（是否用神）
                 "is_good": is_good_ln,  # §4.4 流年好运判断（用神+风险≤15%）

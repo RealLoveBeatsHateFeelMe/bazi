@@ -13,7 +13,7 @@ Chat API HTTP 服务器（最简实现，用于演示完整 JSON 返回）。
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
-from bazi.lunar_engine import analyze_complete
+from bazi.compute_facts import compute_facts
 from bazi.chat_api import chat_api
 from bazi.request_index import generate_request_index
 from bazi.extract_findings import extract_findings_from_facts
@@ -75,8 +75,8 @@ def chat():
         
         birth_dt = datetime(year, month, day, hour, minute, 0)
         
-        # 生成 facts（用户建档生成的全量事实）
-        facts = analyze_complete(birth_dt, is_male, max_dayun=15)
+        # 生成 facts（唯一真相源）
+        facts = compute_facts(birth_dt, is_male, max_dayun=15)
         
         # 调用 Chat API
         response = chat_api(query, facts, base_year=base_year)
@@ -142,8 +142,8 @@ def analyze():
         
         birth_dt = datetime(year, month, day, hour, minute, 0)
         
-        # 生成 facts
-        facts = analyze_complete(birth_dt, is_male, max_dayun=15)
+        # 生成 facts（唯一真相源）
+        facts = compute_facts(birth_dt, is_male, max_dayun=15)
         
         # 生成 index
         index = generate_request_index(facts, base_year)

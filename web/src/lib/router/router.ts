@@ -39,6 +39,8 @@ export interface RouterTrace {
   degrade: string[]
   index_slices_used: string[]
   normalized_query: string
+  // 新增：用于审计
+  index_hits: Array<{ key: string; value: unknown; reason: string }>
 }
 
 export interface RouterResult {
@@ -155,6 +157,7 @@ export function extractTimeScope(text: string): TimeScope {
  */
 export function route(
   query: string,
+  index: Record<string, unknown>,
   dayunGrade: '好运' | '一般' | '坏运' = '一般'
 ): RouterResult {
   const normalizedQuery = normalize(query)
@@ -165,6 +168,19 @@ export function route(
   const degrade: string[] = []
   let slices: string[] = []
   let intent: Intent = 'A'
+  const indexHits: Array<{ key: string; value: unknown; reason: string }> = []
+
+  // 记录用于决策的 index 命中（审计用；不作为事实正文）
+  if (index && typeof index === 'object') {
+    const baseYear = (index as any)?.meta?.base_year
+    if (baseYear) {
+      indexHits.push({ key: 'index.meta.base_year', value: baseYear, reason: 'router_runtime_context' })
+    }
+    const dayunFortune = (index as any)?.dayun?.fortune_label
+    if (dayunFortune) {
+      indexHits.push({ key: 'index.dayun.fortune_label', value: dayunFortune, reason: 'dayun_grade_input' })
+    }
+  }
 
   // 大运对外展示：不佳统一映射成"一般"
   const dayunGradePublic: '好' | '一般' = dayunGrade === '好运' ? '好' : '一般'
@@ -232,6 +248,7 @@ export function route(
     degrade,
     index_slices_used: slices,
     normalized_query: normalizedQuery,
+    index_hits: indexHits,
   }
 
   return { trace, slices }

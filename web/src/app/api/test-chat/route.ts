@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { route, RouterResult } from '@/lib/router'
 import OpenAI from 'openai'
+import { selectFromFacts } from '@/lib/router/select_facts'
 
 // OpenAI client
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY
@@ -9,52 +10,53 @@ const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null
 // Python Engine URL
 const PYTHON_ENGINE_URL = process.env.PYTHON_ENGINE_URL || 'http://localhost:5000'
 
-// Facts topK 配置
-const FACTS_TOP_K = 5
+// preview_max_chars（统一为 600 字符）
+const PREVIEW_MAX_CHARS = 600
 
 // ============================================================
-// Types
+// Types（新统一结构）
 // ============================================================
 
-interface UsedFact {
-  fact_id: string
-  type: string
-  scope: string
-  fact_year: number | null
-  year_source: string  // 年份从哪提取的
-  label: string
-  text_preview: string
-  reason: string  // 为什么入选
+// Context Block（LLM 上下文单个块）
+interface ContextBlock {
+  kind: 'facts' | 'index' | 'other'
+  block_type: string
+  block_id: string
+  used: boolean
+  source: 'engine' | 'index' | 'stub'
+  chars_total: number
+  preview: string         // 前 PREVIEW_MAX_CHARS 字符
+  full_text?: string      // 可选：完整打印层渲染文本（不是 engine 原始 JSON）
+  year?: number
+  reason?: string
 }
 
-interface SelectionStep {
-  step: string
-  filter: string
-  before_count: number
-  after_count: number
+// Router 元数据（给前端展示）
+interface RouterMeta {
+  router_id: string
+  intent: string
+  mode: 'year' | 'range' | 'general'
   reason: string
+  child_router?: RouterMeta | null
 }
 
-interface FactSelectionTrace {
-  time_scope: { type: string; year?: number; years?: number }
-  focus: string
-  allowed_years: number[]
-  steps: SelectionStep[]
-  fallback_triggered: boolean
-  fallback_reason: string
-  final_count: number
-}
-
-interface FactsTraceOutput {
-  used_facts: UsedFact[]
-  used_count: number
-  available_count: number
-  source: string
-  selection_trace: FactSelectionTrace
-  // 诊断字段
-  debug_year_histogram: Record<number, number>
-  extracted_year_null_count: number
-  sample_extracted_years: Array<{ fact_id: string; scope: string; extracted_year: number | null; year_source: string }>
+// Context Trace（权威的 LLM 上下文回放）
+interface ContextTrace {
+  router: RouterMeta
+  used_blocks: ContextBlock[]
+  context_order: string[]
+  facts_selection: {
+    selected_facts_paths: string[]
+    selected_fact_ids: string[]
+  }
+  index_usage: {
+    index_hits: string[]
+    used_index_block_ids: string[]
+  }
+  run_meta: {
+    timing_ms: { router: number; engine: number; llm: number }
+    llm_input_preview?: string
+  }
 }
 
 // Python engine 返回的 findings.facts 结构
@@ -74,6 +76,64 @@ interface EngineFact {
 interface NormalizedFact extends EngineFact {
   fact_year: number | null
   year_source: string
+}
+
+// ============================================================
+// 十神标签词库（从 Python bazi/shishen.py 复制）
+// ============================================================
+const SHISHEN_LABEL_MAP: Record<string, Record<string, string>> = {
+  // 官杀
+  "正官": {
+    "true": "认可/升迁/名誉",
+    "false": "规章压力/束缚/被考核/开销大",
+  },
+  "七杀": {
+    "true": "领导赏识/扛事机会/突破",
+    "false": "工作压力/对抗强/紧张感/开销大",
+  },
+  // 印
+  "正印": {
+    "true": "贵人/支持/学习证书",
+    "false": "胡思乱想/思前顾后/效率低",
+  },
+  "偏印": {
+    "true": "偏门技术/思想突破/学习研究/灵感",
+    "false": "多想/孤立/节奏乱",
+  },
+  // 食伤
+  "食神": {
+    "true": "产出/表现/生活舒适/技术突破",
+    "false": "贪舒服/拖延/松散",
+  },
+  "伤官": {
+    "true": "表达/创新/技术突破/灵感",
+    "false": "顶撞权威/口舌/冲突/贪玩",
+  },
+  // 财
+  "正财": {
+    "true": "努力得回报/方向更清晰/稳步积累(生活&工作)",
+    "false": "现实压力/精神压力大/想不开",
+  },
+  "偏财": {
+    "true": "机会钱/副业/人脉/意外之财",
+    "false": "开销大/现实压力/精神压力大",
+  },
+  // 比劫
+  "比肩": {
+    "true": "自信独立/同辈助力/合伙资源/行动力",
+    "false": "竞争争夺/冲动分心/投机或赌博破财/购置不动产化解",
+  },
+  "劫财": {
+    "true": "自信独立/同辈助力/合伙资源/行动力",
+    "false": "竞争争夺/冲动分心/投机或赌博破财/购置不动产化解",
+  },
+}
+
+function getShishenLabel(shishenName: string | undefined, isYongshen: boolean): string {
+  if (!shishenName) return ''
+  const labels = SHISHEN_LABEL_MAP[shishenName]
+  if (!labels) return ''
+  return labels[String(isYongshen)] || ''
 }
 
 // Year Detail 结构（年请求专用）
@@ -107,43 +167,6 @@ interface YearDetail {
   raw_text: string
 }
 
-// Year Detail Trace
-interface YearDetailTrace {
-  year: number
-  parse_status: 'success' | 'failed'
-  raw_text_preview: string
-  year_detail: YearDetail | null
-}
-
-// Evidence Block（证据块）
-interface EvidenceBlock {
-  block_id: string
-  block_type: string
-  source: 'engine' | 'index' | 'stub'
-  scope: 'year' | 'range' | 'general'
-  year?: number
-  used: boolean
-  reason: string
-  preview: string  // 前300字符
-  length_chars: number
-  full_text?: string  // 可选：完整文本
-}
-
-// Evidence Trace
-interface EvidenceTrace {
-  used_blocks: EvidenceBlock[]
-  llm_context_order: string[]
-}
-
-// Module with produced blocks
-interface ModuleTrace {
-  module: string
-  source: string
-  used: boolean
-  reason?: string
-  produced_blocks: string[]
-}
-
 // ============================================================
 // Main Handler
 // ============================================================
@@ -163,15 +186,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 运行 Router（先运行以确定 time_scope）
+    // 运行 Router（使用 index 做 Decide；但 Select 只能从 facts 取内容）
     const routerStart = Date.now()
-    // 先用默认 dayunGrade 运行一次来获取 time_scope
-    let routerResult = route(message, '一般')
+    let routerResult = route(message, {}, '一般')
     timings.router = Date.now() - routerStart
-
-    // 判断是否是年请求
-    const isYearScope = routerResult.trace.time_scope.type === 'year'
-    const targetYear = isYearScope ? routerResult.trace.time_scope.year : undefined
+    const preTimeScope = routerResult.trace.time_scope
 
     // 调用 Python Engine
     const engineStart = Date.now()
@@ -195,7 +214,7 @@ export async function POST(request: NextRequest) {
           birth_time,
           is_male: is_male !== false,
           base_year: new Date().getFullYear(),
-          target_year: targetYear,  // 年请求时传入目标年份
+          target_year: preTimeScope.type === 'year' ? preTimeScope.year : undefined,
         }),
       })
 
@@ -214,220 +233,220 @@ export async function POST(request: NextRequest) {
 
     timings.engine = Date.now() - engineStart
 
-    // 用实际的 dayunGrade 重新运行 Router
+    // 用实际的 index + dayunGrade 重新运行 Router（Decide only）
     const dayunGrade = (engineData.index as { dayun?: { fortune_label?: string } })?.dayun?.fortune_label as '好运' | '一般' | '坏运' || '一般'
-    routerResult = route(message, dayunGrade)
+    routerResult = route(message, engineData.index, dayunGrade)
+    const isYearScope = routerResult.trace.time_scope.type === 'year'
+    const targetYear = isYearScope ? routerResult.trace.time_scope.year : undefined
 
-    // 提取 index slices（年请求只用 dayun 简述）
-    const indexSlices: Record<string, unknown> = {}
-    if (isYearScope) {
-      // 年请求：只取 dayun 用于大运背景
-      if ('dayun' in (engineData.index as Record<string, unknown>)) {
-        indexSlices['dayun'] = (engineData.index as Record<string, unknown>)['dayun']
+    // Select：只从 facts 中选内容（selected_facts_paths 可复现）
+    const baseYear = new Date().getFullYear()
+    const selectedFactsResult = selectFromFacts(engineData.facts, routerResult.trace, baseYear)
+
+    // ============================================================
+    // 构建 LLM 上下文：只用"打印层渲染文本"，不喂 engine 原始 JSON
+    // ============================================================
+    const usedBlocks: ContextBlock[] = []
+    const contextOrder: string[] = []
+    const llmContextParts: string[] = []
+    const selectedFactIds: string[] = []
+
+    llmContextParts.push(`【用户问题】${message}`)
+
+    if (isYearScope && targetYear) {
+      // === 年请求模式 ===
+      // 1. DAYUN_BRIEF（从 facts 中选出的大运信息，渲染为文本）
+      const dayunData = (selectedFactsResult.selected_facts as any)?.dayun
+      if (dayunData) {
+        const dayunText = renderDayunBrief(dayunData)
+        usedBlocks.push({
+          kind: 'facts',
+          block_type: 'DAYUN_BRIEF',
+          block_id: 'dayun_brief_current',
+          used: true,
+          source: 'engine',
+          chars_total: dayunText.length,
+          preview: dayunText.slice(0, PREVIEW_MAX_CHARS),
+          full_text: dayunText,
+          year: targetYear,
+          reason: 'year_scope_requires_dayun_brief',
+        })
+        contextOrder.push('DAYUN_BRIEF')
+        llmContextParts.push('')
+        llmContextParts.push('=== 大运背景 ===')
+        llmContextParts.push(dayunText)
       }
+
+      // 2. YEAR_DETAIL_TEXT（从 facts 中选出的流年详情，渲染为文本）
+      const liunianData = (selectedFactsResult.selected_facts as any)?.liunian
+      if (liunianData) {
+        const yearDetailText = renderYearDetail(liunianData, targetYear)
+        usedBlocks.push({
+          kind: 'facts',
+          block_type: 'YEAR_DETAIL_TEXT',
+          block_id: `year_detail_${targetYear}`,
+          used: true,
+          source: 'engine',
+          chars_total: yearDetailText.length,
+          preview: yearDetailText.slice(0, PREVIEW_MAX_CHARS),
+          full_text: yearDetailText,
+          year: targetYear,
+          reason: 'year_scope_requires_year_detail',
+        })
+        contextOrder.push('YEAR_DETAIL_TEXT')
+        llmContextParts.push('')
+        llmContextParts.push(`=== ${targetYear}年流年详情 ===`)
+        llmContextParts.push(yearDetailText)
+      }
+
+      llmContextParts.push('')
+      llmContextParts.push('【重要】只允许根据上述信息中的"提示汇总"讲解今年运势。如果提示汇总为空：写"今年暂无额外提示汇总"。')
+
     } else {
-      for (const slice of routerResult.slices) {
-        if (slice in (engineData.index as Record<string, unknown>)) {
-          indexSlices[slice] = (engineData.index as Record<string, unknown>)[slice]
+      // === 范围请求模式：固定 last5（当年+往前4年，旧->新）===
+      const last5Years = getFixedLast5Years(baseYear) // [base-4, ..., base] 升序
+      const { linesText, liuniansUsed } = renderFactsLast5Compact(engineData.facts, last5Years)
+      
+      if (linesText) {
+        usedBlocks.push({
+          kind: 'facts',
+          block_type: 'FACTS_LAST5_COMPACT_BLOCK',
+          block_id: 'facts_last5_compact',
+          used: true,
+          source: 'engine',
+          chars_total: linesText.length,
+          preview: linesText.slice(0, PREVIEW_MAX_CHARS),
+          full_text: linesText,
+          reason: 'range_scope_last5_fixed',
+        })
+        contextOrder.push('FACTS_LAST5_COMPACT_BLOCK')
+        llmContextParts.push('')
+        llmContextParts.push('=== 最近5年运势概览（旧→新） ===')
+        llmContextParts.push(linesText)
+      }
+
+      // 下钻：year_category 为 凶/有变动（或半年含“凶/变动”）的全部追加 YEAR_DETAIL_TEXT
+      for (const ln of liuniansUsed) {
+        if (isRiskyYear(ln)) {
+          const yd = renderYearDetail(ln, ln.year)
+          usedBlocks.push({
+            kind: 'facts',
+            block_type: 'YEAR_DETAIL_TEXT',
+            block_id: `year_detail_${ln.year}`,
+            used: true,
+            source: 'engine',
+            chars_total: yd.length,
+            preview: yd.slice(0, PREVIEW_MAX_CHARS),
+            full_text: yd,
+            year: ln.year,
+            reason: 'risky_year_auto_drill',
+          })
+          contextOrder.push(`YEAR_DETAIL_TEXT_${ln.year}`)
+          llmContextParts.push('')
+          llmContextParts.push(`=== ${ln.year}年流年详情 ===`)
+          llmContextParts.push(yd)
         }
       }
     }
 
-    // ============================================================
-    // Year Detail Trace（年请求专用）
-    // ============================================================
-    let yearDetailTrace: YearDetailTrace | null = null
-    
-    if (isYearScope && targetYear) {
-      const yearDetail = engineData.year_detail
-      yearDetailTrace = {
-        year: targetYear,
-        parse_status: yearDetail ? 'success' : 'failed',
-        raw_text_preview: yearDetail?.raw_text?.slice(0, 300) || '',
-        year_detail: yearDetail || null,
+    // 添加 index 使用的 blocks（仅用于 decide/定位，不作为事实正文）
+    const usedIndexBlockIds: string[] = []
+    for (const slice of routerResult.slices) {
+      if (slice in (engineData.index as Record<string, unknown>)) {
+        usedIndexBlockIds.push(`index_${slice}`)
+        // 不把 index 内容喂给 LLM，只记录使用了哪些
+        usedBlocks.push({
+          kind: 'index',
+          block_type: `INDEX_${slice.toUpperCase()}`,
+          block_id: `index_${slice}`,
+          used: true,
+          source: 'index',
+          chars_total: 0, // index 不作为正文
+          preview: '(index slice used for routing decision only)',
+          reason: 'index_used_for_decide_not_content',
+        })
       }
     }
 
-    // ============================================================
-    // 提取 facts（年请求禁用 atomic facts）
-    // ============================================================
-    let usedFacts: UsedFact[] = []
-    let selectionTrace: FactSelectionTrace
-    let availableCount = 0
-    let debugYearHistogram: Record<number, number> = {}
-    let extractedYearNullCount = 0
-    let sampleExtractedYears: Array<{ fact_id: string; scope: string; extracted_year: number | null; year_source: string }> = []
-
-    if (isYearScope) {
-      // 年请求：禁用 atomic facts，使用 YEAR_DETAIL
-      const factsResult = selectFactsStrict(engineData.facts, engineData.findings, routerResult)
-      availableCount = factsResult.availableCount
-      debugYearHistogram = factsResult.debugYearHistogram
-      extractedYearNullCount = factsResult.extractedYearNullCount
-      sampleExtractedYears = factsResult.sampleExtractedYears
-      
-      // 不使用 facts，只记录 trace
-      selectionTrace = {
-        time_scope: routerResult.trace.time_scope,
-        focus: routerResult.trace.focus,
-        allowed_years: targetYear ? [targetYear] : [],
-        steps: [{
-          step: 'year_detail_mode',
-          filter: 'disabled',
-          before_count: availableCount,
-          after_count: 0,
-          reason: 'year_detail 模式禁用 atomic facts，使用 YEAR_DETAIL_BLOCK',
-        }],
-        fallback_triggered: false,
-        fallback_reason: 'facts_policy=disabled_for_year_detail',
-        final_count: 0,
-      }
-    } else {
-      const factsResult = selectFactsStrict(
-        engineData.facts,
-        engineData.findings,
-        routerResult,
-      )
-      usedFacts = factsResult.usedFacts
-      selectionTrace = factsResult.selectionTrace
-      availableCount = factsResult.availableCount
-      debugYearHistogram = factsResult.debugYearHistogram
-      extractedYearNullCount = factsResult.extractedYearNullCount
-      sampleExtractedYears = factsResult.sampleExtractedYears
-    }
-
-    // 构建 debug_used_fact_ids
-    const debugUsedFactIds = usedFacts.map(f => f.fact_id)
-
-    // ============================================================
-    // 构建 LLM Context
-    // ============================================================
-    let llmContext: string
-    
-    if (isYearScope && yearDetailTrace?.year_detail) {
-      // 年请求专用 Context
-      llmContext = buildYearDetailContext(
-        message,
-        yearDetailTrace.year_detail,
-        indexSlices,
-        birth_date,
-        birth_time,
-        is_male
-      )
-    } else {
-      // 普通请求
-      llmContext = buildLLMContext(
-        message,
-        routerResult,
-        usedFacts,
-        indexSlices,
-        birth_date,
-        birth_time,
-        is_male
-      )
-    }
-
+    const llmContext = llmContextParts.join('\n')
     const llmInputPreview = llmContext.slice(0, 4000)
 
-    // 构建 modules_trace
-    const modulesTrace = buildModulesTrace(
-      routerResult.slices, 
-      usedFacts.length > 0,
-      isYearScope,
-      yearDetailTrace !== null,
-      targetYear
-    )
+    // 构建 router_meta
+    const routerMeta: RouterMeta = {
+      router_id: 'main_router_v1',
+      intent: routerResult.trace.intent,
+      mode: isYearScope ? 'year' : 'range',
+      reason: routerResult.trace.rules_matched.join(', '),
+      child_router: null, // 暂无 child_router
+    }
 
-    // 构建 evidence_trace
-    const evidenceTrace = buildEvidenceTrace(
-      isYearScope,
-      targetYear,
-      yearDetailTrace?.year_detail,
-      yearDetailTrace?.year_detail?.dayun_brief,
-      indexSlices,
-      usedFacts
-    )
+    // 构建 context_trace（权威）
+    const contextTrace: ContextTrace = {
+      router: routerMeta,
+      used_blocks: usedBlocks,
+      context_order: contextOrder,
+      facts_selection: {
+        selected_facts_paths: selectedFactsResult.selected_facts_paths,
+        selected_fact_ids: selectedFactIds,
+      },
+      index_usage: {
+        index_hits: routerResult.trace.index_hits || [],
+        used_index_block_ids: usedIndexBlockIds,
+      },
+      run_meta: {
+        timing_ms: timings,
+        llm_input_preview: llmInputPreview,
+      },
+    }
 
     // 调用 LLM
     let assistantText = ''
-    let llmUsedFactIds: string[] = []
     const llmStart = Date.now()
 
-    // 选择 system prompt
-    const systemPrompt = isYearScope 
-      ? getYearDetailSystemPrompt(targetYear || 0)
-      : getSystemPrompt(routerResult.trace.flags, debugUsedFactIds)
+    const systemPrompt = isYearScope
+      ? getYearDetailSystemPrompt(targetYear || baseYear)
+      : getSystemPrompt(routerResult.trace.flags)
 
     if (openai) {
       try {
         const completion = await openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
-            {
-              role: 'system',
-              content: systemPrompt,
-            },
-            {
-              role: 'user',
-              content: llmContext,
-            },
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: llmContext },
           ],
           temperature: 0.7,
           max_tokens: 1200,
         })
 
-        const rawContent = completion.choices[0]?.message?.content || ''
-        const parsed = parseLLMResponse(rawContent, debugUsedFactIds)
-        assistantText = parsed.text
-        llmUsedFactIds = parsed.usedFactIds
-
+        assistantText = completion.choices[0]?.message?.content || '抱歉，我无法生成回复。'
       } catch (llmError) {
         console.error('LLM error:', llmError)
-        assistantText = isYearScope && yearDetailTrace?.year_detail
-          ? generateYearDetailStubResponse(yearDetailTrace.year_detail)
-          : generateStubResponse(routerResult, indexSlices, usedFacts)
-        llmUsedFactIds = []
+        assistantText = generateStubResponse(routerResult, isYearScope, targetYear)
       }
     } else {
-      assistantText = isYearScope && yearDetailTrace?.year_detail
-        ? generateYearDetailStubResponse(yearDetailTrace.year_detail)
-        : generateStubResponse(routerResult, indexSlices, usedFacts)
-      llmUsedFactIds = []
+      assistantText = generateStubResponse(routerResult, isYearScope, targetYear)
     }
 
     timings.llm = Date.now() - llmStart
+    contextTrace.run_meta.timing_ms = timings
 
-    // 构建 facts_trace 输出
-    const factsTrace: FactsTraceOutput = {
-      used_facts: usedFacts,
-      used_count: usedFacts.length,
-      available_count: availableCount,
-      source: engineData ? 'engine' : 'stub',
-      selection_trace: selectionTrace,
-      debug_year_histogram: debugYearHistogram,
-      extracted_year_null_count: extractedYearNullCount,
-      sample_extracted_years: sampleExtractedYears,
-    }
-
-    // 构建响应
+    // 构建响应（新统一壳）
     return NextResponse.json({
+      // ===== 核心字段（前端只读这些）=====
+      llm_answer: assistantText,
+      context_trace: contextTrace,
+
+      // ===== 兼容旧字段（标记 deprecated，前端禁止读取）=====
       assistant_text: assistantText,
-      debug_used_fact_ids: llmUsedFactIds.length > 0 ? llmUsedFactIds : debugUsedFactIds,
       router_trace: routerResult.trace,
-      modules_trace: modulesTrace,
-      index_trace: {
-        slices_used: isYearScope ? ['dayun'] : routerResult.slices,
-        slices_payload: indexSlices,
-      },
+      index: engineData.index,
+      facts: engineData.facts,
+      
+      // facts_trace 标记 deprecated
       facts_trace: {
-        ...factsTrace,
-        facts_policy: isYearScope ? 'disabled_for_year_detail' : 'enabled',
-      },
-      evidence_trace: evidenceTrace,  // 证据块回放
-      year_detail_trace: yearDetailTrace,  // 年请求专用
-      run_meta: {
-        timing_ms: timings,
-        llm_input_preview: llmInputPreview,
+        deprecated: true,
+        _note: '请改用 context_trace.used_blocks.filter(b=>b.kind==="facts")',
       },
     })
 
@@ -441,1006 +460,374 @@ export async function POST(request: NextRequest) {
 }
 
 // ============================================================
-// normalize_facts: 为每条 fact 提取 fact_year
+// 打印层渲染函数（核心：只能用这些函数生成 LLM 上下文）
 // ============================================================
 
-function normalizeFacts(rawFacts: EngineFact[]): NormalizedFact[] {
-  return rawFacts.map(f => {
-    const { year, source } = extractFactYear(f)
-    return {
-      ...f,
-      fact_year: year,
-      year_source: source,
+/**
+ * 渲染大运背景为可读文本
+ */
+function renderDayunBrief(dayunData: any): string {
+  if (!dayunData) return '（暂无大运信息）'
+  
+  const parts: string[] = []
+  
+  if (dayunData.current_dayun_ref) {
+    const d = dayunData.current_dayun_ref
+    parts.push(`当前大运：${d.label || d.name || '未知'}`)
+    if (d.start_age !== undefined && d.end_age !== undefined) {
+      parts.push(`（${d.start_age}-${d.end_age}岁）`)
     }
-  })
-}
-
-function extractFactYear(f: EngineFact): { year: number | null; source: string } {
-  // 优先级 1: fact.year 或 fact.flow_year
-  if (typeof f.year === 'number' && f.year > 1900 && f.year < 2200) {
-    return { year: f.year, source: 'fact.year' }
-  }
-  if (typeof f.flow_year === 'number' && f.flow_year > 1900 && f.flow_year < 2200) {
-    return { year: f.flow_year, source: 'fact.flow_year' }
-  }
-
-  // 优先级 2: 从 scope 抓 liunian_YYYY
-  if (f.scope) {
-    const scopeMatch = f.scope.match(/liunian_(\d{4})/)
-    if (scopeMatch) {
-      const year = parseInt(scopeMatch[1], 10)
-      if (year > 1900 && year < 2200) {
-        return { year, source: 'scope:liunian_YYYY' }
-      }
+    if (d.fortune_label || d.grade) {
+      parts.push(`，等级：${d.fortune_label || d.grade}`)
     }
-    // dayun_YYYY
-    const dayunMatch = f.scope.match(/dayun_(\d{4})/)
-    if (dayunMatch) {
-      const year = parseInt(dayunMatch[1], 10)
-      if (year > 1900 && year < 2200) {
-        return { year, source: 'scope:dayun_YYYY' }
-      }
-    }
+  } else if (dayunData.fortune_label) {
+    parts.push(`大运整体评级：${dayunData.fortune_label}`)
   }
-
-  // 优先级 3: 从 label 抓 (19|20)\d{2}
-  if (f.label) {
-    const labelMatch = f.label.match(/((?:19|20)\d{2})/)
-    if (labelMatch) {
-      const year = parseInt(labelMatch[1], 10)
-      if (year > 1900 && year < 2200) {
-        return { year, source: 'label:regex' }
-      }
-    }
-  }
-
-  // 优先级 4: 从 type 抓
-  if (f.type) {
-    const typeMatch = f.type.match(/((?:19|20)\d{2})/)
-    if (typeMatch) {
-      const year = parseInt(typeMatch[1], 10)
-      if (year > 1900 && year < 2200) {
-        return { year, source: 'type:regex' }
-      }
-    }
-  }
-
-  // natal scope: 没有年份
-  if (f.scope === 'natal') {
-    return { year: null, source: 'natal:no_year' }
-  }
-
-  return { year: null, source: 'unknown:no_year' }
-}
-
-// ============================================================
-// selectFactsStrict: 严格按 time_scope 过滤（禁止 fallback 到其他年份）
-// ============================================================
-
-interface SelectFactsResult {
-  usedFacts: UsedFact[]
-  selectionTrace: FactSelectionTrace
-  availableCount: number
-  debugYearHistogram: Record<number, number>
-  extractedYearNullCount: number
-  sampleExtractedYears: Array<{ fact_id: string; scope: string; extracted_year: number | null; year_source: string }>
-}
-
-function selectFactsStrict(
-  facts: Record<string, unknown>,
-  findings: { facts?: EngineFact[]; hints?: unknown[]; links?: unknown[] } | undefined,
-  routerResult: RouterResult,
-): SelectFactsResult {
-  const { time_scope, focus } = routerResult.trace
-  const currentYear = new Date().getFullYear()
-  const steps: SelectionStep[] = []
-
-  // 确定 allowed_years
-  let allowedYears: number[] = []
-  let allowNatal = false
-
-  if (time_scope.type === 'year' && time_scope.year) {
-    // year scope: 只允许该年
-    allowedYears = [time_scope.year]
-    allowNatal = true // 允许 natal 作为背景
-  } else if (time_scope.type === 'range' && time_scope.years) {
-    // range scope: 最近 N 年
-    const n = time_scope.years
-    for (let i = 0; i < n; i++) {
-      allowedYears.push(currentYear - i)
-      allowedYears.push(currentYear + i)
-    }
-    allowedYears = [...new Set(allowedYears)].sort((a, b) => a - b)
-    allowNatal = true
-  } else {
-    // 默认: 最近 5 年
-    for (let i = 0; i < 5; i++) {
-      allowedYears.push(currentYear - i)
-      allowedYears.push(currentYear + i)
-    }
-    allowedYears = [...new Set(allowedYears)].sort((a, b) => a - b)
-    allowNatal = true
-  }
-
-  // ============================================================
-  // Step 1: 加载并标准化 facts
-  // ============================================================
-  let allFacts: NormalizedFact[] = []
-
-  if (findings?.facts && Array.isArray(findings.facts) && findings.facts.length > 0) {
-    allFacts = normalizeFacts(findings.facts)
-    steps.push({
-      step: '1_load_findings',
-      filter: 'findings.facts + normalize',
-      before_count: 0,
-      after_count: allFacts.length,
-      reason: `从 engine 加载 ${allFacts.length} 条 facts，已标准化 fact_year`,
-    })
-  } else {
-    // Fallback: 从 facts.luck 中提取
-    const rawFacts = extractFactsFromLuck(facts)
-    allFacts = normalizeFacts(rawFacts)
-    steps.push({
-      step: '1_load_luck_fallback',
-      filter: 'facts.luck + normalize',
-      before_count: 0,
-      after_count: allFacts.length,
-      reason: `findings.facts 为空，从 facts.luck 提取 ${allFacts.length} 条事件`,
-    })
-  }
-
-  const availableCount = allFacts.length
-
-  // ============================================================
-  // 构建诊断字段
-  // ============================================================
-  const buildDiagnostics = (normalizedFacts: NormalizedFact[]) => {
-    // year histogram
-    const yearHistogram: Record<number, number> = {}
-    let nullCount = 0
-    
-    for (const f of normalizedFacts) {
-      if (f.fact_year !== null) {
-        yearHistogram[f.fact_year] = (yearHistogram[f.fact_year] || 0) + 1
-      } else {
-        nullCount++
-      }
-    }
-    
-    // sample extracted years (前10条)
-    const sampleYears = normalizedFacts.slice(0, 10).map(f => ({
-      fact_id: f.fact_id,
-      scope: f.scope,
-      extracted_year: f.fact_year,
-      year_source: f.year_source,
-    }))
-    
-    return { yearHistogram, nullCount, sampleYears }
-  }
-
-  if (allFacts.length === 0) {
-    return {
-      usedFacts: [],
-      selectionTrace: {
-        time_scope,
-        focus,
-        allowed_years: allowedYears,
-        steps,
-        fallback_triggered: false,
-        fallback_reason: 'No facts available from engine',
-        final_count: 0,
-      },
-      availableCount: 0,
-      debugYearHistogram: {},
-      extractedYearNullCount: 0,
-      sampleExtractedYears: [],
-    }
-  }
-
-  const diagnostics = buildDiagnostics(allFacts)
-
-  // ============================================================
-  // Step 2: 按 allowed_years 严格过滤（禁止 fallback 到其他年份）
-  // ============================================================
-  let filtered: NormalizedFact[] = []
-
-  // 分离 liunian facts 和 natal/other facts
-  const liunianFacts = allFacts.filter(f => f.scope?.startsWith('liunian'))
-  const natalFacts = allFacts.filter(f => f.scope === 'natal')
-  const otherFacts = allFacts.filter(f => !f.scope?.startsWith('liunian') && f.scope !== 'natal')
-
-  steps.push({
-    step: '2_categorize',
-    filter: 'by scope type',
-    before_count: allFacts.length,
-    after_count: allFacts.length,
-    reason: `liunian: ${liunianFacts.length}, natal: ${natalFacts.length}, other: ${otherFacts.length}`,
-  })
-
-  // 严格过滤 liunian facts
-  const matchedLiunian = liunianFacts.filter(f => {
-    return f.fact_year !== null && allowedYears.includes(f.fact_year)
-  })
-
-  steps.push({
-    step: '3_filter_liunian_by_year',
-    filter: `fact_year in [${allowedYears.slice(0, 5).join(',')}${allowedYears.length > 5 ? '...' : ''}]`,
-    before_count: liunianFacts.length,
-    after_count: matchedLiunian.length,
-    reason: matchedLiunian.length > 0 
-      ? `${matchedLiunian.length} 条 liunian facts 匹配 allowed_years`
-      : `无 liunian facts 匹配 allowed_years`,
-  })
-
-  filtered = matchedLiunian
-
-  // ============================================================
-  // Step 3b: 如果 liunian facts 为空，尝试从 facts.luck 生成 synthetic fact
-  // ============================================================
-  if (filtered.length === 0 && time_scope.type === 'year' && time_scope.year) {
-    const syntheticFacts = generateSyntheticFactsFromLuck(facts, time_scope.year)
-    if (syntheticFacts.length > 0) {
-      filtered = syntheticFacts
-      steps.push({
-        step: '3b_synthetic_from_luck',
-        filter: `facts.luck.liunian[year=${time_scope.year}]`,
-        before_count: 0,
-        after_count: syntheticFacts.length,
-        reason: `无特殊事件，从 facts.luck 生成 ${syntheticFacts.length} 条年度基础信息`,
-      })
-    } else {
-      steps.push({
-        step: '3b_no_synthetic',
-        filter: `facts.luck.liunian[year=${time_scope.year}]`,
-        before_count: 0,
-        after_count: 0,
-        reason: `该年在 facts.luck 中也无数据`,
-      })
-    }
-  }
-
-  // 如果 liunian 为空且允许 natal，补充 natal 作为背景
-  let fallbackTriggered = false
-  let fallbackReason = ''
-
-  if (filtered.length === 0 && allowNatal && natalFacts.length > 0) {
-    fallbackTriggered = true
-    fallbackReason = `无 liunian facts 匹配 ${allowedYears.join(',')}，补充 ${Math.min(natalFacts.length, FACTS_TOP_K)} 条 natal 作为背景`
-    filtered = natalFacts.slice(0, FACTS_TOP_K)
-
-    steps.push({
-      step: '4_natal_fallback',
-      filter: 'natal only',
-      before_count: natalFacts.length,
-      after_count: filtered.length,
-      reason: fallbackReason,
-    })
-  }
-
-  // ============================================================
-  // Step 3: 取 topK
-  // ============================================================
-  const selected = filtered.slice(0, FACTS_TOP_K)
-
-  steps.push({
-    step: '5_take_topK',
-    filter: `topK=${FACTS_TOP_K}`,
-    before_count: filtered.length,
-    after_count: selected.length,
-    reason: `取前 ${FACTS_TOP_K} 条`,
-  })
-
-  // 转换为 UsedFact 格式（带 reason）
-  const usedFacts: UsedFact[] = selected.map(f => toUsedFact(f, allowedYears))
-
-  return {
-    usedFacts,
-    selectionTrace: {
-      time_scope,
-      focus,
-      allowed_years: allowedYears,
-      steps,
-      fallback_triggered: fallbackTriggered,
-      fallback_reason: fallbackReason,
-      final_count: usedFacts.length,
-    },
-    availableCount,
-    debugYearHistogram: diagnostics.yearHistogram,
-    extractedYearNullCount: diagnostics.nullCount,
-    sampleExtractedYears: diagnostics.sampleYears,
-  }
-}
-
-function extractFactsFromLuck(facts: Record<string, unknown>): EngineFact[] {
-  const result: EngineFact[] = []
-
-  if (!facts.luck) return result
-
-  const luck = facts.luck as {
-    groups?: Array<{
-      liunian?: Array<{
-        year?: number
-        all_events?: Array<Record<string, unknown>>
-      }>
-    }>
-  }
-
-  const groups = luck.groups || []
-  let eventIdx = 0
-
-  for (const group of groups) {
-    const liunianList = group.liunian || []
-    for (const liunian of liunianList) {
-      const year = liunian.year
-      const allEvents = liunian.all_events || []
-
-      for (const event of allEvents) {
-        const eventType = (event.type as string) || 'event'
-        const label = (event.label as string) || eventType
-
-        result.push({
-          fact_id: `evt_${year}_${eventType}_${eventIdx++}`,
-          type: eventType,
-          kind: (event.kind as string) || eventType,
-          scope: `liunian_${year}`,
-          label,
-          flow_year: year,
-          risk_percent: event.risk_percent as number,
-          ...event,
-        })
-      }
-    }
-  }
-
-  return result
+  
+  return parts.join('') || '（暂无大运信息）'
 }
 
 /**
- * 从 facts.luck 中为指定年份生成 synthetic facts（当没有特殊事件时）
+ * 渲染年度详情为可读文本（4段式：总评/为什么/具体表现/建议）
+ * 此函数仅在"凶/有变动"年调用，必须说清楚"怎么坏/为什么坏"
  */
-function generateSyntheticFactsFromLuck(facts: Record<string, unknown>, targetYear: number): NormalizedFact[] {
-  if (!facts.luck) return []
-
-  const luck = facts.luck as {
-    groups?: Array<{
-      liunian?: Array<{
-        year?: number
-        total_risk_percent?: number
-        half1_label?: string
-        half2_label?: string
-        risk_from_gan?: number
-        risk_from_zhi?: number
-        liunian_gan?: string
-        liunian_zhi?: string
-        all_events?: Array<unknown>
-      }>
-    }>
+function renderYearDetail(liunianData: any, targetYear: number): string {
+  if (!liunianData) return `（${targetYear}年暂无详细信息）`
+  
+  const parts: string[] = []
+  
+  // === (1) 总评段：凶/有变动 + 是否可克服 ===
+  const totalRisk = normalizeRiskPercent(liunianData.total_risk_percent || liunianData.risk_from_gan + liunianData.risk_from_zhi || 0)
+  const firstHalf = liunianData.first_half_label || '一般'
+  const secondHalf = liunianData.second_half_label || '一般'
+  
+  let overallCategory = '一般'
+  if (totalRisk >= 40) {
+    overallCategory = '凶（棘手/意外）'
+  } else if (totalRisk >= 25) {
+    overallCategory = '明显变动（可克服）'
+  } else if (firstHalf === '凶' || secondHalf === '凶') {
+    overallCategory = '有凶险'
+  } else if (firstHalf.includes('变动') || secondHalf.includes('变动')) {
+    overallCategory = '有变动'
   }
-
-  const groups = luck.groups || []
-
-  for (const group of groups) {
-    const liunianList = group.liunian || []
-    for (const liunian of liunianList) {
-      if (liunian.year === targetYear) {
-        const result: NormalizedFact[] = []
-
-        // 生成年度概览 fact
-        const totalRisk = liunian.total_risk_percent ?? 0
-        const half1 = liunian.half1_label || ''
-        const half2 = liunian.half2_label || ''
-        const liunianGan = liunian.liunian_gan || ''
-        const liunianZhi = liunian.liunian_zhi || ''
-
-        // 只有当有实际数据时才生成
-        if (totalRisk > 0 || half1 || half2 || liunianGan || liunianZhi) {
-          result.push({
-            fact_id: `syn_${targetYear}_overview`,
-            type: 'year_overview',
-            kind: 'synthetic',
-            scope: `liunian_${targetYear}`,
-            label: `${targetYear}年概览`,
-            flow_year: targetYear,
-            risk_percent: totalRisk,
-            fact_year: targetYear,
-            year_source: 'synthetic:facts.luck',
-            half1_label: half1,
-            half2_label: half2,
-            liunian_gan: liunianGan,
-            liunian_zhi: liunianZhi,
-          })
-        }
-
-        // 如果有上半年信息
-        if (half1) {
-          result.push({
-            fact_id: `syn_${targetYear}_half1`,
-            type: 'half_year',
-            kind: 'synthetic',
-            scope: `liunian_${targetYear}`,
-            label: `${targetYear}年上半年：${half1}`,
-            flow_year: targetYear,
-            risk_percent: liunian.risk_from_gan ?? 0,
-            fact_year: targetYear,
-            year_source: 'synthetic:half1_label',
-          })
-        }
-
-        // 如果有下半年信息
-        if (half2) {
-          result.push({
-            fact_id: `syn_${targetYear}_half2`,
-            type: 'half_year',
-            kind: 'synthetic',
-            scope: `liunian_${targetYear}`,
-            label: `${targetYear}年下半年：${half2}`,
-            flow_year: targetYear,
-            risk_percent: liunian.risk_from_zhi ?? 0,
-            fact_year: targetYear,
-            year_source: 'synthetic:half2_label',
-          })
-        }
-
-        // 如果完全没有数据，生成一条"无特殊事件"的 fact
-        if (result.length === 0) {
-          result.push({
-            fact_id: `syn_${targetYear}_no_events`,
-            type: 'no_special_events',
-            kind: 'synthetic',
-            scope: `liunian_${targetYear}`,
-            label: `${targetYear}年无特殊命理事件，整体平稳`,
-            flow_year: targetYear,
-            risk_percent: 0,
-            fact_year: targetYear,
-            year_source: 'synthetic:no_events',
-          })
-        }
-
-        return result
+  
+  parts.push(`【${targetYear}年总评】`)
+  parts.push(`流年干支：${liunianData.gan || '?'}${liunianData.zhi || '?'}`)
+  parts.push(`整体评估：${overallCategory}`)
+  parts.push(`上半年：${firstHalf}，下半年：${secondHalf}`)
+  
+  // === (2) 为什么段：风险来源 + 关键触发结构 ===
+  parts.push('')
+  parts.push(`【为什么会这样？】`)
+  
+  // 风险来源
+  const ganRisk = normalizeRiskPercent(liunianData.risk_from_gan)
+  const zhiRisk = normalizeRiskPercent(liunianData.risk_from_zhi)
+  parts.push(`主要风险来源：天干 ${ganRisk}% / 地支 ${zhiRisk}% / 总体 ${totalRisk}%`)
+  
+  // 十神角度
+  const ganShishen = liunianData.gan_shishen || ''
+  const zhiShishen = liunianData.zhi_shishen || ''
+  const isGanYongshen = !!liunianData.is_gan_yongshen
+  const isZhiYongshen = !!liunianData.is_zhi_yongshen
+  const ganLabel = getShishenLabel(ganShishen, isGanYongshen) || ''
+  const zhiLabel = getShishenLabel(zhiShishen, isZhiYongshen) || ''
+  
+  if (ganShishen) {
+    parts.push(`天干 ${liunianData.gan}（${ganShishen}）：${isGanYongshen ? '用神得力' : '非用神'}${ganLabel ? '，' + ganLabel : ''}`)
+  }
+  if (zhiShishen) {
+    parts.push(`地支 ${liunianData.zhi}（${zhiShishen}）：${isZhiYongshen ? '用神得力' : '非用神'}${zhiLabel ? '，' + zhiLabel : ''}`)
+  }
+  
+  // 关键触发结构（从 all_events 中挑选冲/刑/害/合会等）
+  const keyTriggers: string[] = []
+  const allEvents = liunianData.all_events as any[] || []
+  const clashesNatal = liunianData.clashes_natal as any[] || []
+  const punishmentsNatal = liunianData.punishments_natal as any[] || []
+  const patternsLiunian = liunianData.patterns_liunian as any[] || []
+  const staticActivation = liunianData.patterns_static_activation as any[] || []
+  
+  // 冲
+  for (const clash of clashesNatal.slice(0, 2)) {
+    const from = clash.from_pillar || clash.source_pillar || '流年'
+    const target = clash.to_pillar || clash.target_pillar || '命局'
+    const branches = clash.branches || [clash.from_branch, clash.to_branch].filter(Boolean)
+    keyTriggers.push(`【冲】${branches.join('冲')}（${from}冲${target}）`)
+  }
+  
+  // 刑
+  for (const punish of punishmentsNatal.slice(0, 2)) {
+    const ptype = punish.type || punish.subtype || '刑'
+    const branches = punish.branches || punish.matched_branches || []
+    if (branches.length > 0) {
+      keyTriggers.push(`【刑】${branches.join('')}${ptype}`)
+    }
+  }
+  
+  // 模式（枭神夺食、伤官见官等）
+  for (const pat of patternsLiunian.slice(0, 2)) {
+    const patType = pat.type || pat.pattern_type || ''
+    const label = pat.label || patType
+    if (label) {
+      keyTriggers.push(`【模式】${label}`)
+    }
+  }
+  
+  // 静态激活
+  for (const act of staticActivation.slice(0, 2)) {
+    const label = act.label || act.type || ''
+    if (label) {
+      keyTriggers.push(`【激活】${label}`)
+    }
+  }
+  
+  // 三合三会逢冲
+  const sanheClashBonus = allEvents.find((e: any) => e.type === 'sanhe_sanhui_clash_bonus')
+  if (sanheClashBonus) {
+    keyTriggers.push(`【三合/三会逢冲】${sanheClashBonus.group_name || ''}额外增${sanheClashBonus.risk_percent || 0}%风险`)
+  }
+  
+  if (keyTriggers.length > 0) {
+    parts.push('')
+    parts.push('关键触发结构：')
+    for (const trigger of keyTriggers.slice(0, 4)) {
+      parts.push(`• ${trigger}`)
+    }
+  } else {
+    parts.push('关键触发结构：无显著冲刑害结构，风险主要来自十神非用神或时运波动')
+  }
+  
+  // === (3) 具体表现段：hints/events ===
+  parts.push('')
+  parts.push(`【具体表现与提示】`)
+  
+  const hints = liunianData.hints as any[] || []
+  const eventsToShow: string[] = []
+  
+  // 优先显示 hints
+  for (const hint of hints) {
+    const hintText = typeof hint === 'string' ? hint : (hint.label || hint.text || '')
+    if (hintText) {
+      eventsToShow.push(hintText)
+    }
+  }
+  
+  // 补充 all_events 中有意义的
+  for (const evt of allEvents) {
+    if (eventsToShow.length >= 5) break
+    const evtLabel = evt.label || ''
+    const evtType = evt.type || ''
+    if (evtLabel && !eventsToShow.includes(evtLabel)) {
+      eventsToShow.push(evtLabel)
+    } else if (evtType && !eventsToShow.some(e => e.includes(evtType))) {
+      // 生成可读描述
+      if (evtType === 'clash') {
+        eventsToShow.push(`流年与命局发生冲克，易有变动或冲突`)
+      } else if (evtType === 'punishment') {
+        eventsToShow.push(`刑罚结构出现，注意口舌是非或身体`)
+      } else if (evtType.includes('pattern')) {
+        eventsToShow.push(`特殊格局触发：${evtType}`)
       }
     }
   }
-
-  return []
-}
-
-function toUsedFact(f: NormalizedFact, allowedYears: number[]): UsedFact {
-  // 构建 text_preview（限制 200 字符）
-  const previewParts: string[] = []
-  previewParts.push(f.label || f.type)
-  if (f.risk_percent !== undefined) {
-    previewParts.push(`风险${f.risk_percent}%`)
-  }
-  if (f.kind && f.kind !== f.type) {
-    previewParts.push(`[${f.kind}]`)
-  }
-
-  const textPreview = previewParts.join(' | ').slice(0, 200)
-
-  // 构建 reason
-  let reason = ''
-  if (f.fact_year !== null) {
-    reason = `fact_year=${f.fact_year} (from ${f.year_source}) in allowed_years=[${allowedYears.slice(0, 3).join(',')}...]`
-  } else if (f.scope === 'natal') {
-    reason = 'natal fact as background (no liunian match)'
-  } else {
-    reason = `included: ${f.year_source}`
-  }
-
-  return {
-    fact_id: f.fact_id,
-    type: f.type,
-    scope: f.scope,
-    fact_year: f.fact_year,
-    year_source: f.year_source,
-    label: f.label,
-    text_preview: textPreview,
-    reason,
-  }
-}
-
-// ============================================================
-// LLM Response Parser
-// ============================================================
-
-function parseLLMResponse(
-  rawContent: string,
-  availableFactIds: string[]
-): { text: string; usedFactIds: string[] } {
-  const usedFactIds: string[] = []
-
-  for (const factId of availableFactIds) {
-    if (rawContent.includes(factId)) {
-      usedFactIds.push(factId)
+  
+  if (eventsToShow.length > 0) {
+    for (const evt of eventsToShow.slice(0, 5)) {
+      parts.push(`• ${evt}`)
     }
+  } else {
+    parts.push('• 今年暂无特定事件提示')
   }
+  
+  // === (4) 建议段（B口吻，避免命令式） ===
+  parts.push('')
+  parts.push(`【总体提示】`)
+  
+  if (totalRisk >= 40) {
+    parts.push('今年整体运势较为棘手，容易遇到意外或挑战。建议保持谨慎，稳扎稳打，避免冲动决策。重大事项宜多方考量。')
+  } else if (totalRisk >= 25) {
+    parts.push('今年有明显变动迹象，但多数情况下可以克服。保持平常心，灵活应对变化，变动未必是坏事。')
+  } else if (firstHalf === '凶' || secondHalf === '凶') {
+    parts.push(`今年${firstHalf === '凶' ? '上半年' : '下半年'}需要特别注意，其他时段相对平稳。做好准备，平稳过渡。`)
+  } else {
+    parts.push('今年虽有波动，但整体尚可应对。保持积极心态，关注上述提示点即可。')
+  }
+  
+  return parts.join('\n')
+}
 
-  if (usedFactIds.length === 0 && availableFactIds.length > 0 && rawContent.length > 100) {
-    usedFactIds.push(...availableFactIds.slice(0, Math.min(3, availableFactIds.length)))
+/**
+ * 渲染最近5年紧凑版 facts 文本
+ * 格式：每年两行（天干行 + 地支行），包含：十神/用神/标签/风险%
+ * 必须输出十神标签（从 SHISHEN_LABEL_MAP 获取）
+ */
+function renderFactsLast5Compact(facts: Record<string, unknown>, years: number[]): { linesText: string; liuniansUsed: any[] } {
+  const luck = facts?.luck as { groups?: any[] } | undefined
+  if (!luck?.groups) return { linesText: '', liuniansUsed: [] }
+  
+  const lines: string[] = []
+  const liuniansUsed: any[] = []
+  
+  for (const year of years) {
+    // 在所有 groups 中找到该年的 liunian
+    let liunianData: any = null
+    for (const group of luck.groups) {
+      const liunianList = group?.liunian as any[] | undefined
+      if (liunianList) {
+        liunianData = liunianList.find((ln: any) => ln.year === year)
+        if (liunianData) break
+      }
+    }
+    
+    if (!liunianData) continue
+    liuniansUsed.push(liunianData)
+    
+    // 风险百分比规范化
+    const ganRisk = normalizeRiskPercent(liunianData.risk_from_gan)
+    const zhiRisk = normalizeRiskPercent(liunianData.risk_from_zhi)
+    
+    // 获取十神标签（从词库映射）
+    const ganShishen = liunianData.gan_shishen || ''
+    const zhiShishen = liunianData.zhi_shishen || ''
+    const isGanYongshen = !!liunianData.is_gan_yongshen
+    const isZhiYongshen = !!liunianData.is_zhi_yongshen
+    const ganLabel = getShishenLabel(ganShishen, isGanYongshen) || ganShishen || '未知'
+    const zhiLabel = getShishenLabel(zhiShishen, isZhiYongshen) || zhiShishen || '未知'
+    
+    // 天干行
+    const ganLine = `${year}年：天干 ${liunianData.gan || '?'}｜十神 ${ganShishen || '未知'}｜用神 ${isGanYongshen ? '是' : '否'}｜标签：${ganLabel}｜上半年危险系数：${ganRisk}%`
+    
+    // 地支行
+    const zhiLine = `        地支 ${liunianData.zhi || '?'}｜十神 ${zhiShishen || '未知'}｜用神 ${isZhiYongshen ? '是' : '否'}｜标签：${zhiLabel}｜下半年危险系数：${zhiRisk}%`
+    
+    lines.push(ganLine)
+    lines.push(zhiLine)
   }
+  
+  return { linesText: lines.join('\n'), liuniansUsed }
+}
 
-  return {
-    text: rawContent,
-    usedFactIds,
+function getFixedLast5Years(baseYear: number): number[] {
+  const start = baseYear - 4
+  const years: number[] = []
+  for (let y = start; y <= baseYear; y++) {
+    years.push(y)
   }
+  return years // 升序（旧->新）
+}
+
+function normalizeRiskPercent(val: any): number {
+  const num = typeof val === 'number' ? val : 0
+  // 如果是小数概率，乘100；如果本身>1，按百分比处理
+  const pct = num > 1 ? num : num * 100
+  const clamped = Math.max(0, Math.min(100, pct))
+  return Number.isFinite(clamped) ? Math.round(clamped) : 0
+}
+
+/**
+ * 判断年份是否为"凶/有变动"需要下钻
+ * 检查逻辑：
+ * 1. year_category/first_half_label/second_half_label 字段
+ * 2. 如果字段不存在，根据风险百分比判断：总风险 >= 25 视为"有变动"，>= 40 视为"凶"
+ */
+function isRiskyYear(liunian: any): boolean {
+  // 1. 检查明确的分类标签
+  const cats = new Set<string>()
+  if (liunian.year_category) cats.add(liunian.year_category)
+  if (liunian.first_half_label) cats.add(liunian.first_half_label)
+  if (liunian.second_half_label) cats.add(liunian.second_half_label)
+  
+  if (['凶', '有变动', '变动'].some(c => cats.has(c))) {
+    return true
+  }
+  
+  // 2. 如果没有明确标签，根据风险百分比判断
+  const ganRisk = typeof liunian.risk_from_gan === 'number' ? liunian.risk_from_gan : 0
+  const zhiRisk = typeof liunian.risk_from_zhi === 'number' ? liunian.risk_from_zhi : 0
+  const totalRisk = ganRisk + zhiRisk
+  
+  // 总风险 >= 25 视为"有变动"，需要下钻
+  if (totalRisk >= 25) {
+    return true
+  }
+  
+  return false
 }
 
 // ============================================================
-// LLM Context Builder
+// Helper Functions
 // ============================================================
 
-function getSystemPrompt(
-  flags: { need_dayun_mention: boolean; dayun_grade_public: '好' | '一般' },
-  factIds: string[]
-): string {
+function getSystemPrompt(flags: { need_dayun_mention: boolean; dayun_grade_public: '好' | '一般' }): string {
   let prompt = `你是一位专业的命理分析师，基于用户的八字信息提供运势解读。
 
 规则：
 1. 使用温和、积极的语气，即使运势不佳也要给出建议
 2. 回答要简洁明了，控制在200-300字
 3. 结合用户的具体问题进行回答
-4. 不要透露技术细节或提及"index"、"trace"等术语
-5. 用自然的中文回答`
-
-  if (factIds.length > 0) {
-    prompt += `
-
-【重要】FACTS 部分包含 ${factIds.length} 条具体命理事实：
-- 你必须在回答中引用这些事实来支撑你的分析
-- 每个 fact 都有 fact_id
-- 你的分析必须基于这些 facts 中描述的具体内容
-- 如果无法基于 facts 得出结论，请明确说明"根据目前信息..."`
-  } else {
-    prompt += `
-
-注意：当前时间范围内没有具体的命理事件记录，请基于 INDEX 中的统计数据进行概括性分析，并说明这是整体趋势而非具体事件。`
-  }
+4. 不要透露技术细节或提及"index"、"trace"等术语`
 
   if (flags.need_dayun_mention) {
     prompt += `
-- 需要提及大运情况，大运评级为"${flags.dayun_grade_public}"`
+5. 需要提及大运情况，大运评级为"${flags.dayun_grade_public}"`
   }
 
   return prompt
 }
 
-/**
- * 年请求专用 System Prompt（严格顺序 + gate 规则）
- */
 function getYearDetailSystemPrompt(targetYear: number): string {
-  return `你是一位专业的命理分析师。用户询问的是 ${targetYear} 年的具体运势。
+  return `你是一位专业的命理分析师，基于用户的八字信息提供${targetYear}年的运势解读。
 
-【输出顺序必须严格遵循】
-
-1. 【大运背景】（单独一段，1-2句）
-   - 只说当前大运名称和年份范围
-   - 等级只用"好"或"一般"（不要用"不好/差/坏"）
-
-2. 【上下半年】（第一屏必须出现）
-   - 使用固定四类枚举：好运 / 一般 / 凶 / 变动
-   - 如果是"变动"：只写"会变动"，不加解释
-
-3. 【流年结构】（天干→地支）
-   - 天干行：天干 X｜十神 XX｜用神 是/否｜标签：...
-   - 若危险系数=0：写"不易出现意外和风险"（不写0%）
-   - 若危险系数>0：写"危险系数：XX%"
-   - 地支行同理
-
-4. 【提示汇总】（最重要的 gate 规则）
-   - 只允许依据【提示汇总】内容讲"今年会出现什么问题/引动/推进"
-   - 如果【提示汇总】为空：写"今年暂无额外提示汇总"，不要自己推断
-   - 【关键禁止】：如果只有冲/克/害/刑信息但【提示汇总】没写，绝对不能讲
-
-【严格禁止】
-- 不要输出 ${targetYear} 以外的任何年份数字
-- 不要输出"建议从事..."等C口吻（保持分析师风格）
-- 不要从冲克害刑自己推断，必须以【提示汇总】为准
-- 术语保留中文：十神/用神/天干/地支 不翻译
-
-【格式要求】
-- 回答200-300字
-- 使用温和积极的语气`
+规则：
+1. 使用温和、积极的语气
+2. 回答要简洁明了，控制在200-300字
+3. 严格按照提供的年度详情信息回答
+4. 如果"提示汇总"为空，写"今年暂无额外提示汇总"
+5. 不要透露技术细节或提及"index"、"trace"等术语
+6. 危险系数为0时，写"不易出现意外和风险"`
 }
 
-/**
- * 年请求专用 Context 构建
- */
-function buildYearDetailContext(
-  query: string,
-  yearDetail: YearDetail,
-  indexSlices: Record<string, unknown>,
-  birth_date: string,
-  birth_time: string,
-  is_male: boolean
-): string {
-  const parts: string[] = []
-
-  parts.push(`【用户问题】${query}`)
-  parts.push(`【用户信息】${is_male ? '男性' : '女性'}，出生于 ${birth_date} ${birth_time}`)
-  parts.push(`【目标年份】${yearDetail.year}年`)
-  parts.push('')
-
-  // DAYUN_BRIEF_BLOCK
-  if (yearDetail.dayun_brief) {
-    const db = yearDetail.dayun_brief
-    parts.push('=== DAYUN_BRIEF_BLOCK（大运背景）===')
-    parts.push(`大运：${db.name}（${db.start_age}-${db.end_age}岁）`)
-    parts.push(`等级：${db.grade}`)
-    parts.push('')
-  }
-
-  // YEAR_DETAIL_BLOCK
-  parts.push('=== YEAR_DETAIL_BLOCK（年度详情）===')
-  
-  // 上下半年
-  parts.push(`【上下半年】上半年：${yearDetail.half_year_grade.first}，下半年：${yearDetail.half_year_grade.second}`)
-  
-  // 天干
-  const gan = yearDetail.gan_block
-  const ganRiskStr = gan.risk_pct > 0 ? `危险系数：${gan.risk_pct.toFixed(1)}%` : '不易出现意外和风险'
-  const ganTagsStr = gan.tags.length > 0 ? gan.tags.join('/') : ''
-  parts.push(`【天干】${gan.gan}｜十神 ${gan.shishen}｜用神 ${gan.yongshen_yesno}｜标签：${ganTagsStr}｜${ganRiskStr}`)
-  
-  // 地支
-  const zhi = yearDetail.zhi_block
-  const zhiRiskStr = zhi.risk_pct > 0 ? `危险系数：${zhi.risk_pct.toFixed(1)}%` : '不易出现意外和风险'
-  const zhiTagsStr = zhi.tags.length > 0 ? zhi.tags.join('/') : ''
-  parts.push(`【地支】${zhi.zhi}｜十神 ${zhi.shishen}｜用神 ${zhi.yongshen_yesno}｜标签：${zhiTagsStr}｜${zhiRiskStr}`)
-  
-  // 提示汇总
-  if (yearDetail.hint_summary_lines.length > 0) {
-    parts.push('【提示汇总】')
-    for (const hint of yearDetail.hint_summary_lines) {
-      parts.push(`  - ${hint}`)
-    }
-  } else {
-    parts.push('【提示汇总】今年暂无额外提示汇总')
-  }
-
-  return parts.join('\n')
-}
-
-/**
- * 年请求专用 Stub Response
- */
-function generateYearDetailStubResponse(yearDetail: YearDetail): string {
-  const parts: string[] = []
-  
-  // 大运背景
-  if (yearDetail.dayun_brief) {
-    const db = yearDetail.dayun_brief
-    parts.push(`【大运背景】当前处于${db.name}大运（${db.start_age}-${db.end_age}岁），整体运势${db.grade}。`)
-    parts.push('')
-  }
-  
-  // 上下半年
-  parts.push(`【上下半年】${yearDetail.year}年上半年${yearDetail.half_year_grade.first}，下半年${yearDetail.half_year_grade.second}。`)
-  parts.push('')
-  
-  // 流年结构
-  const gan = yearDetail.gan_block
-  const ganRiskStr = gan.risk_pct > 0 ? `危险系数${gan.risk_pct.toFixed(1)}%` : '不易出现意外和风险'
-  parts.push(`【流年结构】天干${gan.gan}（${gan.shishen}），${gan.yongshen_yesno === '是' ? '用神得力' : '非用神'}，${ganRiskStr}。`)
-  
-  const zhi = yearDetail.zhi_block
-  const zhiRiskStr = zhi.risk_pct > 0 ? `危险系数${zhi.risk_pct.toFixed(1)}%` : '不易出现意外和风险'
-  parts.push(`地支${zhi.zhi}（${zhi.shishen}），${zhi.yongshen_yesno === '是' ? '用神得力' : '非用神'}，${zhiRiskStr}。`)
-  parts.push('')
-  
-  // 提示汇总
-  if (yearDetail.hint_summary_lines.length > 0) {
-    parts.push('【提示汇总】')
-    for (const hint of yearDetail.hint_summary_lines) {
-      parts.push(`• ${hint}`)
-    }
-  } else {
-    parts.push('【提示汇总】今年暂无额外提示汇总。')
-  }
-  
-  return parts.join('\n')
-}
-
-/**
- * 构建 Evidence Trace（证据块回放）
- */
-function buildEvidenceTrace(
-  isYearScope: boolean,
-  targetYear: number | undefined,
-  yearDetail: YearDetail | null | undefined,
-  dayunBrief: { name: string; start_age: number; end_age: number; grade: string } | null | undefined,
-  indexSlices: Record<string, unknown>,
-  usedFacts: UsedFact[],
-): EvidenceTrace {
-  const usedBlocks: EvidenceBlock[] = []
-  const llmContextOrder: string[] = []
-
+function generateStubResponse(routerResult: RouterResult, isYearScope: boolean, targetYear?: number): string {
   if (isYearScope && targetYear) {
-    // 年请求模式
-
-    // 1. DAYUN_BRIEF
-    if (dayunBrief) {
-      const dayunText = `大运：${dayunBrief.name}（${dayunBrief.start_age}-${dayunBrief.end_age}岁），等级：${dayunBrief.grade}`
-      usedBlocks.push({
-        block_id: 'dayun_brief_current',
-        block_type: 'DAYUN_BRIEF',
-        source: 'index',
-        scope: 'year',
-        year: targetYear,
-        used: true,
-        reason: 'year_scope_requires_dayun_brief',
-        preview: dayunText.slice(0, 300),
-        length_chars: dayunText.length,
-        full_text: dayunText,
-      })
-      llmContextOrder.push('DAYUN_BRIEF')
-    } else {
-      usedBlocks.push({
-        block_id: 'dayun_brief_current',
-        block_type: 'DAYUN_BRIEF',
-        source: 'index',
-        scope: 'year',
-        year: targetYear,
-        used: false,
-        reason: 'dayun_brief_not_available',
-        preview: '',
-        length_chars: 0,
-      })
-    }
-
-    // 2. YEAR_DETAIL_TEXT
-    if (yearDetail) {
-      const rawText = yearDetail.raw_text || ''
-      usedBlocks.push({
-        block_id: `year_detail_text_${targetYear}`,
-        block_type: 'YEAR_DETAIL_TEXT',
-        source: 'engine',
-        scope: 'year',
-        year: targetYear,
-        used: true,
-        reason: 'year_scope_requires_year_detail',
-        preview: rawText.slice(0, 300),
-        length_chars: rawText.length,
-        full_text: rawText,
-      })
-      llmContextOrder.push('YEAR_DETAIL_TEXT')
-    } else {
-      usedBlocks.push({
-        block_id: `year_detail_text_${targetYear}`,
-        block_type: 'YEAR_DETAIL_TEXT',
-        source: 'engine',
-        scope: 'year',
-        year: targetYear,
-        used: false,
-        reason: 'year_detail_parse_failed',
-        preview: '',
-        length_chars: 0,
-      })
-    }
-
-  } else {
-    // 非年请求模式（range/general）
-
-    // 1. FACTS
-    if (usedFacts.length > 0) {
-      const factsText = usedFacts.map(f => `[${f.fact_id}] ${f.label}`).join('\n')
-      usedBlocks.push({
-        block_id: 'facts_selected',
-        block_type: 'FACTS_BLOCK',
-        source: 'engine',
-        scope: 'range',
-        used: true,
-        reason: 'facts_selected_for_context',
-        preview: factsText.slice(0, 300),
-        length_chars: factsText.length,
-        full_text: factsText,
-      })
-      llmContextOrder.push('FACTS_BLOCK')
-    }
-
-    // 2. Index slices
-    for (const [sliceName, sliceData] of Object.entries(indexSlices)) {
-      const sliceText = JSON.stringify(sliceData, null, 2)
-      usedBlocks.push({
-        block_id: `index_${sliceName}`,
-        block_type: `INDEX_${sliceName.toUpperCase()}`,
-        source: 'index',
-        scope: 'range',
-        used: true,
-        reason: 'index_slice_for_context',
-        preview: sliceText.slice(0, 300),
-        length_chars: sliceText.length,
-        full_text: sliceText,
-      })
-      llmContextOrder.push(`INDEX_${sliceName.toUpperCase()}`)
-    }
+    return `根据您的八字分析，${targetYear}年整体运势平稳。建议保持积极的心态，抓住机遇。今年暂无额外提示汇总。`
   }
-
-  return {
-    used_blocks: usedBlocks,
-    llm_context_order: llmContextOrder,
-  }
+  
+  return '根据您的八字分析，最近几年整体运势保持平稳。建议稳扎稳打，把握好眼前的机会。'
 }
-
-function buildLLMContext(
-  query: string,
-  routerResult: RouterResult,
-  usedFacts: UsedFact[],
-  indexSlices: Record<string, unknown>,
-  birth_date: string,
-  birth_time: string,
-  is_male: boolean
-): string {
-  const parts: string[] = []
-
-  parts.push(`【用户问题】${query}`)
-  parts.push(`【用户信息】${is_male ? '男性' : '女性'}，出生于 ${birth_date} ${birth_time}`)
-
-  const { time_scope, focus } = routerResult.trace
-  if (time_scope.type === 'year' && time_scope.year) {
-    parts.push(`【时间范围】${time_scope.year}年`)
-  } else if (time_scope.type === 'range' && time_scope.years) {
-    parts.push(`【时间范围】最近${time_scope.years}年`)
-  }
-  parts.push(`【关注领域】${focus}`)
-
-  parts.push('')
-  parts.push('=== FACTS（具体命理事实）===')
-  if (usedFacts.length > 0) {
-    for (const fact of usedFacts) {
-      parts.push(`• [${fact.fact_id}] ${fact.scope} (year=${fact.fact_year ?? 'N/A'}) | ${fact.label} | ${fact.text_preview}`)
-    }
-  } else {
-    parts.push('（当前时间范围内没有匹配的具体事件记录）')
-  }
-
-  parts.push('')
-  parts.push('=== INDEX（运势统计数据）===')
-  parts.push(JSON.stringify(indexSlices, null, 2))
-
-  return parts.join('\n')
-}
-
-// ============================================================
-// Modules Trace
-// ============================================================
-
-function buildModulesTrace(
-  slices: string[], 
-  hasFactsUsed: boolean,
-  isYearScope: boolean = false,
-  hasYearDetail: boolean = false,
-  targetYear?: number
-): ModuleTrace[] {
-  const modules: ModuleTrace[] = []
-
-  if (isYearScope) {
-    // 年请求专用模块
-    modules.push({
-      module: 'DAYUN_BRIEF_BLOCK',
-      source: 'index',
-      used: true,
-      produced_blocks: ['dayun_brief_current'],
-    })
-    modules.push({
-      module: 'YEAR_DETAIL_BLOCK',
-      source: 'engine',
-      used: hasYearDetail,
-      produced_blocks: hasYearDetail && targetYear ? [`year_detail_text_${targetYear}`] : [],
-    })
-    modules.push({
-      module: 'FACTS_BLOCK',
-      source: 'engine',
-      used: false,
-      reason: 'disabled_for_year_detail',
-      produced_blocks: [],
-    })
-  } else {
-    // 普通请求
-    modules.push({
-      module: 'FACTS_BLOCK',
-      source: 'engine',
-      used: hasFactsUsed,
-      produced_blocks: hasFactsUsed ? ['facts_selected'] : [],
-    })
-
-    for (const slice of slices) {
-      modules.push({
-        module: `${slice.toUpperCase()}_BLOCK`,
-        source: 'index',
-        used: true,
-        produced_blocks: [`index_${slice}`],
-      })
-    }
-  }
-
-  return modules
-}
-
-// ============================================================
-// Stub Data & Response
-// ============================================================
 
 function getStubEngineData(birth_date: string, birth_time: string, is_male: boolean) {
-  const currentYear = new Date().getFullYear()
   return {
     index: {
-      meta: { base_year: currentYear },
+      meta: { base_year: new Date().getFullYear() },
       dayun: {
-        current_dayun_ref: { label: '壬午', start_year: 2020, end_year: 2029, fortune_label: '一般' },
+        current_dayun_ref: { label: '壬午', fortune_label: '一般' },
         fortune_label: '一般',
-        yongshen_swap: { has_swap: false, items: [], hint: '' },
       },
       year_grade: {
         last5: [
-          { year: currentYear, Y: 12.0, year_label: '上半年 一般，下半年 好运' },
-        ],
-        future3: [
-          { year: currentYear, Y: 12.0, year_label: '上半年 一般，下半年 好运' },
+          { year: 2026, Y: 10.0, year_label: '上半年 一般，下半年 一般' },
+          { year: 2025, Y: 15.0, year_label: '上半年 一般，下半年 好运' },
         ],
       },
       relationship: { hit: false, years_hit: [] },
-      turning_points: { all: [], nearby: [], should_mention: false },
-      good_year_search: { has_good_in_future3: true, next_good_year: currentYear },
-      personality: { axis_summaries: [] },
+      turning_points: { nearby: [], should_mention: false },
+      good_year_search: { has_good_in_future3: false, future3_good_years: [] },
     },
     facts: {
-      _stub: true,
       luck: {
-        groups: [{
-          liunian: [{
-            year: currentYear,
-            all_events: [
-              { type: 'pattern', label: '食神生财', risk_percent: 5.0 },
+        groups: [
+          {
+            dayun: { label: '壬午', start_year: 2020, end_year: 2030 },
+            liunian: [
+              { year: 2026, gan: '丙', zhi: '午', first_half_label: '一般', second_half_label: '一般' },
+              { year: 2025, gan: '乙', zhi: '巳', first_half_label: '一般', second_half_label: '好运' },
             ],
-          }],
-        }],
+          },
+        ],
       },
     },
-    findings: {
-      facts: [
-        { fact_id: 'stub_f1', type: 'pattern', kind: 'pattern', scope: `liunian_${currentYear}`, label: '食神生财', flow_year: currentYear, risk_percent: 5.0 },
-      ],
-      hints: [],
-      links: [],
-    },
+    findings: { facts: [], hints: [], links: [] },
   }
-}
-
-function generateStubResponse(
-  routerResult: RouterResult,
-  indexSlices: Record<string, unknown>,
-  usedFacts: UsedFact[]
-): string {
-  const { focus, time_scope, flags } = routerResult.trace
-
-  let factsSection = ''
-  if (usedFacts.length > 0) {
-    const factDescriptions = usedFacts.map(f => f.label).filter(Boolean)
-    if (factDescriptions.length > 0) {
-      factsSection = `根据您的命盘，今年有${factDescriptions.slice(0, 3).join('、')}等特征。`
-    }
-  }
-
-  if (focus === 'relationship') {
-    return `根据您的八字分析，${factsSection || '最近几年感情运势较为平稳。'}建议保持积极开放的心态。`
-  }
-
-  if (time_scope.type === 'year' && time_scope.year) {
-    if (usedFacts.length === 0) {
-      return `根据您的八字分析，${time_scope.year}年整体运势平稳，没有特别突出的命理事件。${flags.dayun_grade_public === '好' ? '大运较好，可稳步发展。' : '大运一般，建议稳中求进。'}`
-    }
-
-    const yearGrade = indexSlices.year_grade as { last5?: Array<{ year: number; Y: number; year_label: string }> } | undefined
-    const yearData = yearGrade?.last5?.find(y => y.year === time_scope.year)
-
-    if (yearData) {
-      return `根据您的八字分析，${time_scope.year}年：${factsSection}
-
-${yearData.year_label}
-
-总体风险指数 ${yearData.Y}%。${flags.dayun_grade_public === '好' ? '大运较好。' : '大运一般。'}`
-    }
-  }
-
-  return `根据您的八字分析，${factsSection || '最近几年整体运势保持平稳。'}${flags.dayun_grade_public === '好' ? '大运较好。' : '大运一般。'}`
 }

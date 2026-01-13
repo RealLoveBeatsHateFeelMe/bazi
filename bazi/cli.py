@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .lunar_engine import analyze_complete
+from .compute_facts import compute_facts
 from .config import ZHI_WUXING
 
 
@@ -287,7 +287,8 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         is_male = True if sex_str != "F" else False
 
     # ===== 完整分析（使用新的 analyze_complete 函数） =====
-    complete_result = analyze_complete(birth_dt, is_male, max_dayun=10)
+    # facts（唯一真相源）：打印层只读该对象
+    complete_result = compute_facts(birth_dt, is_male, max_dayun=10)
     result = complete_result["natal"]  # 原局数据
     luck = complete_result["luck"]  # 大运/流年数据
     turning_points = complete_result["turning_points"]  # 转折点

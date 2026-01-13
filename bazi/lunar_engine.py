@@ -489,7 +489,7 @@ def analyze_complete(
     # 6. 生成 Relationship Index (Index-5)
     from .relationship_index import generate_relationship_index
     # 使用当前系统年份计算 last5_hit 和 last5_years
-    # 注意：为了快照稳定，快照生成脚本应该使用固定基准年份（见 generate_facts_snapshots.py）
+    # 注意：facts 为唯一真相源；任何离线快照/导出都不得作为运行时事实来源
     from datetime import datetime as dt
     current_year = dt.now().year
     relationship_index = generate_relationship_index(

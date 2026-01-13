@@ -49,9 +49,7 @@
 - `bazi/yongshen.py`：用神计算
 - `bazi/yongshen_swap.py`：用神互换检测
 - `bazi/regress.py`：回归测试用例
-- `scripts/generate_facts_snapshots.py`：回归样本 facts 快照生成脚本
-- `tests/regression/samples.json`：回归样本输入文件
-- `tests/regression/snapshots/facts/`：回归样本 facts 快照目录
+- `tests/regression/samples.json`：回归样本输入文件（golden inputs）
 
 ## 关于大运 / 流年
 
