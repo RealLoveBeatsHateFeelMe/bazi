@@ -10,12 +10,245 @@ from .compute_facts import compute_facts
 from .config import ZHI_WUXING
 
 
+# ============================================================
+# 印星天赋卡（5 档）
+# ============================================================
+
+# 印星共性（所有档位都打印）
+_YINXING_COMMON = "- 印星共性：重理解、重支撑、重体系感，也重思想与认知；更吃「认同/资源/老师/环境/长辈」的加成。"
+
+# 正印主卡 5 栏
+_ZHENGYIN_CARD = [
+    "- 思维天赋：耐心、坐得住，学习能力强；更擅长循序渐进，把基础打牢再往上搭。",
+    "- 社交天赋：仁慈、善良、乐善好施、守规矩；给人可靠、讲原则、值得信任的感觉。",
+    "- 兴趣取向：更偏经典与主流体系，喜欢有标准、有脉络、可验证的知识与方法。",
+    "- 生活方式：重秩序与稳定节奏，做事偏「稳、全、合规」，不喜欢失控感与无序变化。",
+    "- 提高方向：在守住原则的前提下更敢推进；避免过度求稳导致行动变慢，先做出一版再完善。",
+]
+
+# 偏印主卡 5 栏
+_PIANYIN_CARD = [
+    "- 思维天赋：善于从细节与碎片信息中抓规律，偏好把复杂问题「想通、想透」再行动；直觉与逻辑经常同时在线。",
+    "- 社交天赋：偏向独处充电，但在群体中察言观色能力强，能读懂气氛与他人真实情绪；更倾向少数深交而非广撒网。",
+    "- 兴趣取向：更容易被小众、偏门、非主流的事物吸引，研究欲强，追求独特路径与个人理解框架。",
+    "- 生活方式：讨厌低质量重复与不透明规则；对「做事的意义与方法」有独特追求，但容易把精力过多消耗在「想清楚/准备更充分」而不是「先交付一版」。",
+    "- 提高方向：多做事、少空想；先做后看，用行动校准；在不确定中保持坚定信念与节奏感。",
+]
+
+# 融合版 5 栏（正偏各半）
+_BLEND_CARD = [
+    "- 思维天赋：既能坐得住、按体系学习，也善于自建框架、从细节里抓到隐藏规律；「稳」和「跳」的两种理解方式并存。",
+    "- 社交天赋：外在温和讲分寸、守规则底色明显，同时对气氛与情绪信号很敏感；更在意交流质量与信任感。",
+    "- 兴趣取向：一边认可经典框架与主流方法，一边又容易被小众与偏门主题吸引；既要「有出处」，也要「有新意」。",
+    "- 生活方式：追求秩序与可持续节奏，但也讨厌低质量重复与不透明规则；容易在「想透做稳」与「想新走偏路」之间拉扯。",
+    "- 提高方向：用稳定节奏托住探索欲；把理解落到「可交付的一版」，再迭代优化，避免在准备期耗空精力。",
+]
+
+# 补充句
+_PIANYIN_SUPPLEMENT = "- 偏印补充：思绪更容易过深、喜欢钻牛角尖；也更容易被文学、艺术、玄学等偏门主题吸引。"
+_ZHENGYIN_SUPPLEMENT = "- 正印补充：同时带一点求稳与守规则的底色，更愿意把事情做完整、做合规。"
+
+# ============================================================
+# 财星天赋卡（5 档）
+# ============================================================
+
+# 财星共性（所有档位都打印）
+_CAIXING_COMMON = "- 财星共性：重现实回报与资源分配，重价值交换与结果；对「钱、成本、性价比、生活质感」更敏感，也更在意体面与边界。"
+
+# 正财主卡 5 栏
+_ZHENGCAI_CARD = [
+    "- 思维天赋：务实、稳健，适合长期积累的财富；更偏向「确定性与可持续」的路径，做事踏实肯干、一步一步把结果做出来。",
+    "- 社交天赋：偏可靠、讲信用、守边界；不靠花哨取胜，更擅长用稳定兑现与责任感建立信任，给人踏实感。",
+    "- 兴趣取向：更偏向稳定收益与看得见的成果（资产、技能、家庭责任、长期建设）；对规则与成本意识更强；关系倾向：感情/关系上更容易出现「多线选择窗口」或暧昧机会（统计口径：并行尝试的概率更高，男性更明显）。",
+    "- 生活方式：勤俭节约，重预算与秩序感；日常更踏实肯干，愿意靠持续投入换稳定回报；也容易出现两份工作/兼职的状态，但容易把自己绷得太紧。",
+    "- 提高方向：在稳的基础上保留弹性；适当允许享受与试错，不要因为过度谨慎错过窗口，同时别把压力全揽在自己身上。",
+]
+
+# 偏财主卡 5 栏
+_PIANCAI_CARD = [
+    "- 思维天赋：对机会、资源、交换关系很敏感，反应快、会算「值不值」；行动力强，有想法往往会立刻付诸行动，擅长在变化里抓窗口与优先级。",
+    "- 社交天赋：社交面更广，氛围感强，会表达、浪漫、大方；更擅长用互动与体面把关系推顺，让人感觉被照顾到。",
+    "- 兴趣取向：更容易对「钱、资源、交易、市场、人情世故、好东西」上心；对新鲜事物与现实结果反馈更敏感；关系倾向：感情/关系上更容易出现「多线选择窗口」或暧昧机会（统计口径：并行尝试的概率更高，男性更明显）。",
+    "- 生活方式：更愿意把生活过得有质感、有效率，出手相对爽快；欲望与比较心一旦失控，容易变成「越想要越焦虑」，现实压力随之放大；也容易出现两份工作/兼职的状态。",
+    "- 提高方向：把大方与热情放在「值得的人和事」上；注意开销与预算边界，先定原则与节奏，再谈投入与回报，避免被外界节奏牵着走。",
+]
+
+# 融合版 5 栏（正偏各半）
+_CAI_BLEND_CARD = [
+    "- 思维天赋：既会算长期账、能稳步积累，也能抓机会窗口、快速行动；「稳的规划」和「快的试错」并存。",
+    "- 社交天赋：既讲信用与边界，也有氛围感与表达力；能靠可靠赢信任，也能靠体面与互动推动关系。",
+    "- 兴趣取向：一边在意稳定与可持续，一边对市场、交易与新机会敏感；既要「长期价值」，也要「当下反馈」；关系倾向：感情/关系上更容易出现「多线选择窗口」或暧昧机会（统计口径：并行尝试的概率更高，男性更明显）。",
+    "- 生活方式：既想把钱花出质感与效率，也需要预算与秩序感来托底；容易在「享受投入」和「控制开销」之间拉扯；必有两份工作/兼职的状态。",
+    "- 提高方向：先定预算与底线，再留一部分弹性用于体验与机会；用规则管住欲望，用行动抓住窗口。",
+]
+
+# 补充句（仅正财主导时追加）
+_PIANCAI_SUPPLEMENT = "- 偏财补充：同时带一点机会嗅觉与社交氛围感，出手更爽快、也更讲体面。"
+
+# ============================================================
+# 比劫天赋卡（比肩/劫财共用同一张卡）
+# ============================================================
+
+# 比劫共性（比肩/劫财都打印）
+_BIJIE_COMMON = "- 比劫共性：重自我与主导权，重独立与对等；不喜欢被安排，遇到竞争更容易被点燃，关系里更在意尊重与边界。"
+
+# 比劫通用卡 v1（比肩/劫财完全相同）
+_BIJIE_CARD = [
+    "- 思维天赋：主见强、反应快，遇事更倾向自己拍板、自己承担；独立性强，但也更容易以自我立场为先，显得固执。",
+    "- 社交天赋：表面朋友可能多、圈子看起来热闹，但真心朋友往往偏少；因更「顾自己」的底色，不一定容易吸引同类/同行长期绑定，关系更容易停留在浅层互利或阶段性来往。",
+    "- 兴趣取向：更喜欢竞争、对抗、排名、PK、证明自己；同时常有某种抽象但难以言说的追求与执念，宁可按自己的标准走，也不太愿意随大流。",
+    "- 生活方式：强调自主与掌控感，讨厌被安排、被管束；遇到冲突更倾向硬顶或冷处理，不太爱解释。",
+    "- 提高方向：不要太自我、不要太固执，学会听劝；在关键选择上给他人意见一个入口，把「独立」从硬扛变成「能协作、能调整」。",
+]
+
+# ============================================================
+# 官杀天赋卡（正官/七杀 + 官杀混杂）
+# ============================================================
+
+# 官杀共性（所有档位都打印）
+_GUANSHA_COMMON = "- 官杀共性：重规矩与责任，重秩序与边界；对「管束、标准、权威、对错」更敏感，也更在意形象与分寸。"
+
+# 正官主卡 5 栏
+_ZHENGGUAN_CARD = [
+    "- 思维天赋：稳健、讲章法，擅长在规则框架内把事情做到位；重逻辑与流程，对「合不合规」天然敏感。",
+    "- 社交天赋：端正、有分寸、重礼节；给人靠谱、守信、有底线的印象，擅长用可预期的方式建立信任。",
+    "- 兴趣取向：偏好有标准、有规矩、有评判体系的领域；对权威与主流路径的认同度更高。",
+    "- 生活方式：重秩序与节奏感，做事偏「稳、正、到位」；讨厌失控与越界，容易对自己和他人有要求。",
+    "- 提高方向：在守规矩的同时允许灵活调整；避免过度拘束导致僵化，学会在合规的前提下抓重点。",
+]
+
+# 七杀主卡 5 栏
+_QISHA_CARD = [
+    "- 思维天赋：反应快、决断力强，遇事敢拍板、敢承压；行动导向明显，更习惯用结果说话。",
+    "- 社交天赋：气场硬、边界感强，不太喜欢被试探；给人「不太好惹」或「说一不二」的印象，但真认可的人会直接护短。",
+    "- 兴趣取向：偏好竞争性强、压力显现的领域；对挑战与对抗有天然兴趣，讨厌拖泥带水和无效内耗。",
+    "- 生活方式：强调效率与掌控感，讨厌被管太细或被人质疑；容易绷紧神经，但也更能扛压。",
+    "- 提高方向：把「硬」转化为「稳」；在坚持原则的同时学会柔性沟通，避免把对抗变成常态。",
+]
+
+# 融合版 5 栏（正官七杀各半）
+_GUANSHA_BLEND_CARD = [
+    "- 思维天赋：既讲章法与规矩，也有决断力与行动力；「稳」和「狠」的两种处事方式并存。",
+    "- 社交天赋：既端正有分寸，也气场硬、边界感强；能靠靠谱建立信任，也能靠果断赢得尊重。",
+    "- 兴趣取向：一边认可规则与主流路径，一边对竞争与挑战有兴趣；既要「合规」，也要「出结果」。",
+    "- 生活方式：重秩序与节奏感，但也强调效率与掌控；容易在「守规矩」和「不想被管」之间拉扯。",
+    "- 提高方向：用规矩托住决断；在守住底线的前提下抓重点、敢行动，把「稳」和「狠」协调起来。",
+]
+
+# 补充句（仅正官主导时追加）
+_QISHA_SUPPLEMENT = "- 七杀补充：同时带一点决断力与压迫感，遇事更敢拍板，边界感也更强。"
+# 补充句（仅七杀主导时追加）
+_ZHENGGUAN_SUPPLEMENT = "- 正官补充：同时带一点守规矩与讲分寸的底色，给人更靠谱、有章法的感觉。"
+
+
+def _get_bijie_talent_card() -> List[str]:
+    """返回比劫天赋卡行列表（比肩/劫财共用同一张卡）。"""
+    lines = [_BIJIE_COMMON]
+    lines.extend(_BIJIE_CARD)
+    return lines
+
+
+def _get_caixing_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ratio: Optional[float]) -> List[str]:
+    """根据财星档位返回对应的天赋卡行列表。
+
+    5 档规则：
+    - 纯正财：共性 + 正财主卡
+    - 纯偏财：共性 + 偏财主卡
+    - 正财主导（pian_ratio <= 0.30）：共性 + 正财主卡 + 偏财补充句
+    - 正偏各半（0.30 < pian_ratio <= 0.60）：共性 + 融合版
+    - 偏财主导（pian_ratio > 0.60）：共性 + 偏财主卡（不加补充）
+    """
+    lines = [_CAIXING_COMMON]
+
+    if is_pure:
+        if pure_shishen == "正财":
+            lines.extend(_ZHENGCAI_CARD)
+        else:
+            lines.extend(_PIANCAI_CARD)
+    elif pian_ratio is not None:
+        if pian_ratio <= 0.30:
+            # 正财主导：正财主卡 + 偏财补充
+            lines.extend(_ZHENGCAI_CARD)
+            lines.append(_PIANCAI_SUPPLEMENT)
+        elif pian_ratio <= 0.60:
+            # 正偏各半：融合版
+            lines.extend(_CAI_BLEND_CARD)
+        else:
+            # 偏财主导：偏财主卡（不加补充）
+            lines.extend(_PIANCAI_CARD)
+
+    return lines
+
+
+def _get_yinxing_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ratio: Optional[float]) -> List[str]:
+    """根据印星档位返回对应的天赋卡行列表。
+
+    5 档规则：
+    - 纯正印：共性 + 正印主卡
+    - 纯偏印：共性 + 偏印主卡
+    - 正印主导（pian_ratio <= 0.30）：共性 + 正印主卡 + 偏印补充句
+    - 正偏各半（0.30 < pian_ratio <= 0.60）：共性 + 融合版
+    - 偏印主导（pian_ratio > 0.60）：共性 + 偏印主卡 + 正印补充句
+    """
+    lines = [_YINXING_COMMON]
+
+    if is_pure:
+        if pure_shishen == "正印":
+            lines.extend(_ZHENGYIN_CARD)
+        else:
+            lines.extend(_PIANYIN_CARD)
+    elif pian_ratio is not None:
+        if pian_ratio <= 0.30:
+            lines.extend(_ZHENGYIN_CARD)
+            lines.append(_PIANYIN_SUPPLEMENT)
+        elif pian_ratio <= 0.60:
+            lines.extend(_BLEND_CARD)
+        else:
+            lines.extend(_PIANYIN_CARD)
+            lines.append(_ZHENGYIN_SUPPLEMENT)
+
+    return lines
+
+
+def _get_guansha_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ratio: Optional[float]) -> List[str]:
+    """根据官杀档位返回对应的天赋卡行列表。
+
+    5 档规则（注：官杀组中正官="正"，七杀="偏"）：
+    - 纯正官：共性 + 正官主卡
+    - 纯七杀：共性 + 七杀主卡
+    - 正官主导（pian_ratio <= 0.30）：共性 + 正官主卡 + 七杀补充句
+    - 正官七杀各半（0.30 < pian_ratio <= 0.60）：共性 + 融合版
+    - 七杀主导（pian_ratio > 0.60）：共性 + 七杀主卡 + 正官补充句
+    """
+    lines = [_GUANSHA_COMMON]
+
+    if is_pure:
+        if pure_shishen == "正官":
+            lines.extend(_ZHENGGUAN_CARD)
+        else:
+            lines.extend(_QISHA_CARD)
+    elif pian_ratio is not None:
+        if pian_ratio <= 0.30:
+            # 正官主导：正官主卡 + 七杀补充
+            lines.extend(_ZHENGGUAN_CARD)
+            lines.append(_QISHA_SUPPLEMENT)
+        elif pian_ratio <= 0.60:
+            # 正官七杀各半：融合版
+            lines.extend(_GUANSHA_BLEND_CARD)
+        else:
+            # 七杀主导：七杀主卡 + 正官补充
+            lines.extend(_QISHA_CARD)
+            lines.append(_ZHENGGUAN_SUPPLEMENT)
+
+    return lines
+
+
 def _generate_marriage_suggestion(yongshen_elements: list[str]) -> str:
     """根据用神五行生成婚配倾向。
-    
+
     参数:
         yongshen_elements: 用神五行列表，例如 ["木", "火"]
-    
+
     返回:
         婚配倾向字符串，例如 "【婚配倾向】更容易匹配：虎兔蛇马；或 木，火旺的人。"
     """
@@ -364,8 +597,12 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             
             return None
 
-        def _format_trait_new(trait: dict, bazi: dict, day_gan: str, yongshen_elements: list) -> List[str]:
-            """新的格式化函数，返回多行输出"""
+        def _format_trait_new(trait: dict, bazi: dict, day_gan: str, yongshen_elements: list, is_major: bool = False) -> List[str]:
+            """新的格式化函数，返回多行输出
+
+            参数:
+                is_major: 是否在主要性格中输出（只有主要性格才输出天赋卡）
+            """
             from .shishen import get_shishen
             
             group = trait.get("group", "")
@@ -402,7 +639,8 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
                     pian_shishen = name
             
             if zheng_percent == 0.0 and pian_percent == 0.0:
-                return []  # 不打印
+                # 原局没有该类十神，打印"原局没有XXX"
+                return [f"{group}：原局没有{group}"]
             
             # 1.2 偏占比计算（仅在并存时）
             pian_ratio = None
@@ -507,7 +745,20 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             is_yongshen = element in yongshen_elements if element and element != "None" else False
             yongshen_status = "为用神" if is_yongshen else "不为用神"
             lines.append(f"- {group}的五行：{element}；{group}{yongshen_status}")
-            
+
+            # ============================================================
+            # 天赋卡（只在主要性格中输出）
+            # ============================================================
+            if is_major:
+                if group == "印":
+                    lines.extend(_get_yinxing_talent_card(is_pure, pure_shishen, pian_ratio))
+                elif group == "财":
+                    lines.extend(_get_caixing_talent_card(is_pure, pure_shishen, pian_ratio))
+                elif group == "比劫":
+                    lines.extend(_get_bijie_talent_card())
+                elif group == "官杀":
+                    lines.extend(_get_guansha_talent_card(is_pure, pure_shishen, pian_ratio))
+
             return lines
 
         def _format_trait_line1(trait: dict, is_major_by_rule3: bool = False) -> str:
@@ -623,7 +874,7 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         if major:
             print("\n—— 主要性格 ——")
             for trait in major:
-                lines = _format_trait_new(trait, bazi, day_gan, yongshen_elements)
+                lines = _format_trait_new(trait, bazi, day_gan, yongshen_elements, is_major=True)
                 for line in lines:
                     print(line)
 

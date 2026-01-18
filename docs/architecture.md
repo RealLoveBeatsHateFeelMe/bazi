@@ -268,10 +268,52 @@ curl -X POST "http://localhost:3000/api/test-chat?dry_run=true&debug_context=tru
 
 ---
 
+## 8. Personality Talent Cards (性格天赋卡)
+
+### 8.1 Design Overview
+
+Talent Cards are detailed personality descriptions for each of the 5 Shishen categories. They are printed **only in the "主要性格" (Major Personality) section**, never in "其他性格" (Other Personality).
+
+### 8.2 Card Structure
+
+Each talent card consists of:
+1. **共性行** (Common trait): 1 line applicable to all tiers
+2. **主卡** (Main card): 5 lines × 5 aspects (思维/社交/兴趣/生活/提高)
+3. **补充句** (Supplement): Optional 1 line when one side dominates
+
+### 8.3 5-Tier Selection (pian_ratio threshold)
+
+```
+pian_ratio = 偏% / (正% + 偏%)
+```
+
+| Tier | Condition | Output |
+|------|-----------|--------|
+| 纯正 | 偏%=0 | 共性 + 正主卡 |
+| 纯偏 | 正%=0 | 共性 + 偏主卡 |
+| 正主导 | pian_ratio ≤ 0.30 | 共性 + 正主卡 + 偏补充 |
+| 各半 | 0.30 < pian_ratio ≤ 0.60 | 共性 + 融合版 |
+| 偏主导 | pian_ratio > 0.60 | 共性 + 偏主卡 + 正补充 |
+
+### 8.4 Implementation Status
+
+| Category | Status | File |
+|----------|--------|------|
+| 印星 (Yin Xing) | ✅ Done | `bazi/cli.py` |
+| 财星 (Cai Xing) | ✅ Done | `bazi/cli.py` |
+| 比劫 (Bi Jie) | ✅ Done | `bazi/cli.py` |
+| 官杀 (Guan Sha) | ✅ Done | `bazi/cli.py` |
+| 食伤 (Shi Shang) | ⏳ Pending | - |
+
+> **详细规则**: See `bazi/BAZI_RULES.md` §13
+
+---
+
 ## Version History
 
 | Date | Change |
 |------|--------|
+| 2026-01-18 | Add §8 Personality Talent Cards (印星/财星/比劫/官杀 completed, 食伤 pending) |
 | 2026-01-13 | Add LLM Input tab to Debug Drawer; full_text 默认返回（开发期） |
 | 2026-01-13 | Initial creation: router/index/context_trace contracts, blocks, regression |
 
