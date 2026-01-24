@@ -309,7 +309,7 @@ def test_harmonies_2005_09_20():
     # 大运 5（index=4，辛巳大运）：应有两条巳酉半合（金局），分别与祖上宫、婚姻宫半合
     dayun_5 = None
     for group in luck.get("groups", []):
-        dy = group.get("dayun", {})
+        dy = group.get("dayun") or {}
         if dy.get("index") == 4 or (dy.get("gan") == "辛" and dy.get("zhi") == "巳"):
             dayun_5 = dy
             break
@@ -438,7 +438,7 @@ def test_sanhe_complete_2007_01_28():
     # 查找大运2（index=1，壬寅大运）
     found_dayun_2 = False
     for group in luck.get("groups", []):
-        dy = group.get("dayun", {})
+        dy = group.get("dayun") or {}
         if dy.get("index") == 1:  # 大运2（index从0开始）
             found_dayun_2 = True
             sanhe_dy = dy.get("sanhe_complete", [])
@@ -536,7 +536,7 @@ def test_sanhui_complete_2005_09_20():
     # 查找大运4（index=3，壬午大运）
     found_dayun_4 = False
     for group in luck.get("groups", []):
-        dy = group.get("dayun", {})
+        dy = group.get("dayun") or {}
         if dy.get("index") == 3:  # 大运4（index从0开始，所以index=3是大运4）
             found_dayun_4 = True
             sanhui_dy = dy.get("sanhui_complete", [])
@@ -904,10 +904,11 @@ def test_golden_case_A_2059():
 
 def test_marriage_suggestion_case_A():
     """婚配倾向回归用例A：2005-09-20 10:00 男
-    
+
     期望：用神五行（候选）独立一行，婚配倾向在独立 section
     """
     import io
+    import re
     from .cli import run_cli
     
     dt = datetime(2005, 9, 20, 10, 0)
@@ -950,10 +951,11 @@ def test_marriage_suggestion_case_A():
 
 def test_marriage_suggestion_case_B():
     """婚配倾向回归用例B：2007-01-28 12:00 男
-    
+
     期望：用神五行（候选）独立一行，婚配倾向在独立 section
     """
     import io
+    import re
     from .cli import run_cli
     
     dt = datetime(2007, 1, 28, 12, 0)
@@ -1168,7 +1170,8 @@ def test_natal_punishment_case_A_output():
         parts = output.split("—— 原局问题 ——")
         if len(parts) > 1:
             issues_section = parts[1].split("——")[0] if "——" in parts[1] else parts[1]
-            assert "祖上宫-婚姻宫 刑" in issues_section or "婚姻宫-祖上宫 刑" in issues_section, "应找到祖上宫-婚姻宫 刑"
+            assert ("祖上宫-婚姻宫 酉酉自刑" in issues_section or
+                    "婚姻宫-祖上宫 酉酉自刑" in issues_section), "应找到祖上宫-婚姻宫 酉酉自刑"
             assert "%" not in issues_section, "原局问题输出不应包含 % 符号"
     
     print("[PASS] 原局刑回归用例A输出（2005-09-20）通过")
@@ -1176,27 +1179,28 @@ def test_natal_punishment_case_A_output():
 
 def test_natal_punishment_case_2026():
     """原局刑回归用例2026：2026-06-12 12:00 男，检查多个柱子自刑的打印
-    
+
+    实际八字：丙午年 甲午月 戊巳日 戊午时（年月时都是午）
     期望：原局问题应包含：
-    - 祖上宫和婚姻宫，亥亥自刑 5.0%
-    - 祖上宫和事业家庭宫，亥亥自刑 5.0%
-    - 婚姻宫和事业家庭宫，亥亥自刑 5.0%
+    - 祖上宫-婚姻宫 午午自刑
+    - 祖上宫-家庭事业宫 午午自刑
+    - 婚姻宫-家庭事业宫 午午自刑
     """
     import io
     from .cli import run_cli
-    
+
     dt = datetime(2026, 6, 12, 12, 0)
-    
+
     # 捕获输出检查原局问题
     old_stdout = sys.stdout
     sys.stdout = captured_output = io.StringIO()
-    
+
     try:
         run_cli(dt, is_male=True)
         output = captured_output.getvalue()
     finally:
         sys.stdout = old_stdout
-    
+
     # 检查原局问题输出（新格式：不包含百分比）
     assert "—— 原局问题 ——" in output, "应找到原局问题标题"
     # 提取原局问题段
@@ -1204,13 +1208,13 @@ def test_natal_punishment_case_2026():
         parts = output.split("—— 原局问题 ——")
         if len(parts) > 1:
             issues_section = parts[1].split("——")[0] if "——" in parts[1] else parts[1]
-            # 检查三个自刑组合（年-月、年-时、月-时），2026-06-12有亥亥自刑（年、月、时三柱都是亥）
-            assert ("祖上宫-婚姻宫 亥亥自刑" in issues_section or 
-                    "婚姻宫-祖上宫 亥亥自刑" in issues_section), "应找到祖上宫-婚姻宫 亥亥自刑"
-            assert ("祖上宫-家庭事业宫 亥亥自刑" in issues_section or 
-                    "家庭事业宫-祖上宫 亥亥自刑" in issues_section), "应找到祖上宫-家庭事业宫 亥亥自刑"
-            assert ("婚姻宫-家庭事业宫 亥亥自刑" in issues_section or 
-                    "家庭事业宫-婚姻宫 亥亥自刑" in issues_section), "应找到婚姻宫-家庭事业宫 亥亥自刑"
+            # 检查三个自刑组合（年-月、年-时、月-时），2026-06-12有午午自刑（年、月、时三柱都是午）
+            assert ("祖上宫-婚姻宫 午午自刑" in issues_section or
+                    "婚姻宫-祖上宫 午午自刑" in issues_section), "应找到祖上宫-婚姻宫 午午自刑"
+            assert ("祖上宫-家庭事业宫 午午自刑" in issues_section or
+                    "家庭事业宫-祖上宫 午午自刑" in issues_section), "应找到祖上宫-家庭事业宫 午午自刑"
+            assert ("婚姻宫-家庭事业宫 午午自刑" in issues_section or
+                    "家庭事业宫-婚姻宫 午午自刑" in issues_section), "应找到婚姻宫-家庭事业宫 午午自刑"
             assert "%" not in issues_section, "原局问题输出不应包含 % 符号"
     
     # 提取原局问题段（更简单的方法）
@@ -1222,10 +1226,10 @@ def test_natal_punishment_case_2026():
                 issues_section = remaining.split("——")[0]
             else:
                 issues_section = remaining
-            # 应该有三个"刑"（不再检查百分比）
-            count = issues_section.count(" 刑")
-            assert count >= 3, f"应该至少有3个刑，但找到{count}个"
-    
+            # 应该有三个"自刑"（午午自刑）
+            count = issues_section.count("自刑")
+            assert count >= 3, f"应该至少有3个自刑，但找到{count}个"
+
     print("[PASS] 原局刑回归用例2026（多个柱子自刑）通过")
 
 
@@ -1416,7 +1420,7 @@ def test_yongshen_swap_case_1969():
     dayun3_found = False
     dayun4_found = False
     for group in luck.get("groups", []):
-        dy = group.get("dayun", {})
+        dy = group.get("dayun") or {}
         if dy.get("index") == 2:  # 大运3（index从0开始）
             dayun3_found = True
         if dy.get("index") == 3:  # 大运4
@@ -1595,7 +1599,7 @@ def test_yongshen_swap_case_1969():
     dayun3_found = False
     dayun4_found = False
     for group in luck.get("groups", []):
-        dy = group.get("dayun", {})
+        dy = group.get("dayun") or {}
         if dy.get("index") == 2:  # 大运3（index从0开始）
             dayun3_found = True
         if dy.get("index") == 3:  # 大运4
@@ -1773,11 +1777,13 @@ def test_traits_new_format_case_A():
     assert "印的五行：木" in major_section, "应包含：印的五行：木"
     assert "印为用神" in major_section, "应包含：印为用神"
 
-    # 财星天赋卡断言（纯偏财档位）
-    assert "财星共性：重现实回报" in major_section, "应包含财星共性"
+    # 财星天赋卡断言（新版：标题行+性格画像+提高方向）
+    assert "偏财：" in major_section, "纯偏财应包含标题行「偏财：」"
     assert "行动力强" in major_section, "纯偏财应包含：行动力强"
-    assert "出手相对爽快" in major_section, "纯偏财应包含：出手相对爽快"
-    assert "偏财补充：" not in major_section, "纯偏财不应包含偏财补充"
+    assert "出手阔绰，浪漫" in major_section, "纯偏财应包含：出手阔绰，浪漫"
+    # 新版不再输出旧版字段
+    assert "财星共性：" not in major_section, "新版不应包含财星共性"
+    assert "偏财补充：" not in major_section, "新版不应包含偏财补充"
 
     print("[PASS] 性格打印格式新格式用例A（2005-9-20）通过")
 
@@ -1851,19 +1857,21 @@ def test_traits_new_format_case_B():
     assert "印的五行：金" in major_section, "应包含：印的五行：金"
     assert "印为用神" in major_section, "应包含：印为用神"
 
-    # 财星天赋卡断言（正偏各半/融合版）
-    assert "财星共性：重现实回报" in major_section, "应包含财星共性"
-    assert "稳的规划" in major_section, "正偏各半应包含：稳的规划"
-    assert "快的试错" in major_section, "正偏各半应包含：快的试错"
-    assert "必有两份工作/兼职的状态" in major_section, "正偏各半应包含：必有两份工作/兼职的状态"
-    assert "偏财补充：" not in major_section, "正偏各半不应包含偏财补充"
+    # 财星天赋卡断言（新版：标题行+性格画像+提高方向）
+    assert "正偏财混杂：" in major_section, "正偏各半应包含标题行「正偏财混杂：」"
+    assert "容易同时保持两份工作" in major_section, "正偏各半应包含：容易同时保持两份工作"
+    assert "工作能力，社交能力强" in major_section, "正偏各半应包含：工作能力，社交能力强"
+    # 新版不再输出旧版字段
+    assert "财星共性：" not in major_section, "新版不应包含财星共性"
+    assert "偏财补充：" not in major_section, "新版不应包含偏财补充"
 
-    # 官杀天赋卡断言（正官七杀各半/融合版，pian_ratio=0.36）
-    assert "官杀共性：重规矩与责任" in major_section, "应包含官杀共性"
-    assert "既讲章法与规矩，也有决断力与行动力" in major_section, "官杀各半应包含融合版思维天赋"
-    assert "「稳」和「狠」的两种处事方式并存" in major_section, "官杀各半应包含融合版特征"
-    assert "七杀补充：" not in major_section, "官杀各半不应包含七杀补充"
-    assert "正官补充：" not in major_section, "官杀各半不应包含正官补充"
+    # 官杀天赋卡断言（正官七杀各半/官杀混杂，pian_ratio=0.36）- 新版格式
+    assert "官杀混杂：" in major_section, "官杀混杂应包含标题行「官杀混杂：」"
+    assert "自我管控能力强" in major_section, "官杀混杂应包含「自我管控能力强」"
+    assert "领导能力强" in major_section, "官杀混杂应包含「领导能力强」"
+    assert "官杀共性：" not in major_section, "新版不应包含官杀共性"
+    assert "七杀补充：" not in major_section, "新版不应包含七杀补充"
+    assert "正官补充：" not in major_section, "新版不应包含正官补充"
 
     print("[PASS] 性格打印格式新格式用例B（2007-1-28）通过")
 
@@ -1930,16 +1938,19 @@ def test_traits_new_format_case_C():
     assert "官杀的五行：火" in all_section, "应包含：官杀的五行：火"
     assert "官杀为用神" in all_section, "应包含：官杀为用神"
 
-    # 财星天赋卡断言（纯正财档位）
-    assert "财星共性：重现实回报" in all_section, "应包含财星共性"
+    # 财星天赋卡断言（新版：标题行+性格画像+提高方向）
+    assert "正财：" in all_section, "纯正财应包含标题行「正财：」"
     assert "踏实肯干" in all_section, "纯正财应包含：踏实肯干"
     assert "勤俭节约" in all_section, "纯正财应包含：勤俭节约"
-    assert "偏财补充：" not in all_section, "纯正财不应包含偏财补充"
+    # 新版不再输出旧版字段
+    assert "财星共性：" not in all_section, "新版不应包含财星共性"
+    assert "偏财补充：" not in all_section, "新版不应包含偏财补充"
 
-    # 官杀天赋卡断言（官杀10%但透干+用神，进入主要性格，应输出天赋卡）
+    # 官杀天赋卡断言（官杀10%但透干+用神，进入主要性格，应输出天赋卡）- 新版格式
     # 注：官杀虽然只有10%，但因为「年柱七杀透干×1 且 官杀为用神」，满足规则3进入主要性格
-    assert "官杀共性：重规矩与责任" in all_section, "官杀(透干+用神)应包含官杀共性"
-    assert "反应快、决断力强" in all_section, "纯七杀应包含七杀主卡思维天赋"
+    assert "七杀：" in all_section, "纯七杀应包含标题行「七杀：」"
+    assert "反应快、决断力强" in all_section, "纯七杀应包含性格画像「反应快、决断力强」"
+    assert "官杀共性：" not in all_section, "新版不应包含官杀共性"
 
     print("[PASS] 性格打印格式新格式用例C（2006-3-22 14:00 女）通过")
 
@@ -2034,7 +2045,11 @@ def test_traits_new_format_case_E():
     assert "混杂口径：食神明显更多（伤官只算一点）" in all_section, "应包含：混杂口径：食神明显更多（伤官只算一点）"
     assert "食伤的五行：金" in all_section, "应包含：食伤的五行：金"
     assert "食伤不为用神" in all_section, "应包含：食伤不为用神"
-    
+    # 食神主导天赋卡断言（食神35%，伤官10%，pian_ratio=0.22）
+    assert "食伤共性：重表达与呈现" in all_section, "食神主导应包含：食伤共性"
+    assert "思维天赋：轻松自然" in all_section, "食神主导应包含：思维天赋：轻松自然"
+    assert "伤官补充：同时带一点表达欲与锋芒" in all_section, "食神主导应有伤官补充"
+
     print("[PASS] 性格打印格式新格式用例E（2005-8-22 00:00 男）通过")
 
 
@@ -4335,16 +4350,17 @@ def test_pre_dayun_liunian_case_C():
 
 
 # ============================================================
-# 印星天赋卡（5 档）回归测试
+# 印星天赋卡（新版：性格画像+提高方向）回归测试
 # ============================================================
 
 def test_yinxing_talent_card_pure_pianyin():
     """印星天赋卡回归测试：黄金A 2005-9-20 10:00 男 - 纯偏印
 
-    验证：
-    - 应包含偏印主卡关键词（讨厌低质量重复、察言观色）
-    - 不应包含正印主卡关键词（仁慈、善良、乐善好施）
-    - 应包含印星共性
+    验证（新版：标题行+性格画像+提高方向）：
+    - 应包含十神名字标题行（偏印：）
+    - 应包含偏印性格画像关键词（偏独处、小众非主流、独特的天分与研究劲）
+    - 应包含偏印提高方向关键词（多做事、少空想）
+    - 不应包含旧版印星共性
     """
     import io
     from .cli import run_cli
@@ -4362,25 +4378,28 @@ def test_yinxing_talent_card_pure_pianyin():
 
     # 提取印星段落
     yin_section = ""
-    if "印（" in output or "印：" in output:
+    if "印（" in output or "印：" in output or "偏印：" in output:
         lines = output.split('\n')
         in_yin = False
         for line in lines:
-            if line.startswith('印（') or line.startswith('印：'):
+            if line.startswith('印（') or line.startswith('印：') or line.startswith('偏印：') or line.startswith('正印：') or line.startswith('正偏印混杂：'):
                 in_yin = True
             if in_yin:
                 yin_section += line + '\n'
-                if line.strip() and not line.startswith('-') and not line.startswith('印'):
+                if line.strip() and not line.startswith('-') and not line.startswith('印') and not line.startswith('偏印') and not line.startswith('正印') and not line.startswith('正偏印'):
                     if '（' in line or line.startswith('财') or line.startswith('官杀'):
                         break
 
-    # 验证：应包含印星共性
-    assert "印星共性" in yin_section, "应包含「印星共性」"
-    # 验证：应包含偏印主卡关键词
-    assert "讨厌低质量重复" in yin_section, "纯偏印应包含「讨厌低质量重复」"
-    assert "察言观色" in yin_section, "纯偏印应包含「察言观色」"
-    # 验证：不应包含正印主卡关键词
-    assert "仁慈、善良、乐善好施" not in yin_section, "纯偏印不应包含正印主卡关键词"
+    # 验证：应包含十神名字标题行
+    assert "偏印：" in yin_section, "纯偏印应包含标题行「偏印：」"
+    # 验证：应包含偏印性格画像关键词
+    assert "偏独处" in yin_section, "纯偏印应包含「偏独处」"
+    assert "小众非主流" in yin_section, "纯偏印应包含「小众非主流」"
+    assert "独特的天分与研究劲" in yin_section, "纯偏印应包含「独特的天分与研究劲」"
+    # 验证：应包含提高方向
+    assert "多做事、少空想" in yin_section, "纯偏印应包含「多做事、少空想」"
+    # 验证：不应包含旧版印星共性
+    assert "印星共性" not in yin_section, "新版不应包含「印星共性」"
 
     print("[PASS] 印星天赋卡回归测试（纯偏印）通过")
 
@@ -4388,10 +4407,11 @@ def test_yinxing_talent_card_pure_pianyin():
 def test_yinxing_talent_card_pure_zhengyin():
     """印星天赋卡回归测试：黄金B 2007-1-28 12:00 男 - 纯正印
 
-    验证：
-    - 应包含正印主卡关键词（仁慈、善良、乐善好施、守规矩）
-    - 不应包含偏印主卡关键词（讨厌低质量重复）
-    - 应包含印星共性
+    验证（新版：标题行+性格画像+提高方向）：
+    - 应包含十神名字标题行（正印：）
+    - 应包含正印性格画像关键词（善良仁慈、守规矩、讲原则、值得信任）
+    - 应包含正印提高方向关键词（不要过分墨守成规、边界感）
+    - 不应包含旧版印星共性
     """
     import io
     from .cli import run_cli
@@ -4409,25 +4429,29 @@ def test_yinxing_talent_card_pure_zhengyin():
 
     # 提取印星段落
     yin_section = ""
-    if "印（" in output or "印：" in output:
+    if "印（" in output or "印：" in output or "正印：" in output:
         lines = output.split('\n')
         in_yin = False
         for line in lines:
-            if line.startswith('印（') or line.startswith('印：'):
+            if line.startswith('印（') or line.startswith('印：') or line.startswith('偏印：') or line.startswith('正印：') or line.startswith('正偏印混杂：'):
                 in_yin = True
             if in_yin:
                 yin_section += line + '\n'
-                if line.strip() and not line.startswith('-') and not line.startswith('印'):
+                if line.strip() and not line.startswith('-') and not line.startswith('印') and not line.startswith('偏印') and not line.startswith('正印') and not line.startswith('正偏印'):
                     if '（' in line or line.startswith('财') or line.startswith('官杀'):
                         break
 
-    # 验证：应包含印星共性
-    assert "印星共性" in yin_section, "应包含「印星共性」"
-    # 验证：应包含正印主卡关键词
-    assert "仁慈、善良、乐善好施、守规矩" in yin_section, "纯正印应包含「仁慈、善良、乐善好施、守规矩」"
-    assert "耐心、坐得住" in yin_section, "纯正印应包含「耐心、坐得住」"
-    # 验证：不应包含偏印主卡关键词
-    assert "讨厌低质量重复" not in yin_section, "纯正印不应包含偏印主卡关键词"
+    # 验证：应包含十神名字标题行
+    assert "正印：" in yin_section, "纯正印应包含标题行「正印：」"
+    # 验证：应包含正印性格画像关键词
+    assert "善良仁慈" in yin_section, "纯正印应包含「善良仁慈」"
+    assert "守规矩、讲原则" in yin_section, "纯正印应包含「守规矩、讲原则」"
+    assert "值得信任" in yin_section, "纯正印应包含「值得信任」"
+    # 验证：应包含提高方向
+    assert "不要过分墨守成规" in yin_section, "纯正印应包含「不要过分墨守成规」"
+    assert "边界感" in yin_section, "纯正印应包含「边界感」"
+    # 验证：不应包含旧版印星共性
+    assert "印星共性" not in yin_section, "新版不应包含「印星共性」"
 
     print("[PASS] 印星天赋卡回归测试（纯正印）通过")
 
@@ -4435,10 +4459,10 @@ def test_yinxing_talent_card_pure_zhengyin():
 def test_yinxing_talent_card_zhengyin_dominant():
     """印星天赋卡回归测试：1980-1-28 7:00 女 - 正印主导
 
-    验证：
-    - 应包含正印主卡 5 栏
-    - 应包含偏印补充句（思绪更容易过深、喜欢钻牛角尖）
-    - 应包含印星共性
+    验证（新版只打印性格画像+提高方向，正印主导用正印卡）：
+    - 应包含正印性格画像关键词（善良仁慈、守规矩、讲原则）
+    - 应包含正印提高方向关键词（不要过分墨守成规）
+    - 不应包含旧版偏印补充句
     """
     import io
     from .cli import run_cli
@@ -4468,14 +4492,13 @@ def test_yinxing_talent_card_zhengyin_dominant():
                     if '（' in line or line.startswith('财') or line.startswith('官杀'):
                         break
 
-    # 验证：应包含印星共性
-    assert "印星共性" in yin_section, "应包含「印星共性」"
-    # 验证：应包含正印主卡关键词
-    assert "仁慈、善良、乐善好施" in yin_section, "正印主导应包含正印主卡关键词"
-    # 验证：应包含偏印补充句
-    assert "偏印补充" in yin_section, "正印主导应包含「偏印补充」"
-    assert "思绪更容易过深" in yin_section, "正印主导应包含偏印补充句关键词"
-    assert "喜欢钻牛角尖" in yin_section, "正印主导应包含偏印补充句关键词"
+    # 验证：应包含正印性格画像关键词
+    assert "善良仁慈" in yin_section, "正印主导应包含正印性格画像关键词"
+    # 验证：应包含提高方向
+    assert "不要过分墨守成规" in yin_section, "正印主导应包含正印提高方向"
+    # 验证：不应包含旧版偏印补充句
+    assert "偏印补充" not in yin_section, "新版不应包含「偏印补充」"
+    assert "印星共性" not in yin_section, "新版不应包含「印星共性」"
 
     print("[PASS] 印星天赋卡回归测试（正印主导）通过")
 
@@ -4483,10 +4506,10 @@ def test_yinxing_talent_card_zhengyin_dominant():
 def test_yinxing_talent_card_pianyin_dominant():
     """印星天赋卡回归测试：1972-12-20 4:00 男 - 偏印主导
 
-    验证：
-    - 应包含偏印主卡 5 栏
-    - 应包含正印补充句（同时带一点求稳与守规则的底色）
-    - 应包含印星共性
+    验证（新版只打印性格画像+提高方向，偏印主导用偏印卡）：
+    - 应包含偏印性格画像关键词（偏独处、小众非主流）
+    - 应包含偏印提高方向关键词（多做事、少空想）
+    - 不应包含旧版正印补充句
     """
     import io
     from .cli import run_cli
@@ -4516,24 +4539,25 @@ def test_yinxing_talent_card_pianyin_dominant():
                     if '（' in line or line.startswith('财') or line.startswith('官杀'):
                         break
 
-    # 验证：应包含印星共性
-    assert "印星共性" in yin_section, "应包含「印星共性」"
-    # 验证：应包含偏印主卡关键词
-    assert "讨厌低质量重复" in yin_section, "偏印主导应包含偏印主卡关键词"
-    # 验证：应包含正印补充句
-    assert "正印补充" in yin_section, "偏印主导应包含「正印补充」"
-    assert "同时带一点求稳与守规则的底色" in yin_section, "偏印主导应包含正印补充句关键词"
+    # 验证：应包含偏印性格画像关键词
+    assert "偏独处" in yin_section, "偏印主导应包含偏印性格画像关键词"
+    assert "小众非主流" in yin_section, "偏印主导应包含「小众非主流」"
+    # 验证：应包含提高方向
+    assert "多做事、少空想" in yin_section, "偏印主导应包含偏印提高方向"
+    # 验证：不应包含旧版正印补充句
+    assert "正印补充" not in yin_section, "新版不应包含「正印补充」"
+    assert "印星共性" not in yin_section, "新版不应包含「印星共性」"
 
     print("[PASS] 印星天赋卡回归测试（偏印主导）通过")
 
 
 def test_yinxing_talent_card_blend():
-    """印星天赋卡回归测试：2005-11-20 8:00 男 - 正偏各半（融合版）
+    """印星天赋卡回归测试：2005-11-20 8:00 男 - 正偏各半（混杂版）
 
-    验证：
-    - 应包含融合版关键词（「稳」和「跳」的两种理解方式并存）
-    - 不应包含正印补充句或偏印补充句
-    - 应包含印星共性
+    验证（新版只打印性格画像+提高方向）：
+    - 应包含混杂版性格画像关键词（心思缜密、学习能力强、既守规矩也爱探索）
+    - 应包含混杂版提高方向关键词（多做事、少空想、边界感）
+    - 不应包含旧版印星共性
     """
     import io
     from .cli import run_cli
@@ -4563,16 +4587,17 @@ def test_yinxing_talent_card_blend():
                     if '（' in line or line.startswith('财') or line.startswith('官杀'):
                         break
 
-    # 验证：应包含印星共性
-    assert "印星共性" in yin_section, "应包含「印星共性」"
-    # 验证：应包含融合版关键词
-    assert "「稳」和「跳」的两种理解方式并存" in yin_section, "融合版应包含「稳」和「跳」并存"
-    assert "既要「有出处」，也要「有新意」" in yin_section, "融合版应包含「既要有出处也要有新意」"
-    # 验证：不应包含补充句（对半不需要补充句）
-    assert "偏印补充" not in yin_section, "融合版不应包含「偏印补充」"
-    assert "正印补充" not in yin_section, "融合版不应包含「正印补充」"
+    # 验证：应包含混杂版性格画像关键词
+    assert "心思缜密" in yin_section, "混杂版应包含「心思缜密」"
+    assert "学习能力强" in yin_section, "混杂版应包含「学习能力强」"
+    assert "既守规矩也爱探索" in yin_section, "混杂版应包含「既守规矩也爱探索」"
+    # 验证：应包含提高方向
+    assert "多做事、少空想" in yin_section, "混杂版应包含「多做事、少空想」"
+    assert "边界感" in yin_section, "混杂版应包含「边界感」"
+    # 验证：不应包含旧版印星共性
+    assert "印星共性" not in yin_section, "新版不应包含「印星共性」"
 
-    print("[PASS] 印星天赋卡回归测试（正偏各半/融合版）通过")
+    print("[PASS] 印星天赋卡回归测试（正偏各半/混杂版）通过")
 
 
 # ============================================================
@@ -4582,10 +4607,11 @@ def test_yinxing_talent_card_blend():
 def test_caixing_talent_card_zhengcai_dominant():
     """财星天赋卡回归测试：1970-5-5 6:00 男 - 正财主导（pian_ratio=0.2）
 
-    要求：
-    - 在主要性格中包含财星共性
-    - 包含正财主卡关键词（踏实肯干、勤俭节约）
-    - 包含偏财补充句
+    要求（新版：标题行+性格画像+提高方向）：
+    - 包含正财标题行
+    - 包含正财性格画像关键词（踏实肯干、勤俭节约）
+    - 包含正财提高方向
+    - 不再包含旧版共性/补充句
     """
     import io
     from .cli import run_cli
@@ -4614,22 +4640,23 @@ def test_caixing_talent_card_zhengcai_dominant():
     lines = major_section.split("\n")
     in_cai = False
     for line in lines:
-        if "财（" in line:
+        if "财（" in line or line.startswith("正财：") or line.startswith("偏财：") or line.startswith("正偏财混杂："):
             in_cai = True
         if in_cai:
             cai_section += line + "\n"
             # 遇到下一个性格大类则停止
-            if line.strip() and not line.startswith("-") and not line.startswith("财"):
+            if line.strip() and not line.startswith("-") and not line.startswith("财") and not line.startswith("正财") and not line.startswith("偏财") and not line.startswith("正偏财"):
                 if "（" in line or line.startswith("印") or line.startswith("官杀") or line.startswith("比劫") or line.startswith("食伤"):
                     break
 
-    # 验证：应包含财星共性（只在主要性格中）
-    assert "财星共性" in cai_section, "主要性格应包含「财星共性」"
-    # 验证：应包含正财主卡关键词
+    # 验证：应包含正财标题行（正财主导使用正财卡）
+    assert "正财：" in cai_section, "正财主导应包含标题行「正财：」"
+    # 验证：应包含正财性格画像关键词
     assert "踏实肯干" in cai_section, "正财主导应包含「踏实肯干」"
     assert "勤俭节约" in cai_section, "正财主导应包含「勤俭节约」"
-    # 验证：应包含偏财补充句
-    assert "偏财补充：同时带一点机会嗅觉" in cai_section, "正财主导应包含「偏财补充」"
+    # 验证：不再包含旧版字段
+    assert "财星共性" not in cai_section, "新版不应包含「财星共性」"
+    assert "偏财补充" not in cai_section, "新版不应包含「偏财补充」"
 
     print("[PASS] 财星天赋卡回归测试（正财主导）通过")
 
@@ -4637,10 +4664,10 @@ def test_caixing_talent_card_zhengcai_dominant():
 def test_caixing_talent_card_piancai_dominant():
     """财星天赋卡回归测试：1970-4-5 6:00 男 - 偏财主导（pian_ratio=0.7）
 
-    要求：
-    - 在主要性格中包含财星共性
-    - 包含偏财主卡关键词（行动力强、出手相对爽快）
-    - 不包含偏财补充句
+    要求（新版格式）：
+    - 包含标题行「偏财：」
+    - 包含性格画像关键词（行动力强、出手阔绰）
+    - 包含提高方向关键词（欲望与比较心）
     """
     import io
     from .cli import run_cli
@@ -4678,14 +4705,13 @@ def test_caixing_talent_card_piancai_dominant():
                 if "（" in line or line.startswith("印") or line.startswith("官杀") or line.startswith("比劫") or line.startswith("食伤"):
                     break
 
-    # 验证：应包含财星共性（只在主要性格中）
-    assert "财星共性" in cai_section, "主要性格应包含「财星共性」"
-    # 验证：应包含偏财主卡关键词
+    # 验证：应包含偏财标题行
+    assert "偏财：" in cai_section, "偏财主导应包含标题行「偏财：」"
+    # 验证：应包含偏财性格画像关键词
     assert "行动力强" in cai_section, "偏财主导应包含「行动力强」"
-    assert "出手相对爽快" in cai_section, "偏财主导应包含「出手相对爽快」"
+    assert "出手阔绰" in cai_section, "偏财主导应包含「出手阔绰」"
+    # 验证：应包含提高方向关键词
     assert "欲望与比较心" in cai_section, "偏财主导应包含「欲望与比较心」"
-    # 验证：不应包含偏财补充句（偏财主导不加补充）
-    assert "偏财补充：" not in cai_section, "偏财主导不应包含「偏财补充」"
 
     print("[PASS] 财星天赋卡回归测试（偏财主导）通过")
 
@@ -4697,9 +4723,10 @@ def test_caixing_talent_card_piancai_dominant():
 def test_bijie_talent_card_bijian():
     """比劫天赋卡回归测试：1975-3-10 12:00 男 - 纯比肩
 
-    要求：
-    - 在主要性格中包含比劫共性
-    - 包含比劫通用卡所有6行关键词
+    要求（新版格式）：
+    - 包含标题行「比劫：」
+    - 包含性格画像关键词（主见强、反应快、讨厌被安排和管制）
+    - 包含提高方向关键词（不要太自我、不要太固执）
     - 其他性格中不包含比劫天赋卡
     """
     import io
@@ -4726,16 +4753,17 @@ def test_bijie_talent_card_bijian():
                 major_section = remaining.split("—— 其他性格 ——")[0]
                 other_section = remaining.split("—— 其他性格 ——")[1]
 
-    # 验证：主要性格中应包含比劫共性
-    assert "比劫共性：重自我与主导权" in major_section, "主要性格应包含「比劫共性」"
-    # 验证：应包含比劫通用卡关键词
+    # 验证：应包含比劫标题行
+    assert "比劫：" in major_section, "主要性格应包含标题行「比劫：」"
+    # 验证：应包含比劫性格画像关键词
     assert "主见强、反应快" in major_section, "应包含「主见强、反应快」"
-    assert "表面朋友可能多" in major_section, "应包含「表面朋友可能多」"
-    assert "更喜欢竞争、对抗、排名" in major_section, "应包含「更喜欢竞争、对抗、排名」"
-    assert "强调自主与掌控感" in major_section, "应包含「强调自主与掌控感」"
+    assert "讨厌被安排和管制" in major_section, "应包含「讨厌被安排和管制」"
+    # 验证：应包含提高方向关键词
     assert "不要太自我、不要太固执，学会听劝" in major_section, "应包含「不要太自我、不要太固执，学会听劝」"
+    # 验证：新版不应包含旧版字段
+    assert "比劫共性：" not in major_section, "新版不应包含「比劫共性」"
     # 验证：其他性格中不应包含比劫天赋卡
-    assert "比劫共性：" not in other_section, "其他性格不应包含「比劫共性」"
+    assert "比劫：" not in other_section, "其他性格不应包含「比劫：」"
 
     print("[PASS] 比劫天赋卡回归测试（纯比肩）通过")
 
@@ -4743,9 +4771,10 @@ def test_bijie_talent_card_bijian():
 def test_bijie_talent_card_jiecai():
     """比劫天赋卡回归测试：1990-3-10 12:00 男 - 纯劫财
 
-    要求：
-    - 在主要性格中包含比劫共性
-    - 包含比劫通用卡所有6行关键词（与比肩完全相同）
+    要求（新版格式）：
+    - 包含标题行「比劫：」
+    - 包含性格画像关键词（与比肩完全相同）
+    - 包含提高方向关键词
     """
     import io
     from .cli import run_cli
@@ -4769,14 +4798,15 @@ def test_bijie_talent_card_jiecai():
             if "—— 其他性格 ——" in remaining:
                 major_section = remaining.split("—— 其他性格 ——")[0]
 
-    # 验证：主要性格中应包含比劫共性
-    assert "比劫共性：重自我与主导权" in major_section, "主要性格应包含「比劫共性」"
-    # 验证：应包含比劫通用卡关键词（与比肩完全相同）
+    # 验证：应包含比劫标题行
+    assert "比劫：" in major_section, "主要性格应包含标题行「比劫：」"
+    # 验证：应包含比劫性格画像关键词（与比肩完全相同）
     assert "主见强、反应快" in major_section, "应包含「主见强、反应快」"
-    assert "表面朋友可能多" in major_section, "应包含「表面朋友可能多」"
-    assert "更喜欢竞争、对抗、排名" in major_section, "应包含「更喜欢竞争、对抗、排名」"
-    assert "强调自主与掌控感" in major_section, "应包含「强调自主与掌控感」"
+    assert "讨厌被安排和管制" in major_section, "应包含「讨厌被安排和管制」"
+    # 验证：应包含提高方向关键词
     assert "不要太自我、不要太固执，学会听劝" in major_section, "应包含「不要太自我、不要太固执，学会听劝」"
+    # 验证：新版不应包含旧版字段
+    assert "比劫共性：" not in major_section, "新版不应包含「比劫共性」"
 
     print("[PASS] 比劫天赋卡回归测试（纯劫财）通过")
 
@@ -4806,10 +4836,10 @@ def test_bijie_talent_card_not_in_other():
         if len(parts) > 1:
             other_section = parts[1]
 
-    # 验证：其他性格中不应包含任何天赋卡
-    assert "比劫共性：" not in other_section, "其他性格不应包含「比劫共性」"
-    assert "印星共性：" not in other_section, "其他性格不应包含「印星共性」"
-    assert "财星共性：" not in other_section, "其他性格不应包含「财星共性」"
+    # 验证：其他性格中不应包含任何天赋卡（新版使用标题行格式）
+    # 检查不应出现单独的"比劫："标题行（作为天赋卡开头）
+    # 注意：这里需要检查的是天赋卡的标题行，不是"比劫（15.0%）"这种格式
+    assert "- 性格画像：主见强、反应快" not in other_section, "其他性格不应包含比劫性格画像"
     assert "官杀共性：" not in other_section, "其他性格不应包含「官杀共性」"
 
     print("[PASS] 比劫天赋卡回归测试（其他性格不输出天赋卡）通过")
@@ -4823,8 +4853,10 @@ def test_guansha_talent_card_pure_zhengguan():
     """官杀天赋卡回归测试：纯正官
 
     1995-5-10 16:00 男：官杀在主要性格，纯正官（正官45%，七杀0%）
-    应输出：官杀共性 + 正官主卡
-    不应输出：七杀补充 或 正官补充
+    要求（新版格式）：
+    - 包含标题行「正官：」
+    - 包含性格画像关键词（稳重、有条理、领导能力强）
+    - 包含提高方向关键词
     """
     import io
     from .cli import run_cli
@@ -4850,14 +4882,15 @@ def test_guansha_talent_card_pure_zhengguan():
             else:
                 major_section = remaining
 
-    # 验证官杀共性
-    assert "官杀共性：重规矩与责任" in major_section, "纯正官应包含官杀共性"
-    # 验证正官主卡特征
-    assert "稳健、讲章法" in major_section, "纯正官应包含正官主卡思维天赋"
-    assert "端正、有分寸、重礼节" in major_section, "纯正官应包含正官主卡社交天赋"
-    # 验证不应有补充
-    assert "七杀补充：" not in major_section, "纯正官不应包含七杀补充"
-    assert "正官补充：" not in major_section, "纯正官不应包含正官补充"
+    # 验证：应包含正官标题行
+    assert "正官：" in major_section, "纯正官应包含标题行「正官：」"
+    # 验证：应包含正官性格画像关键词
+    assert "稳重、有条理" in major_section, "纯正官应包含「稳重、有条理」"
+    assert "领导能力强" in major_section, "纯正官应包含「领导能力强」"
+    # 验证：应包含提高方向关键词
+    assert "在守规矩的同时允许灵活调整" in major_section, "纯正官应包含提高方向"
+    # 验证：新版不应包含旧版字段
+    assert "官杀共性：" not in major_section, "新版不应包含「官杀共性」"
 
     print("[PASS] 官杀天赋卡回归测试（纯正官 1995-5-10）通过")
 
@@ -4866,8 +4899,10 @@ def test_guansha_talent_card_pure_qisha():
     """官杀天赋卡回归测试：纯七杀
 
     2000-2-14 16:00 男：官杀在主要性格，纯七杀（正官0%，七杀30%）
-    应输出：官杀共性 + 七杀主卡
-    不应输出：七杀补充 或 正官补充
+    要求（新版格式）：
+    - 包含标题行「七杀：」
+    - 包含性格画像关键词（反应快、决断力强、抗压能力强）
+    - 包含提高方向关键词
     """
     import io
     from .cli import run_cli
@@ -4893,14 +4928,15 @@ def test_guansha_talent_card_pure_qisha():
             else:
                 major_section = remaining
 
-    # 验证官杀共性
-    assert "官杀共性：重规矩与责任" in major_section, "纯七杀应包含官杀共性"
-    # 验证七杀主卡特征
-    assert "反应快、决断力强" in major_section, "纯七杀应包含七杀主卡思维天赋"
-    assert "气场硬、边界感强" in major_section, "纯七杀应包含七杀主卡社交天赋"
-    # 验证不应有补充
-    assert "七杀补充：" not in major_section, "纯七杀不应包含七杀补充"
-    assert "正官补充：" not in major_section, "纯七杀不应包含正官补充"
+    # 验证：应包含七杀标题行
+    assert "七杀：" in major_section, "纯七杀应包含标题行「七杀：」"
+    # 验证：应包含七杀性格画像关键词
+    assert "反应快、决断力强" in major_section, "纯七杀应包含「反应快、决断力强」"
+    assert "抗压能力强" in major_section, "纯七杀应包含「抗压能力强」"
+    # 验证：应包含提高方向关键词
+    assert "缓解压力" in major_section, "纯七杀应包含提高方向"
+    # 验证：新版不应包含旧版字段
+    assert "官杀共性：" not in major_section, "新版不应包含「官杀共性」"
 
     print("[PASS] 官杀天赋卡回归测试（纯七杀 2000-2-14）通过")
 
@@ -4909,8 +4945,10 @@ def test_guansha_talent_card_zhengguan_dominant():
     """官杀天赋卡回归测试：正官主导
 
     1971-10-25 8:00 男：官杀在主要性格，正官主导（正官60%，七杀10%，pian_ratio=0.14）
-    应输出：官杀共性 + 正官主卡 + 七杀补充
-    不应输出：正官补充
+    要求（新版格式）：
+    - 包含标题行「正官：」（正官主导使用正官卡）
+    - 包含性格画像关键词
+    - 包含提高方向关键词
     """
     import io
     from .cli import run_cli
@@ -4936,15 +4974,16 @@ def test_guansha_talent_card_zhengguan_dominant():
             else:
                 major_section = remaining
 
-    # 验证官杀共性
-    assert "官杀共性：重规矩与责任" in major_section, "正官主导应包含官杀共性"
-    # 验证正官主卡特征
-    assert "稳健、讲章法" in major_section, "正官主导应包含正官主卡思维天赋"
-    assert "端正、有分寸、重礼节" in major_section, "正官主导应包含正官主卡社交天赋"
-    # 验证有七杀补充
-    assert "七杀补充：同时带一点决断力与压迫感" in major_section, "正官主导应包含七杀补充"
-    # 验证不应有正官补充
-    assert "正官补充：" not in major_section, "正官主导不应包含正官补充"
+    # 验证：应包含正官标题行（正官主导使用正官卡）
+    assert "正官：" in major_section, "正官主导应包含标题行「正官：」"
+    # 验证：应包含正官性格画像关键词
+    assert "稳重、有条理" in major_section, "正官主导应包含「稳重、有条理」"
+    assert "领导能力强" in major_section, "正官主导应包含「领导能力强」"
+    # 验证：应包含提高方向关键词
+    assert "在守规矩的同时允许灵活调整" in major_section, "正官主导应包含提高方向"
+    # 验证：新版不应包含旧版字段
+    assert "官杀共性：" not in major_section, "新版不应包含「官杀共性」"
+    assert "七杀补充：" not in major_section, "新版不应包含「七杀补充」"
 
     print("[PASS] 官杀天赋卡回归测试（正官主导 1971-10-25）通过")
 
@@ -4953,8 +4992,10 @@ def test_guansha_talent_card_qisha_dominant():
     """官杀天赋卡回归测试：七杀主导
 
     1983-1-25 6:00 女：官杀在主要性格，七杀主导（正官10%，七杀45%，pian_ratio=0.82）
-    应输出：官杀共性 + 七杀主卡 + 正官补充
-    不应输出：七杀补充
+    要求（新版格式）：
+    - 包含标题行「七杀：」（七杀主导使用七杀卡）
+    - 包含性格画像关键词
+    - 包含提高方向关键词
     """
     import io
     from .cli import run_cli
@@ -4980,15 +5021,16 @@ def test_guansha_talent_card_qisha_dominant():
             else:
                 major_section = remaining
 
-    # 验证官杀共性
-    assert "官杀共性：重规矩与责任" in major_section, "七杀主导应包含官杀共性"
-    # 验证七杀主卡特征
-    assert "反应快、决断力强" in major_section, "七杀主导应包含七杀主卡思维天赋"
-    assert "气场硬、边界感强" in major_section, "七杀主导应包含七杀主卡社交天赋"
-    # 验证有正官补充
-    assert "正官补充：同时带一点守规矩与讲分寸的底色" in major_section, "七杀主导应包含正官补充"
-    # 验证不应有七杀补充
-    assert "七杀补充：" not in major_section, "七杀主导不应包含七杀补充"
+    # 验证：应包含七杀标题行（七杀主导使用七杀卡）
+    assert "七杀：" in major_section, "七杀主导应包含标题行「七杀：」"
+    # 验证：应包含七杀性格画像关键词
+    assert "反应快、决断力强" in major_section, "七杀主导应包含「反应快、决断力强」"
+    assert "抗压能力强" in major_section, "七杀主导应包含「抗压能力强」"
+    # 验证：应包含提高方向关键词
+    assert "缓解压力" in major_section, "七杀主导应包含提高方向"
+    # 验证：新版不应包含旧版字段
+    assert "官杀共性：" not in major_section, "新版不应包含「官杀共性」"
+    assert "正官补充：" not in major_section, "新版不应包含「正官补充」"
 
     print("[PASS] 官杀天赋卡回归测试（七杀主导 1983-1-25）通过")
 
@@ -5018,8 +5060,678 @@ def test_guansha_talent_card_not_in_other():
         if len(parts) > 1:
             other_section = parts[1]
 
-    # 验证：其他性格中不应包含官杀天赋卡
-    assert "官杀共性：重规矩与责任" not in other_section, "其他性格不应包含官杀共性"
+    # 验证：其他性格中不应包含官杀天赋卡（新版使用标题行+性格画像）
+    assert "- 性格画像：稳重、有条理" not in other_section, "其他性格不应包含正官性格画像"
+    assert "- 性格画像：反应快、决断力强" not in other_section, "其他性格不应包含七杀性格画像"
 
     print("[PASS] 官杀天赋卡回归测试（其他性格不输出天赋卡 1970-1-5）通过")
+
+
+# ============================================================
+# 食伤天赋卡回归测试
+# ============================================================
+
+def test_shishang_talent_card_pure_shishen():
+    """食伤天赋卡回归测试：1995-4-25 10:00 男 - 纯食神
+
+    食伤在主要性格，纯食神（食神45.0%，伤官0%）
+    期望输出：
+    - 食伤共性：重表达与呈现...
+    - 食神主卡5栏（思维天赋：轻松自然...）
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(1995, 4, 25, 10, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取主要性格段
+    major_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                major_section = remaining.split("—— 其他性格 ——")[0]
+            else:
+                major_section = remaining
+
+    # 验证纯食神天赋卡
+    assert "食伤共性：重表达与呈现" in major_section, "应包含：食伤共性"
+    assert "思维天赋：轻松自然" in major_section, "纯食神应包含：思维天赋：轻松自然"
+    assert "社交天赋：亲和、好相处" in major_section, "纯食神应包含：社交天赋：亲和"
+    # 不应有伤官补充
+    assert "伤官补充：" not in major_section, "纯食神不应有伤官补充"
+
+    print("[PASS] 食伤天赋卡回归测试（纯食神 1995-4-25）通过")
+
+
+def test_shishang_talent_card_pure_shangguan():
+    """食伤天赋卡回归测试：2003-5-5 18:00 女 - 纯伤官
+
+    食伤在主要性格，纯伤官（食神0%，伤官25.0%）
+    期望输出：
+    - 食伤共性：重表达与呈现...
+    - 伤官主卡5栏（思维天赋：创意强...）
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(2003, 5, 5, 18, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=False)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取主要性格段
+    major_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                major_section = remaining.split("—— 其他性格 ——")[0]
+            else:
+                major_section = remaining
+
+    # 验证纯伤官天赋卡
+    assert "食伤共性：重表达与呈现" in major_section, "应包含：食伤共性"
+    assert "思维天赋：创意强、表达欲旺" in major_section, "纯伤官应包含：思维天赋：创意强"
+    assert "社交天赋：个性鲜明、锋芒外露" in major_section, "纯伤官应包含：社交天赋：个性鲜明"
+    # 不应有食神补充
+    assert "食神补充：" not in major_section, "纯伤官不应有食神补充"
+
+    print("[PASS] 食伤天赋卡回归测试（纯伤官 2003-5-5）通过")
+
+
+def test_shishang_talent_card_shishen_dominant():
+    """食伤天赋卡回归测试：2005-8-22 0:00 男 - 食神主导
+
+    食伤在主要性格，食神主导（食神35.0%，伤官10.0%，pian_ratio=0.22）
+    期望输出：
+    - 食伤共性：重表达与呈现...
+    - 食神主卡5栏（思维天赋：轻松自然...）
+    - 伤官补充句
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(2005, 8, 22, 0, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取主要性格段
+    major_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                major_section = remaining.split("—— 其他性格 ——")[0]
+            else:
+                major_section = remaining
+
+    # 验证食神主导天赋卡
+    assert "食伤共性：重表达与呈现" in major_section, "应包含：食伤共性"
+    assert "思维天赋：轻松自然" in major_section, "食神主导应包含：思维天赋：轻松自然"
+    assert "伤官补充：同时带一点表达欲与锋芒" in major_section, "食神主导应有伤官补充"
+
+    print("[PASS] 食伤天赋卡回归测试（食神主导 2005-8-22）通过")
+
+
+def test_shishang_talent_card_blend():
+    """食伤天赋卡回归测试：1987-6-5 12:00 男 - 食伤各半
+
+    食伤在主要性格，各半（食神25.0%，伤官35.0%，pian_ratio=0.58）
+    期望输出：
+    - 食伤共性：重表达与呈现...
+    - 融合版5栏（思维天赋：既追求轻松愉快...）
+    - 食伤各半提醒句
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(1987, 6, 5, 12, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取主要性格段
+    major_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                major_section = remaining.split("—— 其他性格 ——")[0]
+            else:
+                major_section = remaining
+
+    # 验证食伤各半天赋卡
+    assert "食伤共性：重表达与呈现" in major_section, "应包含：食伤共性"
+    assert "思维天赋：既追求轻松愉快，也追求创意表达" in major_section, "各半应包含：融合版思维天赋"
+    assert "食伤各半提醒：两种能量都想要出口" in major_section, "各半应有提醒句"
+
+    print("[PASS] 食伤天赋卡回归测试（各半 1987-6-5）通过")
+
+
+def test_shishang_talent_card_shangguan_dominant():
+    """食伤天赋卡回归测试：2000-7-7 6:00 女 - 伤官主导
+
+    食伤在主要性格，伤官主导（食神10.0%，伤官35.0%，pian_ratio=0.78）
+    期望输出：
+    - 食伤共性：重表达与呈现...
+    - 伤官主卡5栏（思维天赋：创意强...）
+    - 食神补充句
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(2000, 7, 7, 6, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=False)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取主要性格段
+    major_section = ""
+    if "—— 主要性格 ——" in output:
+        parts = output.split("—— 主要性格 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "—— 其他性格 ——" in remaining:
+                major_section = remaining.split("—— 其他性格 ——")[0]
+            else:
+                major_section = remaining
+
+    # 验证伤官主导天赋卡
+    assert "食伤共性：重表达与呈现" in major_section, "应包含：食伤共性"
+    assert "思维天赋：创意强、表达欲旺" in major_section, "伤官主导应包含：思维天赋：创意强"
+    assert "食神补充：同时带一点轻松与柔和的底色" in major_section, "伤官主导应有食神补充"
+
+    print("[PASS] 食伤天赋卡回归测试（伤官主导 2000-7-7）通过")
+
+
+def test_shishang_talent_card_not_in_other():
+    """食伤天赋卡回归测试：1970-1-5 14:00 男 - 其他性格不输出天赋卡
+
+    食伤在其他性格（total_percent=10.0%，hits=1，非用神）
+    验证：其他性格中不应包含食伤天赋卡
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(1970, 1, 5, 14, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取其他性格段
+    other_section = ""
+    if "—— 其他性格 ——" in output:
+        parts = output.split("—— 其他性格 ——")
+        if len(parts) > 1:
+            other_section = parts[1]
+
+    # 验证：其他性格中不应包含食伤天赋卡
+    assert "食伤共性：重表达与呈现" not in other_section, "其他性格不应包含食伤共性"
+
+    print("[PASS] 食伤天赋卡回归测试（其他性格不输出天赋卡 1970-1-5）通过")
+
+
+# ============================================================
+# 性格快速汇总回归测试
+# ============================================================
+
+def test_quick_summary_R1():
+    """性格快速汇总回归测试R1：2005-9-20 10:00 男
+
+    断言输出包含：
+    - —— 性格快速汇总 ——
+    - 总览：本命局主要性格包含：偏财、偏印
+    - 思维天赋： 包含 - 偏财： 和 - 偏印：
+    - 印星使用新版「性格画像」文案（偏独处、小众非主流）
+    - 财星使用新版「汇总」文案（行动力强、社交能力强）
+    - 印星和财星都不在社交天赋中（新版）
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(2005, 9, 20, 10, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 验证关键子串
+    assert "—— 性格快速汇总 ——" in output, "应包含：—— 性格快速汇总 ——"
+    assert "总览：本命局主要性格包含：偏财、偏印" in output, "应包含：总览：本命局主要性格包含：偏财、偏印"
+    assert "思维天赋：" in output, "应包含：思维天赋："
+    assert "- 偏财：" in output, "思维天赋应包含：- 偏财："
+    assert "- 偏印：" in output, "思维天赋应包含：- 偏印："
+    # 印星使用新版「性格画像」文案
+    assert "偏独处" in output, "偏印应使用新版性格画像文案（偏独处）"
+    assert "小众非主流" in output, "偏印应使用新版性格画像文案（小众非主流）"
+    # 财星使用新版「汇总」文案
+    assert "行动力强、社交能力强" in output, "偏财应使用新版汇总文案（行动力强、社交能力强）"
+    # 印星和财星都不在社交天赋中（新版：只有印/财以外的十神才有社交天赋）
+    # 此用例只有偏财和偏印，所以没有社交天赋输出
+    assert "社交天赋：" not in output, "只有财星和印星时不应输出社交天赋"
+
+    print("[PASS] 性格快速汇总回归测试R1（2005-9-20 10:00 男）通过")
+
+
+def test_quick_summary_R2():
+    """性格快速汇总回归测试R2：2007-1-28 12:00 男
+
+    断言输出包含：
+    - —— 性格快速汇总 ——
+    - - 正印：（思维天赋，使用新版性格画像文案）
+    - 财星若为混杂：包含 - 正偏财：（新版汇总句，包含 容易同时保持两份工作）
+    - 官杀若为混杂：包含 - 正官七杀：（思维+社交各一句）
+    - 印星和财星都不在社交天赋中（新版）
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(2007, 1, 28, 12, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 验证关键子串
+    assert "—— 性格快速汇总 ——" in output, "应包含：—— 性格快速汇总 ——"
+    assert "- 正印：" in output, "应包含：- 正印："
+    # 正印使用新版「性格画像」文案
+    assert "善良仁慈" in output, "正印应使用新版性格画像文案（善良仁慈）"
+    assert "- 正偏财：" in output, "应包含：- 正偏财："
+    # 正偏财使用新版「汇总」文案
+    assert "容易同时保持两份工作" in output, "正偏财汇总句应包含：容易同时保持两份工作"
+    assert "- 正官七杀：" in output, "应包含：- 正官七杀："
+
+    # 验证财星卡不再包含关系倾向句
+    assert "关系倾向：感情/关系上更容易出现「多线选择窗口」" not in output, "不应包含关系倾向句"
+    assert "多线选择窗口" not in output, "不应包含多线选择窗口"
+    assert "男性更明显" not in output, "不应包含男性更明显"
+
+    print("[PASS] 性格快速汇总回归测试R2（2007-1-28 12:00 男）通过")
+
+
+def test_quick_summary_R3():
+    """性格快速汇总回归测试R3：1978-9-22 16:00 女
+
+    断言输出包含：
+    - —— 性格快速汇总 ——
+    - - 正偏财：（新版汇总句，含 容易同时保持两份工作）
+    - - 伤官：（一句版）
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(1978, 9, 22, 16, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=False)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 验证关键子串
+    assert "—— 性格快速汇总 ——" in output, "应包含：—— 性格快速汇总 ——"
+    assert "- 正偏财：" in output, "应包含：- 正偏财："
+    # 正偏财使用新版「汇总」文案
+    assert "容易同时保持两份工作" in output, "正偏财汇总句应包含：容易同时保持两份工作"
+    # 食伤已有一句版，验证伤官一句版
+    assert "- 伤官：" in output, "应包含伤官一句版"
+
+    print("[PASS] 性格快速汇总回归测试R3（1978-9-22 16:00 女）通过")
+
+
+def test_quick_summary_R4_no_jianzhi():
+    """性格快速汇总回归测试R4：2005-9-20 10:00 男 - 纯偏财不含兼职
+
+    该用例财星为纯偏财（非混杂），断言输出中不包含「兼职」和「两份工作」。
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(2005, 9, 20, 10, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 验证禁词不存在
+    assert "兼职" not in output, "纯偏财不应包含「兼职」"
+    assert "两份工作" not in output, "纯偏财不应包含「两份工作」"
+
+    print("[PASS] 性格快速汇总回归测试R4（2005-9-20 纯偏财不含兼职）通过")
+
+
+def test_quick_summary_R5_no_jianzhi():
+    """性格快速汇总回归测试R5：2006-12-18 12:00 女 - 纯正财/纯偏财不含兼职
+
+    该用例财星为纯正财或纯偏财（非混杂），断言输出中不包含「兼职」和「两份工作」。
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(2006, 12, 18, 12, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=False)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 验证禁词不存在
+    assert "兼职" not in output, "纯正财/纯偏财不应包含「兼职」"
+    assert "两份工作" not in output, "纯正财/纯偏财不应包含「两份工作」"
+
+    print("[PASS] 性格快速汇总回归测试R5（2006-12-18 纯财不含兼职）通过")
+
+
+def test_quick_summary_R6_guansha_mixed():
+    """性格快速汇总回归测试R6：2007-1-28 12:00 男 - 正官七杀混杂
+
+    该用例官杀为混杂（正官35% + 七杀20%），断言性格快速汇总中包含正官七杀的新版汇总句。
+    复用既有官杀混杂判定层的样本（test_traits_new_format_case_B）。
+
+    注意（新版）：官杀只在 MIND 输出，不在 SOCIAL 输出。
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(2007, 1, 28, 12, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取性格快速汇总段
+    quick_summary_section = ""
+    if "—— 性格快速汇总 ——" in output:
+        parts = output.split("—— 性格快速汇总 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            # 找到下一个 section 的结束
+            if "——" in remaining:
+                quick_summary_section = remaining.split("——")[0]
+            else:
+                quick_summary_section = remaining
+
+    # 验证正官七杀新版汇总句（思维天赋）
+    assert "- 正官七杀：自我管控和领导力强，目标感很强；敢决策敢担责，强调效率。" in quick_summary_section, \
+        "正官七杀混杂应包含新版汇总句"
+
+    # 验证正官七杀不再出现在社交天赋中（新版只在MIND输出）
+    # 官杀不再输出 social
+
+    print("[PASS] 性格快速汇总回归测试R6（2007-1-28 正官七杀混杂）通过")
+
+
+def test_quick_summary_R7_qisha_pure():
+    """性格快速汇总回归测试R7：2006-3-22 14:00 女 - 纯七杀
+
+    该用例官杀为纯七杀，断言性格快速汇总中包含七杀的新版汇总句。
+    复用既有官杀混杂判定层的样本（test_traits_new_format_case_C）。
+
+    注意（新版）：官杀只在 MIND 输出，不在 SOCIAL 输出。
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(2006, 3, 22, 14, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=False)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取性格快速汇总段
+    quick_summary_section = ""
+    if "—— 性格快速汇总 ——" in output:
+        parts = output.split("—— 性格快速汇总 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            # 找到下一个 section 的结束
+            if "——" in remaining:
+                quick_summary_section = remaining.split("——")[0]
+            else:
+                quick_summary_section = remaining
+
+    # 验证七杀新版汇总句（思维天赋）
+    assert "- 七杀：领导能力强，反应快、决断强；抗压行动导向，目标感强，重效率与结果。" in quick_summary_section, \
+        "纯七杀应包含新版汇总句"
+
+    # 验证七杀不再出现在社交天赋中（新版只在MIND输出）
+    # 官杀不再输出 social
+
+    print("[PASS] 性格快速汇总回归测试R7（2006-3-22 纯七杀）通过")
+
+
+def test_quick_summary_R8_bijie():
+    """性格快速汇总回归测试R8：1975-3-10 12:00 男 - 纯比肩
+
+    该用例主要性格包含比劫（纯比肩），断言性格快速汇总中包含比劫的新版汇总句。
+    复用既有比劫天赋卡的样本（test_bijie_talent_card_bishen）。
+
+    注意（新版）：比劫统一使用"比劫"，只在 MIND 输出，不在 SOCIAL 输出。
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(1975, 3, 10, 12, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取性格快速汇总段
+    quick_summary_section = ""
+    if "—— 性格快速汇总 ——" in output:
+        parts = output.split("—— 性格快速汇总 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            # 找到下一个 section 的结束
+            if "——" in remaining:
+                quick_summary_section = remaining.split("——")[0]
+            else:
+                quick_summary_section = remaining
+
+    # 验证比劫新版汇总句（思维天赋）
+    assert "- 比劫：主见强、反应快，喜欢自己做主；讨厌被安排和管制，偏爱自由。" in quick_summary_section, \
+        "比劫应包含新版汇总句"
+
+    # 验证比劫不再出现在社交天赋中
+    # 新版比劫只在 MIND 输出，不在 SOCIAL 输出
+    assert "社交天赋：" not in quick_summary_section or "- 比劫：" not in quick_summary_section.split("社交天赋：")[1] if "社交天赋：" in quick_summary_section else True, \
+        "比劫不应出现在社交天赋中"
+
+    print("[PASS] 性格快速汇总回归测试R8（1975-3-10 比肩→比劫汇总）通过")
+
+
+def test_quick_summary_R9_shishang():
+    """性格快速汇总回归测试R9：1995-4-25 10:00 男 - 纯食神
+
+    该用例主要性格包含食伤（纯食神45%），断言性格快速汇总中包含食神的一句版。
+    复用既有食伤天赋卡的样本（test_shishang_talent_card_pure_shishen）。
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(1995, 4, 25, 10, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取性格快速汇总段
+    quick_summary_section = ""
+    if "—— 性格快速汇总 ——" in output:
+        parts = output.split("—— 性格快速汇总 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "——" in remaining:
+                quick_summary_section = remaining.split("——")[0]
+            else:
+                quick_summary_section = remaining
+
+    # 验证食神一句版（思维天赋）
+    assert "- 食神：想到就做、顺势而为；即使在压力里也能把状态稳住，反而更容易进入发挥区，能说会道、口才好，临场表现感往往更强。" in quick_summary_section, \
+        "纯食神应包含思维天赋一句版"
+
+    # 验证食神一句版（社交天赋）
+    assert "- 食神：亲和、好相处，给人放松、没压力的感觉；习惯用温和的方式表达，不爱冲突也不爱争论。" in quick_summary_section, \
+        "纯食神应包含社交天赋一句版"
+
+    print("[PASS] 性格快速汇总回归测试R9（1995-4-25 纯食神）通过")
+
+
+def test_quick_summary_R10_shangguan():
+    """性格快速汇总回归测试R10：2003-5-5 18:00 女 - 纯伤官
+
+    该用例主要性格包含食伤（纯伤官25%），断言性格快速汇总中包含伤官的一句版。
+    复用既有食伤天赋卡的样本（test_shishang_talent_card_pure_shangguan）。
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(2003, 5, 5, 18, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=False)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取性格快速汇总段
+    quick_summary_section = ""
+    if "—— 性格快速汇总 ——" in output:
+        parts = output.split("—— 性格快速汇总 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "——" in remaining:
+                quick_summary_section = remaining.split("——")[0]
+            else:
+                quick_summary_section = remaining
+
+    # 验证伤官一句版（思维天赋）
+    assert "- 伤官：创意强、表达欲旺，喜欢打破常规追求新意；更敢试错走差异化路线，擅长把点子与观点做成可被看见的成果，从而打开机会与资源。" in quick_summary_section, \
+        "纯伤官应包含思维天赋一句版"
+
+    # 验证伤官一句版（社交天赋）
+    assert "- 伤官：逻辑表达直接且清晰，容易给人「有想法有态度」的印象；有号召力与领导能力，能团结很多人、推动行动。" in quick_summary_section, \
+        "纯伤官应包含社交天赋一句版"
+
+    print("[PASS] 性格快速汇总回归测试R10（2003-5-5 纯伤官）通过")
+
+
+def test_quick_summary_R11_shishang_blend():
+    """性格快速汇总回归测试R11：1987-6-5 12:00 男 - 食伤各半
+
+    该用例主要性格包含食伤（食神25%，伤官35%，pian_ratio=0.58，各半），
+    断言性格快速汇总中包含食神伤官的一句版。
+    复用既有食伤天赋卡的样本（test_shishang_talent_card_blend）。
+    """
+    import io
+    from .cli import run_cli
+
+    dt = datetime(1987, 6, 5, 12, 0)
+
+    old_stdout = sys.stdout
+    sys.stdout = captured_output = io.StringIO()
+    try:
+        run_cli(dt, is_male=True)
+        output = captured_output.getvalue()
+    finally:
+        sys.stdout = old_stdout
+
+    # 提取性格快速汇总段
+    quick_summary_section = ""
+    if "—— 性格快速汇总 ——" in output:
+        parts = output.split("—— 性格快速汇总 ——")
+        if len(parts) > 1:
+            remaining = parts[1]
+            if "——" in remaining:
+                quick_summary_section = remaining.split("——")[0]
+            else:
+                quick_summary_section = remaining
+
+    # 验证食神伤官一句版（思维天赋）
+    assert "- 食神伤官：更偏伤官：创意与表达驱动，敢突破常规、走差异化换机会；同时带点食神的随性与松弛感，想到就做，临场更容易发挥。" in quick_summary_section, \
+        "食伤各半应包含思维天赋一句版"
+
+    # 验证食神伤官一句版（社交天赋）
+    assert "- 食神伤官：更偏伤官：表达直接清晰、观点鲜明，容易让人信服并形成号召力；同时有食神的亲和与不压迫感，更容易把人聚拢起来、推动行动。" in quick_summary_section, \
+        "食伤各半应包含社交天赋一句版"
+
+    print("[PASS] 性格快速汇总回归测试R11（1987-6-5 食神伤官）通过")
+
+
 

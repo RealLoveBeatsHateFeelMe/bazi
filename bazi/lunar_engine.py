@@ -17,6 +17,7 @@ from .shishen import (
     get_branch_shishen,
     classify_shishen_category,
     compute_shishen_category_percentages,
+    compute_shishen_category_by_layer,
     detect_stem_pattern_summary,
 )
 from .patterns import detect_natal_patterns
@@ -254,27 +255,54 @@ def analyze_basic(birth_dt: datetime) -> Dict[str, Any]:
     # 原局六合三合识别（只解释，不计分）
     natal_harmonies = detect_natal_harmonies(bazi)
 
-    # 特殊规则：壬癸水日主 + 官杀（土）> 40% + 身弱 → 用神加木
+    # ============================================================
+    # 特殊规则：官杀旺 + 身弱 → 补食伤（及旧规则兼容）
+    # ============================================================
     special_rules = []
 
     # 保存基础用神（原始计算出的）
     base_yongshen_elements = yongshen_elements.copy()
-    
+
     strength_percent = strength["strength_percent"]
+    support_percent = strength.get("support_percent", 0.0)
     guansha_percent = shishen_cat.get("官杀", 0.0)
 
-    # 特殊规则1：弱水 + 官杀重 → 补木
+    # 计算分层财星百分比（用于财星屏蔽）
+    shishen_by_layer = compute_shishen_category_by_layer(bazi)
+    cai_pct_tg = shishen_by_layer.get("财星", {}).get("tg", 0.0)
+    cai_pct_dz = shishen_by_layer.get("财星", {}).get("dz", 0.0)
+
+    # 用神来源标记（新增字段，记录每个用神元素的层级来源）
+    yongshen_sources = {}
+
+    # 日主五行 → 食伤五行映射（我生者）
+    DAY_MASTER_TO_SHISHANG_ELEMENT = {
+        "水": "木",  # 水生木
+        "木": "火",  # 木生火
+        "火": "土",  # 火生土
+        "土": "金",  # 土生金
+        "金": None,  # 金日主不触发（总开关排除）
+    }
+
+    # 官杀旺阈值（从 40% 改为 35%）
+    GUANSHA_THRESHOLD = 35.0
+    # 财星屏蔽阈值
+    CAI_BLOCK_THRESHOLD = 20.0
+
+    # ----------------------------------------------------------
+    # 特殊规则1：弱水 + 官杀重 → 补木（旧规则，阈值同步为 35%）
+    # ----------------------------------------------------------
     if day_master_element == "水" and day_gan in ("壬", "癸"):
-        if strength_percent < 50.0 and guansha_percent >= 40.0:
+        if strength_percent < 50.0 and guansha_percent >= GUANSHA_THRESHOLD:
             if "木" not in yongshen_elements:
                 yongshen_elements.append("木")
             special_rules.append("weak_water_heavy_guansha_add_wood")
 
-    # 特殊规则2：弱木 + 强金（官杀%≥40%）+ 基础用神为水木 → 补火
+    # ----------------------------------------------------------
+    # 特殊规则2：弱木 + 强金（官杀%≥35%）+ 基础用神为水木 → 补火（旧规则，阈值同步为 35%）
+    # ----------------------------------------------------------
     if day_master_element == "木" and day_gan in ("甲", "乙"):
-        # 使用 support_percent < 50.0 判断身弱（必须）
-        support_percent = strength.get("support_percent", 0.0)
-        if support_percent < 50.0 and guansha_percent >= 40.0:
+        if support_percent < 50.0 and guansha_percent >= GUANSHA_THRESHOLD:
             # 检查基础用神是否为水木
             base_set = set(base_yongshen_elements)
             if base_set == {"水", "木"} or base_set == {"木", "水"}:
@@ -282,12 +310,52 @@ def analyze_basic(birth_dt: datetime) -> Dict[str, Any]:
                     yongshen_elements.append("火")
                 special_rules.append("weak_wood_heavy_metal_add_fire")
 
+    # ----------------------------------------------------------
+    # 特殊规则3：官杀旺 + 身弱 → 补食伤（新规则）
+    # - 金日主（庚辛）完全不触发
+    # - 财星分层屏蔽：cai_pct_tg >= 20% 则天干食伤不可用；cai_pct_dz >= 20% 则地支食伤不可用
+    # ----------------------------------------------------------
+    if day_gan not in ("庚", "辛"):  # 金日主完全不触发
+        if strength_percent < 50.0 and guansha_percent >= GUANSHA_THRESHOLD:
+            shishang_element = DAY_MASTER_TO_SHISHANG_ELEMENT.get(day_master_element)
+
+            if shishang_element:
+                # 财星分层屏蔽
+                allow_tg = cai_pct_tg < CAI_BLOCK_THRESHOLD
+                allow_dz = cai_pct_dz < CAI_BLOCK_THRESHOLD
+
+                if allow_tg or allow_dz:
+                    # 记录来源
+                    yongshen_sources[shishang_element] = {
+                        "tg": allow_tg,
+                        "dz": allow_dz,
+                        "cai_pct_tg": cai_pct_tg,
+                        "cai_pct_dz": cai_pct_dz,
+                    }
+
+                    # 判断是否需要加前缀
+                    if allow_tg and allow_dz:
+                        # 两层都允许 → 直接加入，无前缀（兼容旧格式）
+                        display_element = shishang_element
+                    elif allow_tg:
+                        # 仅天干允许
+                        display_element = f"天干{shishang_element}"
+                    else:
+                        # 仅地支允许
+                        display_element = f"地支{shishang_element}"
+
+                    if display_element not in yongshen_elements and shishang_element not in yongshen_elements:
+                        yongshen_elements.append(display_element)
+                        special_rules.append(f"weak_heavy_guansha_add_shishang_{shishang_element}")
+
     # 最终用神（包含规则补充后的）
     final_yongshen_elements = yongshen_elements.copy()
 
     # 更新 yongshen_detail，明确 base/final
     yong["base_yongshen_elements"] = base_yongshen_elements
     yong["final_yongshen_elements"] = final_yongshen_elements
+    yong["yongshen_sources"] = yongshen_sources  # 新增：用神来源标记
+    yong["shishen_by_layer"] = shishen_by_layer  # 新增：分层十神百分比
     # 保留旧的 yongshen_elements 字段以兼容（但建议使用 base_yongshen_elements）
     # yong["yongshen_elements"] 现在等于 base_yongshen_elements
 

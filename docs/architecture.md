@@ -303,9 +303,39 @@ pian_ratio = 偏% / (正% + 偏%)
 | 财星 (Cai Xing) | ✅ Done | `bazi/cli.py` |
 | 比劫 (Bi Jie) | ✅ Done | `bazi/cli.py` |
 | 官杀 (Guan Sha) | ✅ Done | `bazi/cli.py` |
-| 食伤 (Shi Shang) | ⏳ Pending | - |
+| 食伤 (Shi Shang) | ✅ Done | `bazi/cli.py` |
 
 > **详细规则**: See `bazi/BAZI_RULES.md` §13
+
+---
+
+## 9. 性格快速汇总 (Personality Quick Summary)
+
+### 9.1 Overview
+
+The "性格快速汇总" section is printed immediately after "其他性格" section, providing a condensed summary of the user's main personality traits.
+
+### 9.2 Structure
+
+1. **总览** (Overview): Lists all major personality traits in fixed order: 财 → 印 → 食伤 → 比劫 → 官杀
+2. **思维天赋** (Mind): One-liner for 财星 and 印星 only
+3. **社交天赋** (Social): One-liner for 财星 and 印星 only
+4. **备注** (Notes): Lists other traits not yet summarized (食伤/比劫/官杀)
+
+### 9.3 Naming Convention
+
+| Group | Pure 正 | Pure 偏 | Mixed |
+|-------|---------|---------|-------|
+| 财 | 正财 | 偏财 | 正偏财 |
+| 印 | 正印 | 偏印 | 正偏印 |
+| 食伤 | 食神 | 伤官 | 食神伤官 |
+| 比劫 | 比肩 | 劫财 | 比肩劫财 |
+| 官杀 | 正官 | 七杀 | 正官七杀 |
+
+### 9.4 Implementation
+
+- Function: `build_personality_quick_summary()` in `bazi/cli.py`
+- Constants: `QUICK_SUMMARY_MIND`, `QUICK_SUMMARY_SOCIAL` in `bazi/cli.py`
 
 ---
 
@@ -313,6 +343,7 @@ pian_ratio = 偏% / (正% + 偏%)
 
 | Date | Change |
 |------|--------|
+| 2026-01-18 | Add §9 性格快速汇总; complete 食伤天赋卡; remove 财星关系倾向句 |
 | 2026-01-18 | Add §8 Personality Talent Cards (印星/财星/比劫/官杀 completed, 食伤 pending) |
 | 2026-01-13 | Add LLM Input tab to Debug Drawer; full_text 默认返回（开发期） |
 | 2026-01-13 | Initial creation: router/index/context_trace contracts, blocks, regression |

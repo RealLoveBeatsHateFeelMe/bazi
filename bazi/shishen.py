@@ -150,7 +150,7 @@ SHISHEN_LABEL_MAP: Dict[tuple[str, bool], str] = {
     ("正印", True): "贵人/支持/学习证书",
     ("正印", False): "胡思乱想/思前顾后/效率低",
     ("偏印", True): "偏门技术/思想突破/学习研究/灵感",
-    ("偏印", False): "多想/孤立/节奏乱",
+    ("偏印", False): "多想/孤立/节奏乱/犯小人/突如其来的变故/思想压力大",
     # 食伤
     ("食神", True): "产出/表现/生活舒适/技术突破",
     ("食神", False): "贪舒服/拖延/松散",
@@ -236,6 +236,76 @@ def compute_shishen_category_percentages(bazi: Dict[str, Dict[str, str]]) -> Dic
 
     total = sum(raw_scores.values()) or 1.0
     return {c: (raw_scores[c] / total) * 100.0 for c in categories}
+
+
+def compute_shishen_category_by_layer(bazi: Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, float]]:
+    """
+    计算按层级拆分的十神类别百分比（分母=整盘总权重=1.0）。
+
+    返回:
+        {
+            "财星": {"tg": 天干财星/整盘*100, "dz": 地支财星/整盘*100},
+            "官杀": {"tg": ..., "dz": ...},
+            ...
+        }
+
+    用于判断"财星分层屏蔽"逻辑：
+    - cai_pct_tg = result["财星"]["tg"]
+    - cai_pct_dz = result["财星"]["dz"]
+    """
+    categories = ["比劫", "财星", "食伤", "官杀", "印星"]
+    tg_scores = {c: 0.0 for c in categories}
+    dz_scores = {c: 0.0 for c in categories}
+
+    day_gan = bazi["day"]["gan"]
+
+    # 1. 天干层级
+    for pillar in ("year", "month", "day", "hour"):
+        gan = bazi[pillar]["gan"]
+        key = f"{pillar}_gan"
+        w = POSITION_WEIGHTS.get(key, 0.0)
+        if w <= 0:
+            continue
+
+        ss = get_shishen(day_gan, gan)
+        if not ss:
+            continue
+
+        cat = classify_shishen_category(ss)
+        if not cat:
+            continue
+
+        tg_scores[cat] += w
+
+    # 2. 地支层级（主气）
+    for pillar in ("year", "month", "day", "hour"):
+        zhi = bazi[pillar]["zhi"]
+        key = f"{pillar}_zhi"
+        w = POSITION_WEIGHTS.get(key, 0.0)
+        if w <= 0:
+            continue
+
+        tg = get_branch_shishen(bazi, zhi)
+        if not tg:
+            continue
+
+        cat = classify_shishen_category(tg["shishen"])
+        if not cat:
+            continue
+
+        dz_scores[cat] += w
+
+    # 整盘总权重 = 1.0（POSITION_WEIGHTS 设计如此）
+    total_weight = 1.0
+
+    result = {}
+    for c in categories:
+        result[c] = {
+            "tg": (tg_scores[c] / total_weight) * 100.0,
+            "dz": (dz_scores[c] / total_weight) * 100.0,
+        }
+
+    return result
 
 
 def detect_stem_pattern_summary(bazi: Dict[str, Dict[str, str]]) -> List[Dict[str, Any]]:
