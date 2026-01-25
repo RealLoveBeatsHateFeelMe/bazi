@@ -102,43 +102,44 @@ def generate_year_detail(
 
 
 def _compute_half_year_grade(liunian: Dict[str, Any]) -> Dict[str, str]:
-    """计算上下半年等级（四类枚举：好运/一般/凶/变动）。"""
-    first_half_good = liunian.get("first_half_good")
-    second_half_good = liunian.get("second_half_good")
+    """计算开始/后来等级（四类枚举：好运/一般/凶/变动）。"""
+    # 兼容映射：支持新字段 start_good/later_good 和旧字段 first_half_good/second_half_good
+    start_good = liunian.get("start_good", liunian.get("first_half_good"))
+    later_good = liunian.get("later_good", liunian.get("second_half_good"))
     risk_from_gan = liunian.get("risk_from_gan", 0.0)
     risk_from_zhi = liunian.get("risk_from_zhi", 0.0)
-    
-    # 上半年判定
-    if first_half_good is None:
-        first_grade = "变动"
-    elif first_half_good:
+
+    # 开始判定
+    if start_good is None:
+        start_grade = "变动"
+    elif start_good:
         if risk_from_gan > 20:
-            first_grade = "一般"
+            start_grade = "一般"
         else:
-            first_grade = "好运"
+            start_grade = "好运"
     else:
         if risk_from_gan > 30:
-            first_grade = "凶"
+            start_grade = "凶"
         else:
-            first_grade = "一般"
-    
-    # 下半年判定
-    if second_half_good is None:
-        second_grade = "变动"
-    elif second_half_good:
+            start_grade = "一般"
+
+    # 后来判定
+    if later_good is None:
+        later_grade = "变动"
+    elif later_good:
         if risk_from_zhi > 20:
-            second_grade = "一般"
+            later_grade = "一般"
         else:
-            second_grade = "好运"
+            later_grade = "好运"
     else:
         if risk_from_zhi > 30:
-            second_grade = "凶"
+            later_grade = "凶"
         else:
-            second_grade = "一般"
-    
+            later_grade = "一般"
+
     return {
-        "first": first_grade,
-        "second": second_grade,
+        "start": start_grade,
+        "later": later_grade,
     }
 
 
@@ -250,8 +251,8 @@ def _build_raw_text(
     if dayun_brief:
         lines.append(f"【大运背景】{dayun_brief['name']}运（{dayun_brief['start_age']}-{dayun_brief['end_age']}岁），等级：{dayun_brief['grade']}")
     
-    # 上下半年
-    lines.append(f"【上下半年】上半年：{half_year_grade['first']}，下半年：{half_year_grade['second']}")
+    # 开始/后来
+    lines.append(f"【开始/后来】开始：{half_year_grade['start']}，后来：{half_year_grade['later']}")
     
     # 天干
     gan = gan_block

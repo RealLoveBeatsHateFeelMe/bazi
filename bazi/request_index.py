@@ -426,38 +426,40 @@ def _build_year_grade_item(year: int, liunian_map: Dict[int, Dict[str, Any]]) ->
     elif Y >= 25.0:
         year_label = "全年 明显变动（可克服）"
     else:
-        # Y < 25.0，必须输出上下半年
+        # Y < 25.0，必须输出开始/后来
         risk_from_gan = ln.get("risk_from_gan", 0.0)
         risk_from_zhi = ln.get("risk_from_zhi", 0.0)
-        is_gan_yongshen = ln.get("first_half_good", False)
-        is_zhi_yongshen = ln.get("second_half_good", False)
-        
-        half1_label = _calc_half_year_label(risk_from_gan, is_gan_yongshen)
-        half2_label = _calc_half_year_label(risk_from_zhi, is_zhi_yongshen)
-        
-        year_label = f"上半年 {half1_label}，下半年 {half2_label}"
-    
+        # 兼容映射：支持新字段 start_good/later_good 和旧字段 first_half_good/second_half_good
+        is_gan_yongshen = ln.get("start_good", ln.get("first_half_good", False))
+        is_zhi_yongshen = ln.get("later_good", ln.get("second_half_good", False))
+
+        start_label = _calc_half_year_label(risk_from_gan, is_gan_yongshen)
+        later_label = _calc_half_year_label(risk_from_zhi, is_zhi_yongshen)
+
+        year_label = f"开始 {start_label}，后来 {later_label}"
+
     # 构建 year 对象
     year_obj: Dict[str, Any] = {
         "year": year,
         "Y": Y,
         "year_label": year_label,
     }
-    
-    # 当 Y < 25.0 时，必须额外输出两个 half（从流年数据中获取）
+
+    # 当 Y < 25.0 时，必须额外输出 start/later（从流年数据中获取）
     if Y < 25.0:
         risk_from_gan = ln.get("risk_from_gan", 0.0)
         risk_from_zhi = ln.get("risk_from_zhi", 0.0)
-        is_gan_yongshen = ln.get("first_half_good", False)
-        is_zhi_yongshen = ln.get("second_half_good", False)
-        
-        year_obj["half1"] = {
+        # 兼容映射
+        is_gan_yongshen = ln.get("start_good", ln.get("first_half_good", False))
+        is_zhi_yongshen = ln.get("later_good", ln.get("second_half_good", False))
+
+        year_obj["start"] = {
             "H": risk_from_gan,
-            "half_label": _calc_half_year_label(risk_from_gan, is_gan_yongshen),
+            "label": _calc_half_year_label(risk_from_gan, is_gan_yongshen),
         }
-        year_obj["half2"] = {
+        year_obj["later"] = {
             "H": risk_from_zhi,
-            "half_label": _calc_half_year_label(risk_from_zhi, is_zhi_yongshen),
+            "label": _calc_half_year_label(risk_from_zhi, is_zhi_yongshen),
         }
     
     return year_obj
@@ -543,59 +545,61 @@ def _build_good_year_search_index(
         
         ln = liunian_map[year]
         Y = ln.get("total_risk_percent", 0.0)
-        
-        # 只有当 Y < 25.0 时，才有 half1/half2
+
+        # 只有当 Y < 25.0 时，才有 start/later
         if Y < 25.0:
             risk_from_gan = ln.get("risk_from_gan", 0.0)
             risk_from_zhi = ln.get("risk_from_zhi", 0.0)
-            is_gan_yongshen = ln.get("first_half_good", False)
-            is_zhi_yongshen = ln.get("second_half_good", False)
-            
-            half1_label = _calc_half_year_label(risk_from_gan, is_gan_yongshen)
-            half2_label = _calc_half_year_label(risk_from_zhi, is_zhi_yongshen)
-            
-            # 好运年判定：half1 或 half2 的 half_label == "好运"
-            if half1_label == "好运" or half2_label == "好运":
+            # 兼容映射
+            is_gan_yongshen = ln.get("start_good", ln.get("first_half_good", False))
+            is_zhi_yongshen = ln.get("later_good", ln.get("second_half_good", False))
+
+            start_label = _calc_half_year_label(risk_from_gan, is_gan_yongshen)
+            later_label = _calc_half_year_label(risk_from_zhi, is_zhi_yongshen)
+
+            # 好运年判定：start 或 later 的 label == "好运"
+            if start_label == "好运" or later_label == "好运":
                 future3_good_years.append(year)
-    
+
     has_good_in_future3 = len(future3_good_years) > 0
-    
+
     # 2. 如果未来三年没有好运，从 base_year 往后继续找（最多到 base_year+10）
     next_good_year: Optional[int] = None
     next_good_year_offset: Optional[int] = None
-    
+
     if not has_good_in_future3:
         # 从 future3_years 的最后一年 + 1 开始，直到 min(scan_horizon_end_year, base_year+10)
         start_search_year = max(future3_years) + 1 if future3_years else base_year + 3
         end_search_year = min(scan_horizon_end_year, base_year + 10)
-        
+
         for year in range(start_search_year, end_search_year + 1):
             checked_years.append(year)  # 记录检查的年份
-            
+
             if year not in liunian_map:
                 continue
-            
+
             ln = liunian_map[year]
             Y = ln.get("total_risk_percent", 0.0)
-            
-            # 只有当 Y < 25.0 时，才有 half1/half2
+
+            # 只有当 Y < 25.0 时，才有 start/later
             if Y < 25.0:
                 risk_from_gan = ln.get("risk_from_gan", 0.0)
                 risk_from_zhi = ln.get("risk_from_zhi", 0.0)
-                is_gan_yongshen = ln.get("first_half_good", False)
-                is_zhi_yongshen = ln.get("second_half_good", False)
-                
-                half1_label = _calc_half_year_label(risk_from_gan, is_gan_yongshen)
-                half2_label = _calc_half_year_label(risk_from_zhi, is_zhi_yongshen)
-                
-                # 好运年判定：half1 或 half2 的 half_label == "好运"
-                if half1_label == "好运" or half2_label == "好运":
+                # 兼容映射
+                is_gan_yongshen = ln.get("start_good", ln.get("first_half_good", False))
+                is_zhi_yongshen = ln.get("later_good", ln.get("second_half_good", False))
+
+                start_label = _calc_half_year_label(risk_from_gan, is_gan_yongshen)
+                later_label = _calc_half_year_label(risk_from_zhi, is_zhi_yongshen)
+
+                # 好运年判定：start 或 later 的 label == "好运"
+                if start_label == "好运" or later_label == "好运":
                     next_good_year = year
                     next_good_year_offset = year - base_year
                     break
-    
+
     return {
-        "rule": "half1_or_half2_label_is_好运",
+        "rule": "start_or_later_label_is_好运",
         "future3_good_years": future3_good_years,
         "has_good_in_future3": has_good_in_future3,
         "next_good_year": next_good_year,          # int | null

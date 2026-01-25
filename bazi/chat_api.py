@@ -141,18 +141,18 @@ def _generate_answer(
                     year_label = year_data.get("year_label", "")
                     parts.append(f"{year}年：{year_label}（Y={Y:.1f}%）")
                     
-                    # 如果 Y < 25，显示上下半年详情
+                    # 如果 Y < 25，显示开始/后来详情
                     if Y < 25.0:
-                        half1 = year_data.get("half1", {})
-                        half2 = year_data.get("half2", {})
-                        if half1 and half2:
-                            parts.append(f"  上半年：{half1.get('half_label', '')}（H={half1.get('H', 0.0):.1f}%），下半年：{half2.get('half_label', '')}（H={half2.get('H', 0.0):.1f}%）")
-    
+                        start_data = year_data.get("start", {})
+                        later_data = year_data.get("later", {})
+                        if start_data and later_data:
+                            parts.append(f"  开始：{start_data.get('label', '')}（H={start_data.get('H', 0.0):.1f}%），后来：{later_data.get('label', '')}（H={later_data.get('H', 0.0):.1f}%）")
+
     # 3. 未来三年天气（FUTURE3_YEAR_GRADE）
     if "FUTURE3_YEAR_GRADE" in modules:
         year_grade = index.get("year_grade", {})
         future3 = year_grade.get("future3", [])
-        
+
         if future3:
             parts.append(f"\n【未来三年天气】")
             for year_data in future3:
@@ -160,13 +160,13 @@ def _generate_answer(
                 Y = year_data.get("Y", 0.0)
                 year_label = year_data.get("year_label", "")
                 parts.append(f"{year}年：{year_label}（Y={Y:.1f}%）")
-                
-                # 如果 Y < 25，显示上下半年详情
+
+                # 如果 Y < 25，显示开始/后来详情
                 if Y < 25.0:
-                    half1 = year_data.get("half1", {})
-                    half2 = year_data.get("half2", {})
-                    if half1 and half2:
-                        parts.append(f"  上半年：{half1.get('half_label', '')}（H={half1.get('H', 0.0):.1f}%），下半年：{half2.get('half_label', '')}（H={half2.get('H', 0.0):.1f}%）")
+                    start_data = year_data.get("start", {})
+                    later_data = year_data.get("later", {})
+                    if start_data and later_data:
+                        parts.append(f"  开始：{start_data.get('label', '')}（H={start_data.get('H', 0.0):.1f}%），后来：{later_data.get('label', '')}（H={later_data.get('H', 0.0):.1f}%）")
     
     # 4. 好运年份搜索（GOOD_YEAR_SEARCH）
     if "GOOD_YEAR_SEARCH" in modules:

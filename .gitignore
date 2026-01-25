@@ -46,3 +46,6 @@ ENV/
 *.zip
 partner_pack_*.zip
 
+
+# Claude Code
+.claude/

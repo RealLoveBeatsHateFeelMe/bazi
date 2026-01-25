@@ -411,7 +411,7 @@ def enrich_liunian(
             hints.append("提示：运年天克地冲（家人去世/生活环境变化剧烈，如出国上学打工）")
             break  # 每年只加一次
     
-    # 检查时柱天克地冲（从 clashes_natal 中检查 tkdc_targets）
+    # 检查时柱天克地冲（用于后续互斥判断，实际提示由 cli.py 生成）
     clashes_natal = liunian.get("clashes_natal", [])
     has_hour_tkdc = False
     for ev in clashes_natal:
@@ -420,7 +420,8 @@ def enrich_liunian(
         tkdc_targets = ev.get("tkdc_targets", [])
         for tkdc_target in tkdc_targets:
             if tkdc_target.get("pillar") == "hour":
-                hints.append("提示：事业家庭宫天克地冲（工作变动概率上升/可能出现搬家窗口）")
+                # 时柱天克地冲的提示由 cli.py 的 _generate_hour_tkdc_hint() 生成
+                # 这里只标记 has_hour_tkdc 用于互斥判断
                 has_hour_tkdc = True
                 break
         if has_hour_tkdc:

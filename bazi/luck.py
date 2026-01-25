@@ -464,8 +464,8 @@ class LiunianLuck:
     zhi: str
     gan_element: Optional[str]
     zhi_element: Optional[str]
-    first_half_good: bool   # 上半年（年干）是否用神 → 好运/坏运
-    second_half_good: bool  # 下半年（年支）是否用神 → 好运/坏运
+    start_good: bool   # 开始（年干）是否用神 → 好运/坏运（原"上半年"）
+    later_good: bool   # 后来（年支）是否用神 → 好运/坏运（原"下半年"）
     clashes_natal: List[Dict[str, Any]] = field(default_factory=list)   # 流年支 与 命局地支的冲
     clashes_dayun: List[Dict[str, Any]] = field(default_factory=list)   # 流年支 与 所在大运支的冲
 
@@ -936,8 +936,8 @@ def analyze_luck(
                 "zhi_shishen": zhi_shishen_ln,  # 地支主气十神
                 "is_gan_yongshen": gan_good_ln,  # 天干是否用神
                 "is_zhi_yongshen": zhi_good_ln,  # 地支是否用神
-                "first_half_good": gan_good_ln,
-                "second_half_good": zhi_good_ln,
+                "start_good": gan_good_ln,
+                "later_good": zhi_good_ln,
                 "is_good": is_good_ln,
                 "risk_from_gan": risk_from_gan,
                 "risk_from_zhi": risk_from_zhi,
@@ -1201,9 +1201,9 @@ def analyze_luck(
             gan_good_ln = bool(gan_el_ln and gan_el_ln in yongshen_elements)
             zhi_good_ln = bool(zhi_el_ln and zhi_el_ln in yongshen_elements)
 
-            # 流年：天干管上半年，地支管下半年
-            first_half_good = gan_good_ln
-            second_half_good = zhi_good_ln
+            # 流年：天干管开始，地支管后来
+            start_good = gan_good_ln
+            later_good = zhi_good_ln
 
             # 流年支 与 命局地支 的冲
             clash_ln_natal = detect_branch_clash(
@@ -1777,8 +1777,8 @@ def analyze_luck(
                 "zhi_shishen": zhi_shishen_ln,  # 地支主气十神
                 "is_gan_yongshen": gan_good_ln,  # 天干是否用神
                 "is_zhi_yongshen": zhi_good_ln,  # 地支是否用神
-                "first_half_good": first_half_good,  # 保留兼容字段（是否用神）
-                "second_half_good": second_half_good,  # 保留兼容字段（是否用神）
+                "start_good": start_good,  # 开始（天干）是否用神
+                "later_good": later_good,  # 后来（地支）是否用神
                 "is_good": is_good_ln,  # §4.4 流年好运判断（用神+风险≤15%）
                 "risk_from_gan": risk_from_gan,  # §6.1 天干引起的风险（不包含天克地冲）
                 "risk_from_zhi": risk_from_zhi,  # §6.1 地支引起的风险

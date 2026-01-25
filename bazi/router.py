@@ -164,7 +164,7 @@ def _decide_modules(
     elif intent in ("overall_recent", "recent_3_years"):
         # 整体/最近几年：需要 LAST5_YEAR_GRADE
         modules.append("LAST5_YEAR_GRADE")
-        reasons.append(f"近{len(years_used)}年天气回放索引（Y < 25 时包含上下半年）")
+        reasons.append(f"近{len(years_used)}年天气回放索引（Y < 25 时包含开始/后来）")
     elif intent == "named_year":
         # 点名某年：需要 LAST5_YEAR_GRADE（用于该年的详细信息）
         if years_used:
