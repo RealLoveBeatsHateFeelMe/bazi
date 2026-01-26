@@ -343,6 +343,7 @@ The "性格快速汇总" section is printed immediately after "其他性格" sec
 
 | Date | Change |
 |------|--------|
+| 2026-01-26 | **打印层协议化进行中**：year detail 已完成协议化（`- HINTS -` / `- DEBUG -` / `@` 结束符），LLM 信息与 Debug 信息分离；下一步：yun detail 和原局 detail；还需函数显示用神行业+大运期间职业变化 |
 | 2026-01-25 | Year detail report rendering complete; fixed hour TKDC/clash hints; about to build payload |
 | 2026-01-18 | Add §9 性格快速汇总; complete 食伤天赋卡; remove 财星关系倾向句 |
 | 2026-01-18 | Add §8 Personality Talent Cards (印星/财星/比劫/官杀 completed, 食伤 pending) |

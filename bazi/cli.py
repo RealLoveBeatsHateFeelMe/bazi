@@ -1133,6 +1133,30 @@ def _build_hint_summary_v2(
         result.append(hour_tkdc_line)
         result.append("")  # 组后空行
 
+    # ========== 2.5 运年天克地冲（大运与流年天克地冲） ==========
+    # 注意：这里先解析 hints，因为需要在 TKDC 区块内输出运年天克地冲
+    # 先扫描一遍 liunian_hints 找运年天克地冲
+    yuannian_tkdc_hint_temp = None
+    for hint in liunian_hints:
+        if "运年天克地冲" in hint:
+            yuannian_tkdc_hint_temp = hint
+            break
+
+    if yuannian_tkdc_hint_temp:
+        result.append(f"- {yuannian_tkdc_hint_temp}")
+        result.append("")  # 组后空行
+
+    # ========== 2.6 婚恋变化提醒（天干五合争合/双合） ==========
+    marriage_wuhe_hint_temp = None
+    for hint in liunian_hints:
+        if "婚恋变化提醒" in hint:
+            marriage_wuhe_hint_temp = hint
+            break
+
+    if marriage_wuhe_hint_temp:
+        result.append(f"- {marriage_wuhe_hint_temp}")
+        result.append("")  # 组后空行
+
     # ========== 3. 冲/合（与提示对齐） ==========
     # 从 liunian_hints 中提取提示信息
     feeling_hint = None  # 感情（单身：更易暧昧/受阻；有伴侣：争执起伏）
@@ -1140,12 +1164,20 @@ def _build_hint_summary_v2(
     extra_hint = None  # 合冲同现
     risk_hint = None
     cai_guansha_hints = []  # 财官杀提示
+    marriage_wuhe_hint = None  # 婚恋变化提醒（天干五合）
+    yuannian_tkdc_hint = None  # 运年天克地冲
 
     for hint in liunian_hints:
         if "风险管理选项" in hint:
             risk_hint = hint
         elif "合冲同现" in hint:
             extra_hint = hint
+        elif "婚恋变化提醒" in hint:
+            # 天干五合争合/双合婚恋提醒
+            marriage_wuhe_hint = hint
+        elif "运年天克地冲" in hint:
+            # 大运与流年天克地冲
+            yuannian_tkdc_hint = hint
         elif "提示：感情（" in hint:
             feeling_hint = hint.replace("提示：", "")
         elif "宫引动" in hint:
@@ -1249,6 +1281,10 @@ def _build_hint_summary_v2(
         result.append(line)
     for line in harmony_lines_with_hint:
         result.append(line)
+
+    # 输出财官杀缘分提示（男见财星/女见官杀）
+    for source, hint_text in cai_guansha_hints:
+        result.append(f"- {hint_text}")
 
     # ========== 4. 额外提示（合冲同现） ==========
     if extra_hint:
@@ -1395,6 +1431,315 @@ def _print_liunian_v2(
     )
 
 
+def _print_liunian_v3(
+    ln: dict,
+    bazi: dict,
+    day_gan: str,
+    yongshen_elements: list,
+) -> None:
+    """打印流年块（协议版 v3）。
+
+    新格式：
+    === YEAR_SUMMARY ===
+    year: 2026
+    ganzhi: 丙午
+    age: 21
+    Y: 0.0
+    前期: 好运
+    前期标签: xxx
+    后期: 好运
+    后期标签: xxx
+
+    === HINTS ===
+    [category] hint_text
+
+    === DEBUG ===
+    天干=X | 十神=Y | 用神=Z | 风险=W% | 标签=T
+    ...
+    """
+    from .shishen import get_shishen, get_branch_main_gan, get_shishen_label
+
+    # 基础数据
+    year = ln.get("year")
+    liunian_gan = ln.get("gan", "")
+    liunian_zhi = ln.get("zhi", "")
+    age = ln.get("age")
+    total_risk = ln.get("total_risk_percent", 0.0)
+    risk_from_gan = ln.get("risk_from_gan", 0.0)
+    risk_from_zhi = ln.get("risk_from_zhi", 0.0)
+    tkdc_risk = ln.get("tkdc_risk_percent", 0.0)
+
+    gan_element = ln.get("gan_element", "")
+    zhi_element = ln.get("zhi_element", "")
+    is_gan_yongshen = gan_element in yongshen_elements if gan_element else False
+    is_zhi_yongshen = zhi_element in yongshen_elements if zhi_element else False
+
+    # 计算十神和标签
+    gan_shishen = get_shishen(day_gan, liunian_gan) if liunian_gan else None
+    zhi_main_gan = get_branch_main_gan(liunian_zhi) if liunian_zhi else None
+    zhi_shishen = get_shishen(day_gan, zhi_main_gan) if zhi_main_gan else None
+    gan_label = get_shishen_label(gan_shishen, is_gan_yongshen) if gan_shishen else ""
+    zhi_label = get_shishen_label(zhi_shishen, is_zhi_yongshen) if zhi_shishen else ""
+
+    # 计算前期/后期判词
+    h1_label = _calc_half_year_label(risk_from_gan, is_gan_yongshen)
+    h2_label = _calc_half_year_label(risk_from_zhi, is_zhi_yongshen)
+
+    # 全年判词（用于 >= 25 或 >= 40 的情况）
+    if total_risk >= 40.0:
+        h1_label = h2_label = "凶（棘手/意外）"
+    elif total_risk >= 25.0:
+        h1_label = h2_label = "明显变动（可克服）"
+
+    # ========== YEAR_SUMMARY ==========
+    print("-" * 40)
+    print(f"  {year}年 {liunian_gan}{liunian_zhi} | 虚龄{age}岁 | Y={total_risk:.1f}")
+    print()
+    print(f"前期: {h1_label}")
+    print(f"前期标签: {gan_label}")
+    print()
+    print(f"后期: {h2_label}")
+    print(f"后期标签: {zhi_label}")
+
+    # ========== HINTS ==========
+    liunian_hints = ln.get("hints", []) or []
+    all_events = ln.get("all_events", [])
+    static_events = [ev for ev in all_events if ev.get("type") in (
+        "static_clash_activation", "static_punish_activation", "pattern_static_activation", "static_tkdc_activation"
+    )]
+    clashes_natal = ln.get("clashes_natal", []) or []
+    clashes_dayun = ln.get("clashes_dayun", []) or []
+    pattern_hints = _generate_pattern_hints(all_events, static_events, clashes_natal)
+    tkdc_data = _collect_tkdc_evidences(clashes_natal, clashes_dayun, static_events)
+
+    hint_lines, no_hint_lines = _build_hint_summary_v3(
+        ln, bazi, pattern_hints, tkdc_data, liunian_hints, total_risk
+    )
+
+    print()
+    print("- HINTS -")
+    if hint_lines:
+        for line in hint_lines:
+            print(line)
+    else:
+        print("（无）")
+
+    # ========== DEBUG ==========
+    print()
+    print("- DEBUG -")
+    # 调用完整版计算过程打印
+    _print_liunian_calculation_verbatim(
+        ln,
+        liunian_gan,
+        liunian_zhi,
+        gan_shishen,
+        zhi_shishen,
+        is_gan_yongshen,
+        is_zhi_yongshen,
+        day_gan,
+        bazi,
+        yongshen_elements,
+        no_hint_lines,
+    )
+    print()
+    print("@")
+    print()
+
+
+def _build_hint_summary_v3(
+    ln: dict,
+    bazi: dict,
+    pattern_hints: list,
+    tkdc_data: dict,
+    liunian_hints: list,
+    total_risk: float,
+) -> list:
+    """构建提示汇总（协议版 v3，带 [category] 前缀）。"""
+    result = []
+
+    # ========== 1. 模式 [模式] ==========
+    for hint in pattern_hints:
+        if "伤官见官" in hint:
+            result.append(f"[模式] 伤官见官: {hint}")
+        elif "枭神夺食" in hint:
+            result.append(f"[模式] 枭神夺食: {hint}")
+
+    # ========== 2. 天克地冲 [天克地冲] ==========
+    for clash in ln.get("clashes_natal", []) or []:
+        if not clash:
+            continue
+        tkdc_targets = clash.get("tkdc_targets", [])
+        for target in tkdc_targets:
+            target_pillar = target.get("pillar", "")
+            if target_pillar == "year":
+                continue  # 年柱不输出
+
+            flow_gan = clash.get("flow_gan", "")
+            flow_branch = clash.get("flow_branch", "")
+            target_gan = target.get("target_gan", "")
+            target_zhi = clash.get("target_branch", "")
+            pillar_map = {"month": "月柱", "day": "日柱", "hour": "时柱"}
+            pillar_cn = pillar_map.get(target_pillar, target_pillar)
+            palace = _get_pillar_palace(target_pillar)
+
+            if target_pillar == "hour":
+                result.append(f"[天克地冲] {pillar_cn}/{palace}: 流年 {flow_gan}{flow_branch} × 命局 {target_gan}{target_zhi} → 可能搬家/换工作")
+            else:
+                result.append(f"[天克地冲] {pillar_cn}/{palace}: 流年 {flow_gan}{flow_branch} × 命局 {target_gan}{target_zhi} → 可能出现意外、生活环境剧变，少数情况下牵动亲缘离别")
+
+    # ========== 2.5 运年天克地冲 [天克地冲] ==========
+    for hint in liunian_hints:
+        if "运年天克地冲" in hint:
+            result.append(f"[天克地冲] 运年: {hint.replace('提示：', '')}")
+
+    # ========== 2.6 婚恋变化提醒 [感情] ==========
+    for hint in liunian_hints:
+        if "婚恋变化提醒" in hint:
+            result.append(f"[感情] {hint}")
+
+    # ========== 3. 冲/合 ==========
+    has_hour_tkdc = any(
+        target.get("pillar") == "hour"
+        for clash in (ln.get("clashes_natal", []) or [])
+        for target in clash.get("tkdc_targets", [])
+        if clash
+    )
+
+    clash_lines = []
+    harmony_lines = []
+    no_hint_lines = []
+
+    # 处理冲
+    for ev in ln.get("clashes_natal", []) or []:
+        if not ev:
+            continue
+        flow_branch = ev.get("flow_branch", "")
+        target_branch = ev.get("target_branch", "")  # 从事件层获取
+        for t in ev.get("targets", []):
+            palace_full = t.get("palace", "")
+            palace = _simplify_palace_name(palace_full)
+            if not palace:
+                continue
+            clash_name = f"{flow_branch}{target_branch}冲"
+
+            if palace in ("婚姻宫", "夫妻宫"):
+                clash_lines.append(f"[感情] {palace}被冲: {clash_name} → 单身更易暧昧/受阻；有伴侣争执起伏")
+            elif palace == "事业家庭宫":
+                if not has_hour_tkdc:
+                    clash_lines.append(f"[变动] {palace}被冲: {clash_name} → 可能搬家/换工作")
+            else:
+                no_hint_lines.append(f"[无提示] {palace}被冲: {clash_name}")
+
+    # 处理合
+    for ev in ln.get("harmonies_natal", []) or []:
+        if ev.get("type") != "branch_harmony":
+            continue
+        subtype = ev.get("subtype")
+        if subtype not in ("liuhe", "banhe"):
+            continue
+
+        flow_branch = ev.get("flow_branch", "")
+        for t in ev.get("targets", []):
+            palace_full = t.get("palace", "")
+            target_branch = t.get("target_branch", "")
+            palace = _simplify_palace_name(palace_full)
+            if not palace:
+                continue
+
+            if subtype == "liuhe":
+                harmony_name = f"{flow_branch}{target_branch}合"
+            else:
+                matched = ev.get("matched_branches", [])
+                harmony_name = f"{matched[0]}{matched[1]}半合" if len(matched) >= 2 else f"{flow_branch}{target_branch}半合"
+
+            if palace in ("婚姻宫", "夫妻宫"):
+                harmony_lines.append(f"[感情] {palace}被合: {harmony_name} → 单身更容易暧昧/推进；有伴侣关系推进或波动")
+            else:
+                no_hint_lines.append(f"[无提示] {palace}被合: {harmony_name}")
+
+    result.extend(clash_lines)
+    result.extend(harmony_lines)
+
+    # ========== 4. 缘分提示 [感情] ==========
+    for hint in liunian_hints:
+        if "缘分（天干）" in hint:
+            result.append(f"[感情] 缘分(天干): {hint.replace('提示：', '').replace('缘分（天干）：', '')}")
+        elif "缘分（地支）" in hint:
+            result.append(f"[感情] 缘分(地支): {hint.replace('提示：', '').replace('缘分（地支）：', '')}")
+
+    # ========== 5. 合冲同现 [感情] ==========
+    for hint in liunian_hints:
+        if "合冲同现" in hint:
+            result.append(f"[感情] 合冲同现: {hint.replace('提示：', '').replace('感情线合冲同现', '')}")
+
+    # ========== 6. 风险管理 [建议] ==========
+    for hint in liunian_hints:
+        if "风险管理选项" in hint:
+            result.append(f"[建议] 风险管理: {hint.replace('风险管理选项（供参考）：', '')}")
+
+    # ========== 7. 无提示事实 -> 移到 DEBUG ==========
+    # no_hint_lines 不再添加到 result，而是单独返回
+
+    return result, no_hint_lines
+
+
+def _print_debug_events_v3(
+    ln: dict,
+    all_events: list,
+    static_events: list,
+    clashes_natal: list,
+    clashes_dayun: list,
+) -> None:
+    """打印 DEBUG 区的事件详情（简化版）。"""
+    # 模式事件
+    for ev in all_events:
+        if ev.get("type") == "pattern":
+            pattern_type = ev.get("pattern_type", "")
+            risk = ev.get("risk_percent", 0.0)
+            kind = ev.get("kind", "")
+            pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
+            layer = "天干层" if kind == "gan" else "地支层"
+            print(f"模式（{layer}）: {pattern_name}，风险 {risk:.1f}%")
+
+    # 冲事件
+    for ev in clashes_natal:
+        if not ev:
+            continue
+        flow_branch = ev.get("flow_branch", "")
+        target_branch = ev.get("target_branch", "")
+        risk = ev.get("risk_percent", 0.0)
+        targets = ev.get("targets", [])
+        pillars = "/".join(t.get("pillar", "") for t in targets)
+        print(f"冲: {flow_branch}{target_branch}冲 ({pillars})，风险 {risk:.1f}%")
+
+    # 运年相冲
+    for ev in clashes_dayun:
+        if not ev:
+            continue
+        dayun_zhi = ev.get("dayun_zhi", "")
+        liunian_zhi = ev.get("liunian_zhi", "")
+        risk = ev.get("risk_percent", 0.0)
+        print(f"运年相冲: 大运支 {dayun_zhi} 与 流年支 {liunian_zhi} 相冲，风险 {risk:.1f}%")
+
+    # 天克地冲（流年与命局）
+    for ev in clashes_natal:
+        if not ev:
+            continue
+        tkdc_targets = ev.get("tkdc_targets", [])
+        for target in tkdc_targets:
+            flow_gan = ev.get("flow_gan", "")
+            flow_branch = ev.get("flow_branch", "")
+            target_gan = target.get("target_gan", "")
+            target_zhi = ev.get("target_branch", "")
+            pillar = target.get("pillar", "")
+            print(f"天克地冲: 流年 {flow_gan}{flow_branch} 与 命局{pillar} {target_gan}{target_zhi} 天克地冲")
+
+    # 运年天克地冲（从 hints 读取）
+    for hint in (ln.get("hints", []) or []):
+        if "运年天克地冲" in hint:
+            print(f"运年天克地冲: (见 HINTS)")
+
+
 def _print_liunian_calculation_verbatim(
     ln: dict,
     liunian_gan: str,
@@ -1406,6 +1751,7 @@ def _print_liunian_calculation_verbatim(
     day_gan: str,
     bazi: dict,
     yongshen_elements: list,
+    no_hint_lines: list = None,
 ) -> None:
     """打印流年计算过程（保持原有格式 verbatim）。"""
     from .shishen import get_shishen_label
@@ -1419,6 +1765,12 @@ def _print_liunian_calculation_verbatim(
     gan_label = get_shishen_label(gan_shishen, is_gan_yongshen) if gan_shishen else ""
     zhi_label = get_shishen_label(zhi_shishen, is_zhi_yongshen) if zhi_shishen else ""
 
+    # 打印无提示事实（从 HINTS 移过来的）
+    if no_hint_lines:
+        for line in no_hint_lines:
+            print(f"        {line}")
+        print("")
+
     # 打印总危险系数（带分隔线）
     print(f"        --- 总危险系数：{total_risk:.1f}% ---")
 
@@ -1430,8 +1782,8 @@ def _print_liunian_calculation_verbatim(
     else:
         print(f"        天干 {liunian_gan}｜十神 -｜用神 {gan_yongshen_str}")
 
-    # 打印开始危险系数
-    print(f"        - 开始危险系数（天干引起）：{risk_from_gan:.1f}%")
+    # 打印前期危险系数
+    print(f"        - 前期危险系数（天干引起）：{risk_from_gan:.1f}%")
 
     # 打印地支十神行
     zhi_yongshen_str = "是" if is_zhi_yongshen else "否"
@@ -1441,8 +1793,8 @@ def _print_liunian_calculation_verbatim(
     else:
         print(f"        地支 {liunian_zhi}｜十神 -｜用神 {zhi_yongshen_str}")
 
-    # 打印后来危险系数
-    print(f"        - 后来危险系数（地支引起）：{risk_from_zhi:.1f}%")
+    # 打印后期危险系数
+    print(f"        - 后期危险系数（地支引起）：{risk_from_zhi:.1f}%")
 
     # 打印天克地冲危险系数
     print(f"        - 天克地冲危险系数：{tkdc_risk:.1f}%")
@@ -1474,11 +1826,11 @@ def _print_liunian_calculation_verbatim(
         elif ev_type in ("branch_clash", "dayun_liunian_branch_clash", "punishment"):
             zhi_events.append(ev)
 
-    # 打印开始事件（天干相关）
+    # 打印前期事件（天干相关）
     has_gan_events = gan_events or any(ev.get("type") == "pattern_static_activation" and (ev.get("risk_from_gan", 0.0) > 0.0) for ev in static_events)
 
     if has_gan_events:
-        print("        开始事件（天干引起）：")
+        print("        前期事件（天干引起）：")
 
         # 收集所有动态天干模式，按类型分组
         pattern_gan_dynamic = {}
@@ -1525,13 +1877,13 @@ def _print_liunian_calculation_verbatim(
 
         print("")
 
-    # 打印后来事件（地支相关）
+    # 打印后期事件（地支相关）
     has_zhi_events = zhi_events or any(ev.get("type") in ("static_clash_activation", "static_punish_activation") or (ev.get("type") == "pattern_static_activation" and ev.get("risk_from_zhi", 0.0) > 0.0) for ev in static_events)
     if ln.get("clashes_natal") or ln.get("clashes_dayun"):
         has_zhi_events = True
 
     if has_zhi_events:
-        print("        后来事件（地支引起）：")
+        print("        后期事件（地支引起）：")
 
         # 先打印所有动态冲
         total_clash_dynamic = 0.0
@@ -3159,7 +3511,7 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             # 大运开始之前，只打印流年，不打印大运信息
             print("    —— 大运开始之前的流年 ——")
             for ln in lns:
-                _print_liunian_v2(ln, bazi, day_gan, yongshen_elements)
+                _print_liunian_v3(ln, bazi, day_gan, yongshen_elements)
             # 跳过大运相关打印，继续下一个 group
             continue
 
@@ -3426,12 +3778,12 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         for line in tip_lines:
             print(line)
 
-        # 该大运下面的十个流年（使用新版模板 v2）
+        # 该大运下面的十个流年（使用新版协议格式 v3）
         print("    —— 该大运对应的流年 ——")
         for ln in lns:
-            _print_liunian_v2(ln, bazi, day_gan, yongshen_elements)
+            _print_liunian_v3(ln, bazi, day_gan, yongshen_elements)
 
-        # 旧版流年代码已移除，使用新版 _print_liunian_v2
+        # 旧版流年代码已移除，使用新版 _print_liunian_v3
 
     # 这里不再需要额外的 print，因为 _print_liunian_v2 已处理
 
