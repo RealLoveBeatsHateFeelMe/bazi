@@ -994,6 +994,766 @@ def _format_clash_natal(ev: dict) -> str:
 
 
 
+# ============================================================
+# 流年打印新模板 v2
+# ============================================================
+
+def _format_h1_h2_title(
+    risk_from_gan: float,
+    risk_from_zhi: float,
+    is_gan_yongshen: bool,
+    is_zhi_yongshen: bool,
+    total_risk: float,
+) -> str:
+    """计算新版年度标题行：开始 xxx，后来 xxx
+
+    规则：
+    - 若总风险 >= 40：全年 凶（棘手/意外）
+    - 若 25 <= 总风险 < 40：全年 明显变动（可克服）
+    - 否则输出 开始/后来 各自的判词
+    """
+    if total_risk >= 40.0:
+        return "全年 凶（棘手/意外）"
+    if total_risk >= 25.0:
+        return "全年 明显变动（可克服）"
+
+    h1_label = _calc_half_year_label(risk_from_gan, is_gan_yongshen)
+    h2_label = _calc_half_year_label(risk_from_zhi, is_zhi_yongshen)
+    return f"开始 {h1_label}，后来 {h2_label}"
+
+
+def _format_h1_h2_detail_lines(
+    liunian_gan: str,
+    liunian_zhi: str,
+    gan_shishen: str,
+    zhi_shishen: str,
+    is_gan_yongshen: bool,
+    is_zhi_yongshen: bool,
+    gan_label: str,
+    zhi_label: str,
+) -> list:
+    """生成 H1/H2 详情行。
+
+    格式：
+    开始(H1)：天干 己 | 食神｜用神 否｜标签【重点】：贪舒服/拖延/松散
+    后来(H2)：地支 卯 | 偏印｜用神 是｜标签【重点】：偏门技术/思想突破/学习研究/灵感
+    """
+    lines = []
+    gan_yongshen_str = "是" if is_gan_yongshen else "否"
+    zhi_yongshen_str = "是" if is_zhi_yongshen else "否"
+
+    gan_ss = gan_shishen or "-"
+    zhi_ss = zhi_shishen or "-"
+
+    # H1 行：开始(H1)：天干 X | 十神｜用神 是/否｜标签【重点】：xxx
+    h1_tag_part = f"｜标签【重点】：{gan_label}" if gan_label else ""
+    lines.append(f"开始(H1)：天干 {liunian_gan} | {gan_ss}｜用神 {gan_yongshen_str}{h1_tag_part}")
+
+    # H2 行：后来(H2)：地支 X | 十神｜用神 是/否｜标签【重点】：xxx
+    h2_tag_part = f"｜标签【重点】：{zhi_label}" if zhi_label else ""
+    lines.append(f"后来(H2)：地支 {liunian_zhi} | {zhi_ss}｜用神 {zhi_yongshen_str}{h2_tag_part}")
+
+    return lines
+
+
+def _build_hint_summary_v2(
+    ln: dict,
+    bazi: dict,
+    pattern_hints: list,
+    tkdc_data: dict,
+    liunian_hints: list,
+    total_risk: float,
+) -> list:
+    """构建提示汇总（新版 v2）。
+
+    分组顺序：
+    1. 模式(pattern)
+    2. 天克地冲
+    3. 冲/合（与提示对齐）
+    4. 额外提示（合冲同现）
+    5. 风险管理选项
+    6. 无提示的事实
+    """
+    result = []
+
+    # ========== 1. 模式 ==========
+    for hint in pattern_hints:
+        # 提取模式名称和文案
+        if "伤官见官" in hint:
+            result.append(f"- 模式：伤官见官 → {hint}")
+            result.append("")  # 组后空行
+        elif "枭神夺食" in hint:
+            result.append(f"- 模式：枭神夺食 → {hint}")
+            result.append("")  # 组后空行
+
+    # ========== 2. 天克地冲 ==========
+    # 收集天克地冲事件
+    tkdc_lines = []
+    hour_tkdc_line = None  # 时柱天克地冲单独记录
+    has_hour_tkdc = False
+
+    for clash in ln.get("clashes_natal", []) or []:
+        if not clash:
+            continue
+        tkdc_targets = clash.get("tkdc_targets", [])
+        for target in tkdc_targets:
+            target_pillar = target.get("pillar", "")
+            if target_pillar == "year":
+                continue  # 年柱不输出
+
+            flow_gan = clash.get("flow_gan", "")
+            flow_branch = clash.get("flow_branch", "")
+            target_gan = target.get("target_gan", "")  # 注意：是 target_gan 不是 gan
+            target_zhi = clash.get("target_branch", "")
+
+            if target_pillar == "hour":
+                # 时柱天克地冲：使用专门的提示（搬家/换工作）
+                has_hour_tkdc = True
+                hour_tkdc_line = (
+                    f"- 天克地冲（时柱）：流年 {flow_gan}{flow_branch} × 命局时柱 {target_gan}{target_zhi}（事业家庭宫） → 提示：{_HOUR_TKDC_HINT}"
+                )
+            else:
+                # 月柱/日柱：普通天克地冲
+                pillar_map = {"month": "月柱", "day": "日柱"}
+                pillar_cn = pillar_map.get(target_pillar, target_pillar)
+                palace = _get_pillar_palace(target_pillar)
+
+                tkdc_lines.append(
+                    f"- 天克地冲（{pillar_cn}）：流年 {flow_gan}{flow_branch} × 命局{pillar_cn} {target_gan}{target_zhi}（{palace}） → 提示：{_TKDC_HINT}"
+                )
+
+    # 先输出普通天克地冲
+    if tkdc_lines:
+        for line in tkdc_lines:
+            result.append(line)
+        result.append("")  # 组后空行
+
+    # 再输出时柱天克地冲
+    if hour_tkdc_line:
+        result.append(hour_tkdc_line)
+        result.append("")  # 组后空行
+
+    # ========== 3. 冲/合（与提示对齐） ==========
+    # 从 liunian_hints 中提取提示信息
+    feeling_hint = None  # 感情（单身：更易暧昧/受阻；有伴侣：争执起伏）
+    palace_hints = {}  # {宫位: 提示文案}
+    extra_hint = None  # 合冲同现
+    risk_hint = None
+    cai_guansha_hints = []  # 财官杀提示
+
+    for hint in liunian_hints:
+        if "风险管理选项" in hint:
+            risk_hint = hint
+        elif "合冲同现" in hint:
+            extra_hint = hint
+        elif "提示：感情（" in hint:
+            feeling_hint = hint.replace("提示：", "")
+        elif "宫引动" in hint:
+            # 提取宫位名称
+            for palace_name in ["婚姻宫", "夫妻宫", "祖上宫", "事业家庭宫"]:
+                if palace_name in hint:
+                    palace_hints[palace_name] = hint.replace("提示：", "")
+                    break
+        elif "缘分（天干）" in hint:
+            cai_guansha_hints.append(("天干", hint.replace("提示：", "")))
+        elif "缘分（地支）" in hint:
+            cai_guansha_hints.append(("地支", hint.replace("提示：", "")))
+
+    # 收集冲事件并对齐提示
+    # 注意：对于同一个冲事件（相同 flow_branch + target_branch），如果婚姻宫/夫妻宫有 feeling_hint，
+    # 则其他宫位（如祖上宫）应被完全抑制（不输出无提示行）
+    # 互斥规则：时柱天克地冲 > 时柱被冲，若已有时柱天克地冲，则时柱被冲不输出
+    clash_lines_with_hint = []
+    clash_lines_no_hint = []
+
+    for ev in ln.get("clashes_natal", []) or []:
+        if not ev:
+            continue
+        flow_branch = ev.get("flow_branch", "")
+        target_branch = ev.get("target_branch", "")
+        targets = ev.get("targets", [])
+
+        # 检查这个冲是否有婚姻宫/夫妻宫被感情 hint 覆盖
+        has_feeling_hint_palace = False
+        for t in targets:
+            palace = _simplify_palace_name(t.get("palace", ""))
+            if palace in ("婚姻宫", "夫妻宫") and feeling_hint:
+                has_feeling_hint_palace = True
+                break
+
+        for t in targets:
+            palace_full = t.get("palace", "")
+            palace = _simplify_palace_name(palace_full)
+            if not palace:
+                continue
+
+            clash_name = f"{flow_branch}{target_branch}冲"
+
+            # 尝试匹配提示
+            if palace in palace_hints:
+                hint_text = palace_hints[palace]
+                clash_lines_with_hint.append(f"- 冲：{clash_name}（{palace}） → 提示：{hint_text}")
+            elif feeling_hint and palace in ("婚姻宫", "夫妻宫"):
+                clash_lines_with_hint.append(f"- 冲：{clash_name}（{palace}） → 提示：{feeling_hint}")
+            elif has_feeling_hint_palace:
+                # 如果同一冲事件的其他宫位已有 feeling_hint，则完全抑制这个宫位
+                pass
+            elif palace == "事业家庭宫":
+                # 事业家庭宫（时柱）被冲：检查互斥规则
+                if has_hour_tkdc:
+                    # 已有时柱天克地冲，时柱被冲不再输出（互斥规则）
+                    pass
+                else:
+                    # 无时柱天克地冲，输出搬家/换工作提示
+                    clash_lines_with_hint.append(f"- 冲：{clash_name}（{palace}） → 提示：{_HOUR_CLASH_HINT}")
+            else:
+                clash_lines_no_hint.append(f"- （无提示）冲：{clash_name}（{palace}）")
+
+    # 收集合事件并对齐提示
+    harmony_lines_with_hint = []
+    harmony_lines_no_hint = []
+
+    for ev in ln.get("harmonies_natal", []) or []:
+        if ev.get("type") != "branch_harmony":
+            continue
+        subtype = ev.get("subtype")
+        if subtype not in ("liuhe", "banhe"):
+            continue
+
+        flow_branch = ev.get("flow_branch", "")
+        for t in ev.get("targets", []):
+            palace_full = t.get("palace", "")
+            target_branch = t.get("target_branch", "")
+            palace = _simplify_palace_name(palace_full)
+            if not palace:
+                continue
+
+            if subtype == "liuhe":
+                harmony_name = f"{flow_branch}{target_branch}合"
+            else:
+                matched = ev.get("matched_branches", [])
+                if len(matched) >= 2:
+                    harmony_name = f"{matched[0]}{matched[1]}半合"
+                else:
+                    harmony_name = f"{flow_branch}{target_branch}半合"
+
+            # 尝试匹配提示
+            if palace in palace_hints:
+                hint_text = palace_hints[palace]
+                harmony_lines_with_hint.append(f"- 合：{harmony_name}（{palace}） → 提示：{hint_text}")
+            else:
+                harmony_lines_no_hint.append(f"- （无提示）合：{harmony_name}（{palace}）")
+
+    # 输出有提示的冲/合
+    for line in clash_lines_with_hint:
+        result.append(line)
+    for line in harmony_lines_with_hint:
+        result.append(line)
+
+    # ========== 4. 额外提示（合冲同现） ==========
+    if extra_hint:
+        result.append(f"- 额外提示：{extra_hint.replace('提示：', '')}")
+
+    # 在冲/合后添加空行（如果有内容）
+    if clash_lines_with_hint or harmony_lines_with_hint or extra_hint:
+        result.append("")
+
+    # ========== 5. 风险管理选项 ==========
+    if risk_hint:
+        result.append(f"- {risk_hint}")
+
+    # ========== 6. 无提示的事实 ==========
+    if clash_lines_no_hint or harmony_lines_no_hint:
+        for line in clash_lines_no_hint:
+            result.append(line)
+        for line in harmony_lines_no_hint:
+            result.append(line)
+
+    # 清理末尾多余空行
+    while result and result[-1] == "":
+        result.pop()
+
+    return result
+
+
+def _simplify_palace_name(palace_full: str) -> str:
+    """简化宫位名称。"""
+    if "婚姻宫" in palace_full:
+        return "婚姻宫"
+    elif "夫妻宫" in palace_full:
+        return "夫妻宫"
+    elif "事业家庭" in palace_full or "家庭事业" in palace_full:
+        return "事业家庭宫"
+    elif "祖上宫" in palace_full:
+        return "祖上宫"
+    return ""
+
+
+def _get_pillar_palace(pillar: str) -> str:
+    """获取柱位对应的宫位。"""
+    palace_map = {
+        "year": "祖上宫",
+        "month": "婚姻宫",
+        "day": "夫妻宫",
+        "hour": "事业家庭宫",
+    }
+    return palace_map.get(pillar, "")
+
+
+def _print_liunian_v2(
+    ln: dict,
+    bazi: dict,
+    day_gan: str,
+    yongshen_elements: list,
+) -> None:
+    """打印流年块（新版模板 v2）。
+
+    模板结构：
+    1. 年份头：YYYY 年 干支（虚龄 XX 岁）：H1 xxx，H2 xxx
+    2. H1/H2 详情行
+    3. 提示汇总（分组排序）
+    4. 计算过程（verbatim）
+    """
+    from .shishen import get_shishen, get_branch_main_gan, get_shishen_label
+
+    # 基础数据
+    year = ln.get("year")
+    liunian_gan = ln.get("gan", "")
+    liunian_zhi = ln.get("zhi", "")
+    age = ln.get("age")
+    total_risk = ln.get("total_risk_percent", 0.0)
+    risk_from_gan = ln.get("risk_from_gan", 0.0)
+    risk_from_zhi = ln.get("risk_from_zhi", 0.0)
+    tkdc_risk = ln.get("tkdc_risk_percent", 0.0)
+
+    gan_element = ln.get("gan_element", "")
+    zhi_element = ln.get("zhi_element", "")
+    is_gan_yongshen = gan_element in yongshen_elements if gan_element else False
+    is_zhi_yongshen = zhi_element in yongshen_elements if zhi_element else False
+
+    # 计算十神
+    gan_shishen = get_shishen(day_gan, liunian_gan) if liunian_gan else None
+    zhi_main_gan = get_branch_main_gan(liunian_zhi) if liunian_zhi else None
+    zhi_shishen = get_shishen(day_gan, zhi_main_gan) if zhi_main_gan else None
+
+    # 计算标签
+    gan_label = get_shishen_label(gan_shishen, is_gan_yongshen) if gan_shishen else ""
+    zhi_label = get_shishen_label(zhi_shishen, is_zhi_yongshen) if zhi_shishen else ""
+
+    # 1. 打印年份头
+    title = _format_h1_h2_title(
+        risk_from_gan, risk_from_zhi,
+        is_gan_yongshen, is_zhi_yongshen,
+        total_risk
+    )
+    print(f"{year} 年 {liunian_gan}{liunian_zhi}（虚龄 {age} 岁）：{title}")
+
+    # 2. 打印 H1/H2 详情行
+    h1h2_lines = _format_h1_h2_detail_lines(
+        liunian_gan, liunian_zhi,
+        gan_shishen, zhi_shishen,
+        is_gan_yongshen, is_zhi_yongshen,
+        gan_label, zhi_label
+    )
+    for line in h1h2_lines:
+        print(line)
+
+    # 3. 收集并打印提示汇总
+    liunian_hints = ln.get("hints", []) or []
+
+    # 收集模式提示
+    all_events = ln.get("all_events", [])
+    static_events = [ev for ev in all_events if ev.get("type") in (
+        "static_clash_activation", "static_punish_activation", "pattern_static_activation", "static_tkdc_activation"
+    )]
+    clashes_natal = ln.get("clashes_natal", []) or []
+    clashes_dayun = ln.get("clashes_dayun", []) or []
+    pattern_hints = _generate_pattern_hints(all_events, static_events, clashes_natal)
+
+    # 收集天克地冲数据
+    tkdc_data = _collect_tkdc_evidences(clashes_natal, clashes_dayun, static_events)
+
+    # 构建提示汇总（新版 v2）
+    hint_lines = _build_hint_summary_v2(
+        ln, bazi, pattern_hints, tkdc_data, liunian_hints, total_risk
+    )
+
+    if hint_lines:
+        print()
+        print("提示汇总：")
+        for line in hint_lines:
+            print(line)
+        print()
+
+    # 4. 打印计算过程（verbatim）
+    print("计算过程（Evidence / Debug，仅供开发者）：")
+    _print_liunian_calculation_verbatim(
+        ln, liunian_gan, liunian_zhi,
+        gan_shishen, zhi_shishen,
+        is_gan_yongshen, is_zhi_yongshen,
+        day_gan, bazi, yongshen_elements
+    )
+
+
+def _print_liunian_calculation_verbatim(
+    ln: dict,
+    liunian_gan: str,
+    liunian_zhi: str,
+    gan_shishen: str,
+    zhi_shishen: str,
+    is_gan_yongshen: bool,
+    is_zhi_yongshen: bool,
+    day_gan: str,
+    bazi: dict,
+    yongshen_elements: list,
+) -> None:
+    """打印流年计算过程（保持原有格式 verbatim）。"""
+    from .shishen import get_shishen_label
+    from .config import PILLAR_PALACE
+
+    total_risk = ln.get("total_risk_percent", 0.0)
+    risk_from_gan = ln.get("risk_from_gan", 0.0)
+    risk_from_zhi = ln.get("risk_from_zhi", 0.0)
+    tkdc_risk = ln.get("tkdc_risk_percent", 0.0)
+
+    gan_label = get_shishen_label(gan_shishen, is_gan_yongshen) if gan_shishen else ""
+    zhi_label = get_shishen_label(zhi_shishen, is_zhi_yongshen) if zhi_shishen else ""
+
+    # 打印总危险系数（带分隔线）
+    print(f"        --- 总危险系数：{total_risk:.1f}% ---")
+
+    # 打印天干十神行
+    gan_yongshen_str = "是" if is_gan_yongshen else "否"
+    if gan_shishen:
+        label_str = f"｜标签：{gan_label}" if gan_label else ""
+        print(f"        天干 {liunian_gan}｜十神 {gan_shishen}｜用神 {gan_yongshen_str}{label_str}")
+    else:
+        print(f"        天干 {liunian_gan}｜十神 -｜用神 {gan_yongshen_str}")
+
+    # 打印开始危险系数
+    print(f"        - 开始危险系数（天干引起）：{risk_from_gan:.1f}%")
+
+    # 打印地支十神行
+    zhi_yongshen_str = "是" if is_zhi_yongshen else "否"
+    if zhi_shishen:
+        label_str = f"｜标签：{zhi_label}" if zhi_label else ""
+        print(f"        地支 {liunian_zhi}｜十神 {zhi_shishen}｜用神 {zhi_yongshen_str}{label_str}")
+    else:
+        print(f"        地支 {liunian_zhi}｜十神 -｜用神 {zhi_yongshen_str}")
+
+    # 打印后来危险系数
+    print(f"        - 后来危险系数（地支引起）：{risk_from_zhi:.1f}%")
+
+    # 打印天克地冲危险系数
+    print(f"        - 天克地冲危险系数：{tkdc_risk:.1f}%")
+    print("")
+
+    # 组织所有事件
+    all_events = ln.get("all_events", [])
+    gan_events = []
+    zhi_events = []
+    static_events = []
+
+    for ev in all_events:
+        ev_type = ev.get("type", "")
+        if ev_type in ("static_clash_activation", "static_punish_activation", "pattern_static_activation", "static_tkdc_activation"):
+            static_events.append(ev)
+        elif ev_type == "pattern":
+            kind = ev.get("kind", "")
+            if kind == "gan":
+                gan_events.append(ev)
+            elif kind == "zhi":
+                zhi_events.append(ev)
+        elif ev_type == "lineyun_bonus":
+            lineyun_bonus_gan = ev.get("lineyun_bonus_gan", 0.0)
+            lineyun_bonus_zhi = ev.get("lineyun_bonus_zhi", 0.0)
+            if lineyun_bonus_gan > 0.0:
+                gan_events.append(ev)
+            if lineyun_bonus_zhi > 0.0:
+                zhi_events.append(ev)
+        elif ev_type in ("branch_clash", "dayun_liunian_branch_clash", "punishment"):
+            zhi_events.append(ev)
+
+    # 打印开始事件（天干相关）
+    has_gan_events = gan_events or any(ev.get("type") == "pattern_static_activation" and (ev.get("risk_from_gan", 0.0) > 0.0) for ev in static_events)
+
+    if has_gan_events:
+        print("        开始事件（天干引起）：")
+
+        # 收集所有动态天干模式，按类型分组
+        pattern_gan_dynamic = {}
+        for ev in gan_events:
+            ev_type = ev.get("type", "")
+            if ev_type == "pattern":
+                pattern_type = ev.get("pattern_type", "")
+                if pattern_type not in pattern_gan_dynamic:
+                    pattern_gan_dynamic[pattern_type] = []
+                pattern_gan_dynamic[pattern_type].append(ev)
+
+        # 打印所有动态天干模式
+        for pattern_type, events in pattern_gan_dynamic.items():
+            pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
+            total_dynamic_risk = 0.0
+            for ev in events:
+                risk = ev.get("risk_percent", 0.0)
+                total_dynamic_risk += risk
+                print(f"          模式（天干层）：{pattern_name}，风险 {risk:.1f}%")
+
+            # 打印对应的静态模式激活（如果有）
+            static_risk_gan = 0.0
+            for static_ev in static_events:
+                if static_ev.get("type") == "pattern_static_activation":
+                    static_pattern_type = static_ev.get("pattern_type", "")
+                    if static_pattern_type == pattern_type:
+                        static_risk_gan = static_ev.get("risk_from_gan", 0.0)
+                        if static_risk_gan > 0.0:
+                            print(f"          静态模式激活（天干）：{pattern_name}，风险 {static_risk_gan:.1f}%")
+                            break
+
+            # 打印总和
+            total_pattern_risk = total_dynamic_risk + static_risk_gan
+            if total_pattern_risk > 0.0:
+                print(f"          {pattern_name}总影响：动态 {total_dynamic_risk:.1f}% + 静态 {static_risk_gan:.1f}% = {total_pattern_risk:.1f}%")
+
+        # 打印天干线运加成
+        for ev in gan_events:
+            ev_type = ev.get("type", "")
+            if ev_type == "lineyun_bonus":
+                lineyun_bonus_gan = ev.get("lineyun_bonus_gan", 0.0)
+                if lineyun_bonus_gan > 0.0:
+                    print(f"          线运加成（天干）：{lineyun_bonus_gan:.1f}%")
+
+        print("")
+
+    # 打印后来事件（地支相关）
+    has_zhi_events = zhi_events or any(ev.get("type") in ("static_clash_activation", "static_punish_activation") or (ev.get("type") == "pattern_static_activation" and ev.get("risk_from_zhi", 0.0) > 0.0) for ev in static_events)
+    if ln.get("clashes_natal") or ln.get("clashes_dayun"):
+        has_zhi_events = True
+
+    if has_zhi_events:
+        print("        后来事件（地支引起）：")
+
+        # 先打印所有动态冲
+        total_clash_dynamic = 0.0
+        sanhe_sanhui_bonus_printed = False
+
+        # 流年与命局的冲
+        for ev in ln.get("clashes_natal", []):
+            if not ev:
+                continue
+            flow_branch = ev.get("flow_branch", "")
+            target_branch = ev.get("target_branch", "")
+            base_power = ev.get("base_power_percent", 0.0)
+            grave_bonus = ev.get("grave_bonus_percent", 0.0)
+            clash_risk_zhi = base_power + grave_bonus
+            if clash_risk_zhi > 0.0:
+                total_clash_dynamic += clash_risk_zhi
+                targets = ev.get("targets", [])
+                target_info = []
+                for target in targets:
+                    target_pillar = target.get("pillar", "")
+                    palace = PILLAR_PALACE.get(target_pillar, target_pillar)
+                    pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
+                    target_info.append(f"{pillar_name}（{palace}）")
+                target_str = "、".join(target_info)
+                print(f"          冲：流年 {flow_branch} 冲 命局{target_str} {target_branch}，风险 {clash_risk_zhi:.1f}%")
+
+                # 检查三合/三会逢冲额外加分
+                if not sanhe_sanhui_bonus_printed:
+                    sanhe_sanhui_bonus_ev = ln.get("sanhe_sanhui_clash_bonus_event")
+                    if sanhe_sanhui_bonus_ev:
+                        bonus_flow = sanhe_sanhui_bonus_ev.get("flow_branch", "")
+                        bonus_target = sanhe_sanhui_bonus_ev.get("target_branch", "")
+                        if (bonus_flow == flow_branch and bonus_target == target_branch) or \
+                           (bonus_flow == target_branch and bonus_target == flow_branch):
+                            _print_sanhe_sanhui_clash_bonus(sanhe_sanhui_bonus_ev)
+                            sanhe_sanhui_bonus_printed = True
+
+                # 检查模式重叠
+                if ev.get("is_pattern_overlap"):
+                    overlap_pattern = ev.get("overlap_pattern_type", "")
+                    pattern_bonus = ev.get("pattern_bonus_percent", 0.0)
+                    if overlap_pattern == "hurt_officer":
+                        print(f"          伤官见官（地支层）：与冲同时出现，风险 {pattern_bonus:.1f}%")
+                    elif overlap_pattern == "pianyin_eatgod":
+                        print(f"          枭神夺食（地支层）：与冲同时出现，风险 {pattern_bonus:.1f}%")
+
+        # 运年相冲
+        for ev in ln.get("clashes_dayun", []):
+            if not ev:
+                continue
+            dayun_branch = ev.get("dayun_branch", "")
+            liunian_branch = ev.get("liunian_branch", "")
+            base_risk = ev.get("base_risk_percent", 0.0)
+            grave_bonus = ev.get("grave_bonus_percent", 0.0)
+            clash_risk_zhi = base_risk + grave_bonus
+            if clash_risk_zhi > 0.0:
+                total_clash_dynamic += clash_risk_zhi
+                dg = ev.get("dayun_shishen") or {}
+                lg = ev.get("liunian_shishen") or {}
+                dg_ss = dg.get("shishen") or "-"
+                lg_ss = lg.get("shishen") or "-"
+                print(f"          运年相冲：大运支 {dayun_branch}（{dg_ss}） 与 流年支 {liunian_branch}（{lg_ss}） 相冲，风险 {clash_risk_zhi:.1f}%")
+
+                # 检查三合/三会逢冲额外加分
+                if not sanhe_sanhui_bonus_printed:
+                    sanhe_sanhui_bonus_ev = ln.get("sanhe_sanhui_clash_bonus_event")
+                    if sanhe_sanhui_bonus_ev:
+                        bonus_flow = sanhe_sanhui_bonus_ev.get("flow_branch", "")
+                        bonus_target = sanhe_sanhui_bonus_ev.get("target_branch", "")
+                        if (bonus_flow == dayun_branch and bonus_target == liunian_branch) or \
+                           (bonus_flow == liunian_branch and bonus_target == dayun_branch):
+                            _print_sanhe_sanhui_clash_bonus(sanhe_sanhui_bonus_ev)
+                            sanhe_sanhui_bonus_printed = True
+
+        # 打印静态冲激活
+        static_clash_risk = 0.0
+        for static_ev in static_events:
+            if static_ev.get("type") == "static_clash_activation":
+                static_clash_risk = static_ev.get("risk_percent", 0.0)
+                if static_clash_risk > 0.0:
+                    print(f"          静态冲激活：风险 {static_clash_risk:.1f}%")
+                    break
+
+        # 打印冲的总和
+        sanhe_sanhui_bonus_for_clash = ln.get("sanhe_sanhui_clash_bonus", 0.0)
+        if total_clash_dynamic > 0.0 or static_clash_risk > 0.0 or sanhe_sanhui_bonus_for_clash > 0.0:
+            total_clash = total_clash_dynamic + static_clash_risk + sanhe_sanhui_bonus_for_clash
+            parts = []
+            if total_clash_dynamic > 0.0:
+                parts.append(f"动态 {total_clash_dynamic:.1f}%")
+            if static_clash_risk > 0.0:
+                parts.append(f"静态 {static_clash_risk:.1f}%")
+            if sanhe_sanhui_bonus_for_clash > 0.0:
+                parts.append(f"三合/三会逢冲 {sanhe_sanhui_bonus_for_clash:.1f}%")
+            parts_str = " + ".join(parts)
+            print(f"          冲总影响：{parts_str} = {total_clash:.1f}%")
+
+        # 打印动态刑
+        total_punish_dynamic = 0.0
+        for ev in zhi_events:
+            ev_type = ev.get("type", "")
+            if ev_type == "punishment":
+                risk = ev.get("risk_percent", 0.0)
+                total_punish_dynamic += risk
+                flow_branch = ev.get("flow_branch", "")
+                target_branch = ev.get("target_branch", "")
+                targets = ev.get("targets", [])
+                target_info = []
+                for target in targets:
+                    target_pillar = target.get("pillar", "")
+                    palace = PILLAR_PALACE.get(target_pillar, target_pillar)
+                    pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
+                    target_info.append(f"{pillar_name}（{palace}）")
+                target_str = "、".join(target_info)
+                print(f"          刑：{flow_branch} 刑 {target_str} {target_branch}，风险 {risk:.1f}%")
+
+        # 打印静态刑激活
+        static_punish_risk = 0.0
+        for static_ev in static_events:
+            if static_ev.get("type") == "static_punish_activation":
+                static_punish_risk = static_ev.get("risk_percent", 0.0)
+                if static_punish_risk > 0.0:
+                    print(f"          静态刑激活：风险 {static_punish_risk:.1f}%")
+                    break
+
+        # 打印刑的总和
+        if total_punish_dynamic > 0.0 or static_punish_risk > 0.0:
+            total_punish = total_punish_dynamic + static_punish_risk
+            print(f"          刑总影响：动态 {total_punish_dynamic:.1f}% + 静态 {static_punish_risk:.1f}% = {total_punish:.1f}%")
+
+        # 收集所有动态地支模式，按类型分组
+        pattern_zhi_dynamic = {}
+        for ev in zhi_events:
+            ev_type = ev.get("type", "")
+            if ev_type == "pattern":
+                pattern_type = ev.get("pattern_type", "")
+                if pattern_type not in pattern_zhi_dynamic:
+                    pattern_zhi_dynamic[pattern_type] = []
+                pattern_zhi_dynamic[pattern_type].append(ev)
+
+        # 打印所有动态地支模式
+        for pattern_type, events in pattern_zhi_dynamic.items():
+            pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
+            total_dynamic_risk = 0.0
+            for ev in events:
+                risk = ev.get("risk_percent", 0.0)
+                total_dynamic_risk += risk
+                print(f"          模式（地支层）：{pattern_name}，风险 {risk:.1f}%")
+
+            # 打印对应的静态模式激活
+            static_risk_zhi = 0.0
+            for static_ev in static_events:
+                if static_ev.get("type") == "pattern_static_activation":
+                    static_pattern_type = static_ev.get("pattern_type", "")
+                    if static_pattern_type == pattern_type:
+                        static_risk_zhi = static_ev.get("risk_from_zhi", 0.0)
+                        if static_risk_zhi > 0.0:
+                            print(f"          静态模式激活（地支）：{pattern_name}，风险 {static_risk_zhi:.1f}%")
+                            break
+
+            # 打印总和
+            total_pattern_risk = total_dynamic_risk + static_risk_zhi
+            if total_pattern_risk > 0.0:
+                print(f"          {pattern_name}总影响：动态 {total_dynamic_risk:.1f}% + 静态 {static_risk_zhi:.1f}% = {total_pattern_risk:.1f}%")
+
+        # 打印地支线运加成
+        for ev in zhi_events:
+            ev_type = ev.get("type", "")
+            if ev_type == "lineyun_bonus":
+                lineyun_bonus_zhi = ev.get("lineyun_bonus_zhi", 0.0)
+                if lineyun_bonus_zhi > 0.0:
+                    print(f"          线运加成（地支）：{lineyun_bonus_zhi:.1f}%")
+
+        print("")
+
+    # 打印天克地冲事件
+    if tkdc_risk > 0.0:
+        print("        天克地冲事件：")
+
+        # 流年与命局的天克地冲
+        for ev_clash in ln.get("clashes_natal", []):
+            if not ev_clash:
+                continue
+            tkdc_targets = ev_clash.get("tkdc_targets", [])
+            if tkdc_targets:
+                flow_branch = ev_clash.get("flow_branch", "")
+                flow_gan = ev_clash.get("flow_gan", "")
+                for target in tkdc_targets:
+                    target_pillar = target.get("pillar", "")
+                    target_gan = target.get("target_gan", "")
+                    palace = PILLAR_PALACE.get(target_pillar, target_pillar)
+                    pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
+                    if target_pillar == "year":
+                        tkdc_per_pillar = 0.0
+                    elif target_pillar == "day":
+                        tkdc_per_pillar = 20.0
+                    else:
+                        tkdc_per_pillar = 10.0
+                    if tkdc_per_pillar > 0.0:
+                        print(f"          天克地冲：流年 {flow_gan}{flow_branch} 与 命局{pillar_name}（{palace}）{target_gan}{ev_clash.get('target_branch', '')} 天克地冲，风险 {tkdc_per_pillar:.1f}%")
+
+        # 运年天克地冲
+        for ev_clash in ln.get("clashes_dayun", []):
+            if not ev_clash:
+                continue
+            if ev_clash.get("is_tian_ke_di_chong", False):
+                dayun_gan = ev_clash.get("dayun_gan", "")
+                liunian_gan_ev = ev_clash.get("liunian_gan", "")
+                dayun_branch = ev_clash.get("dayun_branch", "")
+                liunian_branch = ev_clash.get("liunian_branch", "")
+                print(f"          天克地冲：大运 {dayun_gan}{dayun_branch} 与 流年 {liunian_gan_ev}{liunian_branch} 天克地冲，风险 20.0%")
+
+        # 静态天克地冲激活
+        for ev in static_events:
+            if ev.get("type") == "static_tkdc_activation":
+                risk_tkdc_static = ev.get("risk_from_gan", 0.0)
+                if risk_tkdc_static > 0.0:
+                    print(f"          静态天克地冲激活：风险 {risk_tkdc_static:.1f}%")
+
+        print("")
+
+
 def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
     """运行CLI，可以接受参数（用于测试）或从输入获取（用于交互）。
     
@@ -2394,590 +3154,12 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         axis_lines: List[str] = []  # 主轴/天干区（原tone_lines）
         tip_lines: List[str] = []
 
-        # ===== 处理大运开始之前的流年 =====
+        # ===== 处理大运开始之前的流年（使用新版模板 v2） =====
         if dy is None:
             # 大运开始之前，只打印流年，不打印大运信息
             print("    —— 大运开始之前的流年 ——")
             for ln in lns:
-                # 计算年度标题行（新逻辑）
-                total_risk = ln.get("total_risk_percent", 0.0)
-                risk_from_gan = ln.get("risk_from_gan", 0.0)
-                risk_from_zhi = ln.get("risk_from_zhi", 0.0)
-                gan_element = ln.get("gan_element", "")
-                zhi_element = ln.get("zhi_element", "")
-                is_gan_yongshen = gan_element in yongshen_elements if gan_element else False
-                is_zhi_yongshen = zhi_element in yongshen_elements if zhi_element else False
-                
-                title_line, should_print_suggestion = _calc_year_title_line(
-                    total_risk, risk_from_gan, risk_from_zhi,
-                    is_gan_yongshen, is_zhi_yongshen
-                )
-                
-                print(
-                    f"    {ln['year']} 年 {ln['gan']}{ln['zhi']}（虚龄 {ln['age']} 岁）：{title_line}"
-                )
-                
-                # 打印流年事件（与大运下的流年相同的逻辑，但没有大运相关信息）
-                # 流年六合 / 半合
-                liunian_lines = []
-                for ev in ln.get("harmonies_natal", []) or []:
-                    if ev.get("type") != "branch_harmony":
-                        continue
-                    subtype = ev.get("subtype")
-                    if subtype not in ("liuhe", "banhe"):
-                        continue
-                    flow_branch = ev.get("flow_branch", ln.get("zhi", ""))
-                    for t in ev.get("targets", []):
-                        palace = t.get("palace", "")
-                        target_branch = t.get("target_branch", "")
-                        if not palace or not target_branch:
-                            continue
-                        if subtype == "liuhe":
-                            pair_str = f"{flow_branch}{target_branch}合"
-                            line = f"        流年和{palace}合（{pair_str}）"
-                        else:
-                            matched = ev.get("matched_branches", [])
-                            if len(matched) >= 2:
-                                pair_str = f"{matched[0]}{matched[1]}半合"
-                            else:
-                                pair_str = f"{flow_branch}{target_branch}半合"
-                            line = f"        流年 与 {palace} 半合（{pair_str}）"
-                        liunian_lines.append((line, palace))
-                
-                if liunian_lines:
-                    seen_lines = {}
-                    for line, palace in liunian_lines:
-                        key = (line, palace)
-                        if key not in seen_lines:
-                            seen_lines[key] = palace
-                    sorted_items = sorted(seen_lines.items(), key=lambda x: x[0])
-                    for (line, _), palace in sorted_items:
-                        print(line)
-                
-                # 流年完整三合局（没有大运参与）
-                for ev in ln.get("sanhe_complete", []) or []:
-                    if ev.get("subtype") != "sanhe":
-                        continue
-                    sources = ev.get("sources", [])
-                    if not sources:
-                        continue
-                    parts = []
-                    matched_branches = ev.get("matched_branches", [])
-                    for zhi in matched_branches:
-                        zhi_sources = [s for s in sources if s.get("zhi") == zhi]
-                        zhi_parts = []
-                        for src in zhi_sources:
-                            src_type = src.get("source_type")
-                            if src_type == "liunian":
-                                zhi_parts.append(f"流年 {zhi}")
-                            elif src_type == "natal":
-                                pillar_name = src.get("pillar_name", "")
-                                palace = src.get("palace", "")
-                                if pillar_name and palace:
-                                    zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
-                                elif pillar_name:
-                                    zhi_parts.append(f"{pillar_name}{zhi}")
-                        if zhi_parts:
-                            for zp in zhi_parts:
-                                parts.append(zp)
-                    group = ev.get("group", "")
-                    matched_str = "".join(matched_branches)
-                    parts.append(f"{matched_str}三合{group}")
-                    result = "，".join(parts)
-                    print(f"        {result}。")
-                
-                # 流年完整三会局（没有大运参与）
-                for ev in ln.get("sanhui_complete", []) or []:
-                    if ev.get("subtype") != "sanhui":
-                        continue
-                    sources = ev.get("sources", [])
-                    if not sources:
-                        continue
-                    parts = []
-                    matched_branches = ev.get("matched_branches", [])
-                    for zhi in matched_branches:
-                        zhi_sources = [s for s in sources if s.get("zhi") == zhi]
-                        zhi_parts = []
-                        for src in zhi_sources:
-                            src_type = src.get("source_type")
-                            if src_type == "liunian":
-                                zhi_parts.append(f"流年 {zhi}")
-                            elif src_type == "natal":
-                                pillar_name = src.get("pillar_name", "")
-                                palace = src.get("palace", "")
-                                if pillar_name and palace:
-                                    zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
-                                elif pillar_name:
-                                    zhi_parts.append(f"{pillar_name}{zhi}")
-                        if zhi_parts:
-                            for zp in zhi_parts:
-                                parts.append(zp)
-                    group = ev.get("group", "")
-                    matched_str = "".join(matched_branches)
-                    parts.append(f"{matched_str}三会{group.replace('会', '局')}")
-                    result = " ".join(parts)
-                    print(f"        {result}。")
-                
-                # 流年天干五合（没有大运参与）
-                liunian_gan = ln.get("gan", "")
-                if liunian_gan:
-                    from .gan_wuhe import GanPosition, detect_gan_wuhe, format_gan_wuhe_event
-                    gan_shishen = get_shishen(day_gan, liunian_gan) if liunian_gan else None
-                    liunian_shishen = gan_shishen or "-"
-                    liunian_gan_positions = []
-                    pillar_labels_liunian = {"year": "年干", "month": "月干", "day": "日干", "hour": "时干"}
-                    for pillar in ["year", "month", "day", "hour"]:
-                        gan = bazi[pillar]["gan"]
-                        shishen = get_shishen(day_gan, gan) or "-"
-                        liunian_gan_positions.append(GanPosition(
-                            source="natal",
-                            label=pillar_labels_liunian[pillar],
-                            gan=gan,
-                            shishen=shishen
-                        ))
-                    # 大运开始之前，没有大运天干
-                    liunian_gan_positions.append(GanPosition(
-                        source="liunian",
-                        label="流年天干",
-                        gan=liunian_gan,
-                        shishen=liunian_shishen
-                    ))
-                    liunian_wuhe_events = detect_gan_wuhe(liunian_gan_positions)
-                    if liunian_wuhe_events:
-                        for ev in liunian_wuhe_events:
-                            liunian_involved = any(pos.source == "liunian" for pos in ev["many_side"] + ev["few_side"])
-                            if liunian_involved:
-                                line = format_gan_wuhe_event(ev, incoming_shishen=liunian_shishen)
-                                print(f"        {line}")
-                
-                # 冲摘要
-                allowed_palaces = {"婚姻宫", "夫妻宫", "事业家庭宫（工作 / 子女 / 后期家庭）"}
-                palace_name_map = {
-                    "婚姻宫": "婚姻宫",
-                    "夫妻宫": "夫妻宫",
-                    "事业家庭宫（工作 / 子女 / 后期家庭）": "事业家庭宫"
-                }
-                clash_summary_lines = []
-                for ev in ln.get("clashes_natal", []) or []:
-                    if not ev:
-                        continue
-                    flow_branch = ev.get("flow_branch", "")
-                    target_branch = ev.get("target_branch", "")
-                    if not flow_branch or not target_branch:
-                        continue
-                    hit_palaces = []
-                    targets = ev.get("targets", [])
-                    for target in targets:
-                        palace = target.get("palace", "")
-                        if palace in allowed_palaces:
-                            simple_palace = palace_name_map.get(palace, palace)
-                            hit_palaces.append(simple_palace)
-                    if hit_palaces:
-                        palace_order = {"婚姻宫": 0, "夫妻宫": 1, "事业家庭宫": 2}
-                        hit_palaces_sorted = sorted(hit_palaces, key=lambda p: palace_order.get(p, 99))
-                        palace_str = "/".join(hit_palaces_sorted)
-                        clash_name = f"{flow_branch}{target_branch}冲"
-                        clash_summary_lines.append((clash_name, palace_str))
-                
-                if clash_summary_lines:
-                    clash_groups = {}
-                    for clash_name, palace_str in clash_summary_lines:
-                        if clash_name not in clash_groups:
-                            clash_groups[clash_name] = set()
-                        clash_groups[clash_name].add(palace_str)
-                    for clash_name in sorted(clash_groups.keys()):
-                        all_palaces = set()
-                        for palace_str in clash_groups[clash_name]:
-                            all_palaces.update(palace_str.split("/"))
-                        palace_order = {"婚姻宫": 0, "夫妻宫": 1, "事业家庭宫": 2}
-                        sorted_palaces = sorted(all_palaces, key=lambda p: palace_order.get(p, 99))
-                        palace_str = "/".join(sorted_palaces)
-                        print(f"        冲：{clash_name}（{palace_str}）")
-                
-                # 检查时柱天克地冲
-                has_hour_tkdc = False
-                hour_tkdc_info = None
-                for ev_clash in ln.get("clashes_natal", []) or []:
-                    if not ev_clash:
-                        continue
-                    tkdc_targets = ev_clash.get("tkdc_targets", [])
-                    if tkdc_targets:
-                        flow_branch = ev_clash.get("flow_branch", "")
-                        flow_gan = ev_clash.get("flow_gan", "")
-                        for target in tkdc_targets:
-                            if target.get("pillar") == "hour":
-                                has_hour_tkdc = True
-                                target_gan = target.get("target_gan", "")
-                                target_branch = ev_clash.get("target_branch", "")
-                                hour_tkdc_info = {
-                                    "liunian_ganzhi": f"{flow_gan}{flow_branch}",
-                                    "hour_ganzhi": f"{target_gan}{target_branch}"
-                                }
-                                break
-                    if has_hour_tkdc:
-                        break
-                
-                if has_hour_tkdc and hour_tkdc_info:
-                    print(f"        天克地冲：流年 {hour_tkdc_info['liunian_ganzhi']} ↔ 时柱 {hour_tkdc_info['hour_ganzhi']}")
-                
-                print()
-                
-                # 提示汇总区
-                liunian_hints = ln.get("hints", [])
-
-                # 收集模式提示（伤官见官/枭神夺食）
-                all_events_for_hints = ln.get("all_events", [])
-                static_events_for_hints = [ev for ev in all_events_for_hints if ev.get("type") in (
-                    "static_clash_activation", "static_punish_activation", "pattern_static_activation", "static_tkdc_activation"
-                )]
-                clashes_natal_for_hints = ln.get("clashes_natal", []) or []
-                pattern_hints = _generate_pattern_hints(all_events_for_hints, static_events_for_hints, clashes_natal_for_hints)
-
-                # 收集天克地冲提示（排除年柱、时柱）
-                clashes_dayun_for_hints = ln.get("clashes_dayun", []) or []
-                tkdc_hint = _generate_tkdc_hint(clashes_natal_for_hints, clashes_dayun_for_hints, static_events_for_hints)
-
-                # 收集时柱天克地冲提示
-                hour_tkdc_hint = _generate_hour_tkdc_hint(clashes_natal_for_hints)
-
-                # 收集时支冲提示
-                liunian_zhi_for_hints = ln.get("zhi", "")
-                hour_clash_hint = _generate_hour_clash_hint(bazi, liunian_zhi_for_hints)
-
-                # 互斥规则：时柱天克地冲 > 时支被冲
-                # 如果有时柱天克地冲，则不输出时支被冲
-                if hour_tkdc_hint:
-                    hour_clash_hint = ""  # 抑制时支被冲
-
-                # 合并所有提示（顺序：伤官见官、枭神夺食、天克地冲、时柱天克地冲、时支被流年冲）
-                all_hints = list(liunian_hints)
-                all_hints.extend(pattern_hints)
-                if tkdc_hint:
-                    all_hints.append(tkdc_hint)
-                if hour_tkdc_hint:
-                    all_hints.append(hour_tkdc_hint)
-                if hour_clash_hint:
-                    all_hints.append(hour_clash_hint)
-
-                if all_hints:
-                    print("        提示汇总：")
-                    for hint in all_hints:
-                        print(f"        - {hint}")
-                    print()
-
-                # 危险系数块
-                total_risk = ln.get("total_risk_percent", 0.0)
-                risk_from_gan = ln.get("risk_from_gan", 0.0)
-                risk_from_zhi = ln.get("risk_from_zhi", 0.0)
-                tkdc_risk = ln.get("tkdc_risk_percent", 0.0)
-                
-                liunian_gan = ln.get("gan", "")
-                liunian_zhi = ln.get("zhi", "")
-                gan_shishen = get_shishen(day_gan, liunian_gan) if liunian_gan else None
-                zhi_main_gan = get_branch_main_gan(liunian_zhi) if liunian_zhi else None
-                zhi_shishen = get_shishen(day_gan, zhi_main_gan) if zhi_main_gan else None
-                gan_label = get_shishen_label(gan_shishen, is_gan_yongshen) if gan_shishen else ""
-                zhi_label = get_shishen_label(zhi_shishen, is_zhi_yongshen) if zhi_shishen else ""
-                
-                print(f"        --- 总危险系数：{total_risk:.1f}% ---")
-                
-                gan_yongshen_str = "是" if is_gan_yongshen else "否"
-                if gan_shishen:
-                    label_str = f"｜标签：{gan_label}" if gan_label else ""
-                    print(f"        天干 {liunian_gan}｜十神 {gan_shishen}｜用神 {gan_yongshen_str}{label_str}")
-                else:
-                    print(f"        天干 {liunian_gan}｜十神 -｜用神 {gan_yongshen_str}")
-                
-                zhi_yongshen_str = "是" if is_zhi_yongshen else "否"
-                if zhi_shishen:
-                    label_str = f"｜标签：{zhi_label}" if zhi_label else ""
-                    print(f"        地支 {liunian_zhi}｜十神 {zhi_shishen}｜用神 {zhi_yongshen_str}{label_str}")
-                else:
-                    print(f"        地支 {liunian_zhi}｜十神 -｜用神 {zhi_yongshen_str}")
-                
-                # 打印开始危险系数
-                print(f"        - 开始危险系数（天干引起）：{risk_from_gan:.1f}%")
-
-                # 打印后来危险系数
-                print(f"        - 后来危险系数（地支引起）：{risk_from_zhi:.1f}%")
-                
-                # 打印天克地冲危险系数
-                print(f"        - 天克地冲危险系数：{tkdc_risk:.1f}%")
-                print("")
-                
-                # 组织所有事件
-                all_events = ln.get("all_events", [])
-                gan_events = []
-                zhi_events = []
-                static_events = []
-                
-                for ev in all_events:
-                    ev_type = ev.get("type", "")
-                    if ev_type in ("static_clash_activation", "static_punish_activation", "pattern_static_activation", "static_tkdc_activation"):
-                        static_events.append(ev)
-                    elif ev_type == "pattern":
-                        kind = ev.get("kind", "")
-                        if kind == "gan":
-                            gan_events.append(ev)
-                        elif kind == "zhi":
-                            zhi_events.append(ev)
-                    elif ev_type == "lineyun_bonus":
-                        lineyun_bonus_gan = ev.get("lineyun_bonus_gan", 0.0)
-                        lineyun_bonus_zhi = ev.get("lineyun_bonus_zhi", 0.0)
-                        if lineyun_bonus_gan > 0.0:
-                            gan_events.append(ev)
-                        if lineyun_bonus_zhi > 0.0:
-                            zhi_events.append(ev)
-                    elif ev_type in ("branch_clash", "punishment"):
-                        zhi_events.append(ev)
-                
-                # 打印开始事件（天干相关）
-                has_gan_events = gan_events or any(ev.get("type") == "pattern_static_activation" and (ev.get("risk_from_gan", 0.0) > 0.0) for ev in static_events)
-
-                if has_gan_events:
-                    print("        开始事件（天干引起）：")
-                    
-                    # 收集所有动态天干模式，按类型分组
-                    pattern_gan_dynamic = {}  # {pattern_type: [events]}
-                    for ev in gan_events:
-                        ev_type = ev.get("type", "")
-                        if ev_type == "pattern":
-                            pattern_type = ev.get("pattern_type", "")
-                            if pattern_type not in pattern_gan_dynamic:
-                                pattern_gan_dynamic[pattern_type] = []
-                            pattern_gan_dynamic[pattern_type].append(ev)
-                    
-                    # 打印所有动态天干模式
-                    for pattern_type, events in pattern_gan_dynamic.items():
-                        pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
-                        total_dynamic_risk = 0.0
-                        for ev in events:
-                            risk = ev.get("risk_percent", 0.0)
-                            total_dynamic_risk += risk
-                            print(f"          模式（天干层）：{pattern_name}，风险 {risk:.1f}%")
-                        
-                        # 打印对应的静态模式激活（如果有）
-                        static_risk_gan = 0.0
-                        for static_ev in static_events:
-                            if static_ev.get("type") == "pattern_static_activation":
-                                static_pattern_type = static_ev.get("pattern_type", "")
-                                if static_pattern_type == pattern_type:
-                                    static_risk_gan = static_ev.get("risk_from_gan", 0.0)
-                                    if static_risk_gan > 0.0:
-                                        print(f"          静态模式激活（天干）：{pattern_name}，风险 {static_risk_gan:.1f}%")
-                                        break
-                        
-                        # 打印总和
-                        total_pattern_risk = total_dynamic_risk + static_risk_gan
-                        if total_pattern_risk > 0.0:
-                            print(f"          {pattern_name}总影响：动态 {total_dynamic_risk:.1f}% + 静态 {static_risk_gan:.1f}% = {total_pattern_risk:.1f}%")
-                    
-                    # 打印天干线运加成
-                    for ev in gan_events:
-                        ev_type = ev.get("type", "")
-                        if ev_type == "lineyun_bonus":
-                            lineyun_bonus_gan = ev.get("lineyun_bonus_gan", 0.0)
-                            if lineyun_bonus_gan > 0.0:
-                                print(f"          线运加成（天干）：{lineyun_bonus_gan:.1f}%")
-                    
-                    print("")
-                
-                # 打印后来事件（地支相关）
-                has_zhi_events = zhi_events or any(ev.get("type") in ("static_clash_activation", "static_punish_activation") or (ev.get("type") == "pattern_static_activation" and ev.get("risk_from_zhi", 0.0) > 0.0) for ev in static_events)
-                # 检查是否有冲或刑（大运开始之前，只有流年与命局的冲）
-                if ln.get("clashes_natal"):
-                    has_zhi_events = True
-
-                if has_zhi_events:
-                    print("        后来事件（地支引起）：")
-                    
-                    # 先打印所有动态冲
-                    total_clash_dynamic = 0.0
-                    from .config import PILLAR_PALACE
-                    sanhe_sanhui_bonus_printed = False  # 标记是否已打印三合/三会逢冲额外加分
-                    
-                    # 流年与命局的冲（大运开始之前，没有运年相冲）
-                    for ev in ln.get("clashes_natal", []):
-                        if not ev:
-                            continue
-                        flow_branch = ev.get("flow_branch", "")
-                        target_branch = ev.get("target_branch", "")
-                        base_power = ev.get("base_power_percent", 0.0)
-                        grave_bonus = ev.get("grave_bonus_percent", 0.0)
-                        clash_risk_zhi = base_power + grave_bonus
-                        if clash_risk_zhi > 0.0:
-                            total_clash_dynamic += clash_risk_zhi
-                            targets = ev.get("targets", [])
-                            target_info = []
-                            for target in targets:
-                                target_pillar = target.get("pillar", "")
-                                palace = PILLAR_PALACE.get(target_pillar, target_pillar)
-                                pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
-                                target_info.append(f"{pillar_name}（{palace}）")
-                            target_str = "、".join(target_info)
-                            print(f"          冲：流年 {flow_branch} 冲 命局{target_str} {target_branch}，风险 {clash_risk_zhi:.1f}%")
-                            
-                            # 检查这个冲是否触发三合/三会逢冲额外加分（只打印一次）
-                            if not sanhe_sanhui_bonus_printed:
-                                sanhe_sanhui_bonus_ev = ln.get("sanhe_sanhui_clash_bonus_event")
-                                if sanhe_sanhui_bonus_ev:
-                                    bonus_flow = sanhe_sanhui_bonus_ev.get("flow_branch", "")
-                                    bonus_target = sanhe_sanhui_bonus_ev.get("target_branch", "")
-                                    # 检查是否匹配当前冲
-                                    if (bonus_flow == flow_branch and bonus_target == target_branch) or \
-                                       (bonus_flow == target_branch and bonus_target == flow_branch):
-                                        _print_sanhe_sanhui_clash_bonus(sanhe_sanhui_bonus_ev)
-                                        sanhe_sanhui_bonus_printed = True
-
-                            # 检查这个冲是否与模式重叠（伤官见官/枭神夺食）
-                            if ev.get("is_pattern_overlap"):
-                                overlap_pattern = ev.get("overlap_pattern_type", "")
-                                pattern_bonus = ev.get("pattern_bonus_percent", 0.0)
-                                if overlap_pattern == "hurt_officer":
-                                    print(f"          伤官见官（地支层）：与冲同时出现，风险 {pattern_bonus:.1f}%")
-                                elif overlap_pattern == "pianyin_eatgod":
-                                    print(f"          枭神夺食（地支层）：与冲同时出现，风险 {pattern_bonus:.1f}%")
-
-                    # 打印静态冲激活（如果有）
-                    static_clash_risk = 0.0
-                    for static_ev in static_events:
-                        if static_ev.get("type") == "static_clash_activation":
-                            static_clash_risk = static_ev.get("risk_percent", 0.0)
-                            if static_clash_risk > 0.0:
-                                print(f"          静态冲激活：风险 {static_clash_risk:.1f}%")
-                                break
-                    
-                    # 打印冲的总和（包含三合/三会逢冲额外加分）
-                    sanhe_sanhui_bonus_for_clash = ln.get("sanhe_sanhui_clash_bonus", 0.0)
-                    if total_clash_dynamic > 0.0 or static_clash_risk > 0.0 or sanhe_sanhui_bonus_for_clash > 0.0:
-                        total_clash = total_clash_dynamic + static_clash_risk + sanhe_sanhui_bonus_for_clash
-                        parts = []
-                        if total_clash_dynamic > 0.0:
-                            parts.append(f"动态 {total_clash_dynamic:.1f}%")
-                        if static_clash_risk > 0.0:
-                            parts.append(f"静态 {static_clash_risk:.1f}%")
-                        if sanhe_sanhui_bonus_for_clash > 0.0:
-                            parts.append(f"三合/三会逢冲 {sanhe_sanhui_bonus_for_clash:.1f}%")
-                        parts_str = " + ".join(parts)
-                        print(f"          冲总影响：{parts_str} = {total_clash:.1f}%")
-                    
-                    # 先打印所有动态刑
-                    total_punish_dynamic = 0.0
-                    for ev in zhi_events:
-                        ev_type = ev.get("type", "")
-                        if ev_type == "punishment":
-                            risk = ev.get("risk_percent", 0.0)
-                            total_punish_dynamic += risk
-                            flow_branch = ev.get("flow_branch", "")
-                            target_branch = ev.get("target_branch", "")
-                            targets = ev.get("targets", [])
-                            target_info = []
-                            for target in targets:
-                                target_pillar = target.get("pillar", "")
-                                palace = PILLAR_PALACE.get(target_pillar, target_pillar)
-                                pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
-                                target_info.append(f"{pillar_name}（{palace}）")
-                            target_str = "、".join(target_info)
-                            print(f"          刑：{flow_branch} 刑 {target_str} {target_branch}，风险 {risk:.1f}%")
-                    
-                    # 打印静态刑激活（如果有）
-                    static_punish_risk = 0.0
-                    for static_ev in static_events:
-                        if static_ev.get("type") == "static_punish_activation":
-                            static_punish_risk = static_ev.get("risk_percent", 0.0)
-                            if static_punish_risk > 0.0:
-                                print(f"          静态刑激活：风险 {static_punish_risk:.1f}%")
-                                break
-                    
-                    # 打印刑的总和
-                    if total_punish_dynamic > 0.0 or static_punish_risk > 0.0:
-                        total_punish = total_punish_dynamic + static_punish_risk
-                        print(f"          刑总影响：动态 {total_punish_dynamic:.1f}% + 静态 {static_punish_risk:.1f}% = {total_punish:.1f}%")
-                    
-                    # 收集所有动态地支模式，按类型分组
-                    pattern_zhi_dynamic = {}  # {pattern_type: [events]}
-                    for ev in zhi_events:
-                        ev_type = ev.get("type", "")
-                        if ev_type == "pattern":
-                            pattern_type = ev.get("pattern_type", "")
-                            if pattern_type not in pattern_zhi_dynamic:
-                                pattern_zhi_dynamic[pattern_type] = []
-                            pattern_zhi_dynamic[pattern_type].append(ev)
-                    
-                    # 打印所有动态地支模式
-                    for pattern_type, events in pattern_zhi_dynamic.items():
-                        pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
-                        total_dynamic_risk = 0.0
-                        for ev in events:
-                            risk = ev.get("risk_percent", 0.0)
-                            total_dynamic_risk += risk
-                            print(f"          模式（地支层）：{pattern_name}，风险 {risk:.1f}%")
-                        
-                        # 打印对应的静态模式激活（如果有）
-                        static_risk_zhi = 0.0
-                        for static_ev in static_events:
-                            if static_ev.get("type") == "pattern_static_activation":
-                                static_pattern_type = static_ev.get("pattern_type", "")
-                                if static_pattern_type == pattern_type:
-                                    static_risk_zhi = static_ev.get("risk_from_zhi", 0.0)
-                                    if static_risk_zhi > 0.0:
-                                        print(f"          静态模式激活（地支）：{pattern_name}，风险 {static_risk_zhi:.1f}%")
-                                        break
-                        
-                        # 打印总和
-                        total_pattern_risk = total_dynamic_risk + static_risk_zhi
-                        if total_pattern_risk > 0.0:
-                            print(f"          {pattern_name}总影响：动态 {total_dynamic_risk:.1f}% + 静态 {static_risk_zhi:.1f}% = {total_pattern_risk:.1f}%")
-                    
-                    # 打印地支线运加成
-                    for ev in zhi_events:
-                        ev_type = ev.get("type", "")
-                        if ev_type == "lineyun_bonus":
-                            lineyun_bonus_zhi = ev.get("lineyun_bonus_zhi", 0.0)
-                            if lineyun_bonus_zhi > 0.0:
-                                print(f"          线运加成（地支）：{lineyun_bonus_zhi:.1f}%")
-                    
-                    print("")
-                
-                # 打印天克地冲事件（单独列出）
-                if tkdc_risk > 0.0:
-                    print("        天克地冲事件：")
-                    
-                    # 检查流年与命局的冲中的天克地冲
-                    for ev_clash in ln.get("clashes_natal", []):
-                        if not ev_clash:
-                            continue
-                        tkdc_targets = ev_clash.get("tkdc_targets", [])
-                        if tkdc_targets:
-                            flow_branch = ev_clash.get("flow_branch", "")
-                            flow_gan = ev_clash.get("flow_gan", "")
-                            for target in tkdc_targets:
-                                target_pillar = target.get("pillar", "")
-                                target_gan = target.get("target_gan", "")
-                                palace = PILLAR_PALACE.get(target_pillar, target_pillar)
-                                pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
-                                # 计算该柱的天克地冲加成
-                                if target_pillar == "year":
-                                    tkdc_per_pillar = 0.0  # 年柱不加成
-                                elif target_pillar == "day":
-                                    tkdc_per_pillar = 20.0  # 日柱20%
-                                else:
-                                    tkdc_per_pillar = 10.0  # 其他柱10%
-                                if tkdc_per_pillar > 0.0:
-                                    print(f"          天克地冲：流年 {flow_gan}{flow_branch} 与 命局{pillar_name}（{palace}）{target_gan}{ev_clash.get('target_branch', '')} 天克地冲，风险 {tkdc_per_pillar:.1f}%")
-                    
-                    # 打印静态天克地冲激活（大运开始之前，没有运年相冲）
-                    for ev in static_events:
-                        if ev.get("type") == "static_tkdc_activation":
-                            risk_tkdc_static = ev.get("risk_from_gan", 0.0)  # 静态天克地冲全部计入tkdc_risk
-                            if risk_tkdc_static > 0.0:
-                                print(f"          静态天克地冲激活：风险 {risk_tkdc_static:.1f}%")
-                    
-                    print("")
-                
-                if should_print_suggestion:
-                    print("        建议：买保险/不投机/守法/不轻易辞职/控制情绪/三思后行")
-            
+                _print_liunian_v2(ln, bazi, day_gan, yongshen_elements)
             # 跳过大运相关打印，继续下一个 group
             continue
 
@@ -3244,720 +3426,16 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         for line in tip_lines:
             print(line)
 
-        # 该大运下面的十个流年
+        # 该大运下面的十个流年（使用新版模板 v2）
         print("    —— 该大运对应的流年 ——")
         for ln in lns:
-            # 计算年度标题行（新逻辑）
-            total_risk = ln.get("total_risk_percent", 0.0)
-            risk_from_gan = ln.get("risk_from_gan", 0.0)
-            risk_from_zhi = ln.get("risk_from_zhi", 0.0)
-            gan_element = ln.get("gan_element", "")
-            zhi_element = ln.get("zhi_element", "")
-            is_gan_yongshen = gan_element in yongshen_elements if gan_element else False
-            is_zhi_yongshen = zhi_element in yongshen_elements if zhi_element else False
-            
-            title_line, should_print_suggestion = _calc_year_title_line(
-                total_risk, risk_from_gan, risk_from_zhi,
-                is_gan_yongshen, is_zhi_yongshen
-            )
-            
-            print(
-                f"    {ln['year']} 年 {ln['gan']}{ln['zhi']}（虚龄 {ln['age']} 岁）：{title_line}"
-            )
-            
-            # 流年六合 / 半合（只解释，不计分）：流年支与原局四宫位
-            liunian_lines = []
-            # 记录已提示的宫位（同一年同一宫位只提示一次）
-            # 提示已从 hints 读取，不再在此处生成
-            
-            for ev in ln.get("harmonies_natal", []) or []:
-                if ev.get("type") != "branch_harmony":
-                    continue
-                subtype = ev.get("subtype")
-                if subtype not in ("liuhe", "banhe"):
-                    continue
-                flow_branch = ev.get("flow_branch", ln.get("zhi", ""))
-                for t in ev.get("targets", []):
-                    palace = t.get("palace", "")
-                    target_branch = t.get("target_branch", "")
-                    if not palace or not target_branch:
-                        continue
-                    if subtype == "liuhe":
-                        # 例如：流年和婚姻宫合（辰酉合）
-                        pair_str = f"{flow_branch}{target_branch}合"
-                        line = f"        流年和{palace}合（{pair_str}）"
-                    else:
-                        # 例如：流年 与 祖上宫 半合（巳酉半合）
-                        matched = ev.get("matched_branches", [])
-                        if len(matched) >= 2:
-                            pair_str = f"{matched[0]}{matched[1]}半合"
-                        else:
-                            pair_str = f"{flow_branch}{target_branch}半合"
-                        line = f"        流年 与 {palace} 半合（{pair_str}）"
-                    liunian_lines.append((line, palace))
-            
-            # 打印事件行，并在婚姻宫/夫妻宫命中时追加提示
-            if liunian_lines:
-                # 去重：使用字典记录每个(line, palace)组合，保留第一次出现的
-                seen_lines = {}
-                for line, palace in liunian_lines:
-                    key = (line, palace)
-                    if key not in seen_lines:
-                        seen_lines[key] = palace
-                
-                # 按行文本排序后打印（事件行，提示从 hints 读取）
-                sorted_items = sorted(seen_lines.items(), key=lambda x: x[0])
-                for (line, _), palace in sorted_items:
-                    print(line)
-            
-            # 流年完整三合局（包括大运+流年+原局的情况）
-            for ev in ln.get("sanhe_complete", []) or []:
-                if ev.get("subtype") != "sanhe":
-                    continue
-                sources = ev.get("sources", [])
-                if not sources:
-                    continue
-                
-                # 构建输出句子
-                parts = []
-                
-                # 按三合局的顺序列出每个字的来源
-                matched_branches = ev.get("matched_branches", [])
-                for zhi in matched_branches:
-                    zhi_sources = [s for s in sources if s.get("zhi") == zhi]
-                    zhi_parts = []
-                    for src in zhi_sources:
-                        src_type = src.get("source_type")
-                        if src_type == "dayun":
-                            zhi_parts.append(f"大运 {zhi}")
-                        elif src_type == "liunian":
-                            zhi_parts.append(f"流年 {zhi}")
-                        elif src_type == "natal":
-                            pillar_name = src.get("pillar_name", "")
-                            palace = src.get("palace", "")
-                            if pillar_name and palace:
-                                zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
-                            elif pillar_name:
-                                zhi_parts.append(f"{pillar_name}{zhi}")
-                    
-                    if zhi_parts:
-                        # 如果同一字在多个位置出现，分别列出（不合并），用逗号分隔
-                        for zp in zhi_parts:
-                            parts.append(zp)
-                
-                # 结尾：三合局名称
-                group = ev.get("group", "")
-                matched_str = "".join(matched_branches)
-                parts.append(f"{matched_str}三合{group}")
-                
-                # 用逗号连接各部分
-                result = "，".join(parts)
-                print(f"        {result}。")
-            
-            # 流年完整三会局（包括大运+流年+原局的情况）
-            for ev in ln.get("sanhui_complete", []) or []:
-                if ev.get("subtype") != "sanhui":
-                    continue
-                sources = ev.get("sources", [])
-                if not sources:
-                    continue
-                
-                # 构建输出句子
-                parts = []
-                
-                # 按三会局的顺序列出每个字的来源
-                matched_branches = ev.get("matched_branches", [])
-                for zhi in matched_branches:
-                    zhi_sources = [s for s in sources if s.get("zhi") == zhi]
-                    zhi_parts = []
-                    for src in zhi_sources:
-                        src_type = src.get("source_type")
-                        if src_type == "dayun":
-                            zhi_parts.append(f"大运 {zhi}")
-                        elif src_type == "liunian":
-                            zhi_parts.append(f"流年 {zhi}")
-                        elif src_type == "natal":
-                            pillar_name = src.get("pillar_name", "")
-                            palace = src.get("palace", "")
-                            if pillar_name and palace:
-                                zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
-                            elif pillar_name:
-                                zhi_parts.append(f"{pillar_name}{zhi}")
-                    
-                    if zhi_parts:
-                        # 如果同一字在多个位置出现，分别列出（不合并）
-                        for zp in zhi_parts:
-                            parts.append(zp)
-                
-                # 结尾：三会局名称
-                group = ev.get("group", "")
-                matched_str = "".join(matched_branches)
-                parts.append(f"{matched_str}三会{group.replace('会', '局')}")
-                
-                # 用空格连接各部分
-                result = " ".join(parts)
-                print(f"        {result}。")
-            
-            # 先计算流年天干和地支十神（用于缘分提示判断和十神行打印）
-            liunian_gan = ln.get("gan", "")
-            liunian_zhi = ln.get("zhi", "")
-            gan_shishen = get_shishen(day_gan, liunian_gan) if liunian_gan else None
-            gan_element = ln.get("gan_element", "")
-            is_gan_yongshen = gan_element in yongshen_elements if gan_element else False
-            
-            zhi_main_gan = get_branch_main_gan(liunian_zhi) if liunian_zhi else None
-            zhi_shishen = get_shishen(day_gan, zhi_main_gan) if zhi_main_gan else None
-            zhi_element = ln.get("zhi_element", "")
-            is_zhi_yongshen = zhi_element in yongshen_elements if zhi_element else False
-            
-            # ===== 流年天干五合（只识别+打印，不影响风险） =====
-            if liunian_gan:
-                liunian_shishen = gan_shishen or "-"
-                # 流年入口使用"年干"格式（不是"年柱天干"），本行不再重复打印"2050年"等年份
-                liunian_gan_positions = []
-                pillar_labels_liunian = {"year": "年干", "month": "月干", "day": "日干", "hour": "时干"}
-                for pillar in ["year", "month", "day", "hour"]:
-                    gan = bazi[pillar]["gan"]
-                    shishen = get_shishen(day_gan, gan) or "-"
-                    liunian_gan_positions.append(GanPosition(
-                        source="natal",
-                        label=pillar_labels_liunian[pillar],
-                        gan=gan,
-                        shishen=shishen
-                    ))
-                # 添加大运天干（如果存在）
-                dayun_gan = dy.get("gan", "") if dy else None
-                if dayun_gan:
-                    dayun_shishen = get_shishen(day_gan, dayun_gan) or "-"
-                    liunian_gan_positions.append(GanPosition(
-                        source="dayun",
-                        label="大运天干",
-                        gan=dayun_gan,
-                        shishen=dayun_shishen
-                    ))
-                # 添加流年天干
-                liunian_gan_positions.append(GanPosition(
-                    source="liunian",
-                    label="流年天干",
-                    gan=liunian_gan,
-                    shishen=liunian_shishen
-                ))
-                liunian_wuhe_events = detect_gan_wuhe(liunian_gan_positions)
-                if liunian_wuhe_events:
-                    for ev in liunian_wuhe_events:
-                        # 只打印涉及流年天干的五合
-                        liunian_involved = any(pos.source == "liunian" for pos in ev["many_side"] + ev["few_side"])
-                        if liunian_involved:
-                            # 行内只保留"年干，月干，时干 乙 争合 流年天干，大运天干 庚 ..."
-                            line = format_gan_wuhe_event(ev, incoming_shishen=liunian_shishen)
-                            print(f"        {line}")
-            
-            # 注意：婚恋变化提醒已从 hints 读取，这里不再单独检测
-            
-            # ===== 冲摘要（流年地支冲命局宫位） =====
-            # 允许进入摘要的宫位集合（匹配PILLAR_PALACE中的值）
-            allowed_palaces = {"婚姻宫", "夫妻宫", "事业家庭宫（工作 / 子女 / 后期家庭）"}
-            # 宫位名称映射（用于识别提示）
-            palace_name_map = {
-                "婚姻宫": "婚姻宫",
-                "夫妻宫": "夫妻宫",
-                "事业家庭宫（工作 / 子女 / 后期家庭）": "事业家庭宫"
-            }
-            
-            # 收集流年地支冲命局宫位的事件
-            clash_summary_lines = []
-            clash_palaces_hit = set()  # 记录命中的允许宫位（用于识别提示）
-            
-            for ev in ln.get("clashes_natal", []) or []:
-                if not ev:
-                    continue
-                flow_branch = ev.get("flow_branch", "")
-                target_branch = ev.get("target_branch", "")
-                if not flow_branch or not target_branch:
-                    continue
-                
-                # 收集该次冲命中的允许宫位
-                hit_palaces = []
-                targets = ev.get("targets", [])
-                for target in targets:
-                    palace = target.get("palace", "")
-                    # 检查是否在允许的宫位集合中
-                    if palace in allowed_palaces:
-                        # 使用简化的宫位名称（用于摘要显示）
-                        simple_palace = palace_name_map.get(palace, palace)
-                        hit_palaces.append(simple_palace)
-                        clash_palaces_hit.add(simple_palace)
-                
-                # 如果过滤后还有允许的宫位，则生成摘要行
-                if hit_palaces:
-                    # 按固定顺序排序：婚姻宫/夫妻宫/事业家庭宫
-                    palace_order = {"婚姻宫": 0, "夫妻宫": 1, "事业家庭宫": 2}
-                    hit_palaces_sorted = sorted(hit_palaces, key=lambda p: palace_order.get(p, 99))
-                    palace_str = "/".join(hit_palaces_sorted)
-                    clash_name = f"{flow_branch}{target_branch}冲"
-                    clash_summary_lines.append((clash_name, palace_str))
-            
-            # 打印冲摘要行（去重同一组冲）
-            if clash_summary_lines:
-                # 按冲名称分组，合并同一组冲的不同宫位
-                clash_groups = {}
-                for clash_name, palace_str in clash_summary_lines:
-                    if clash_name not in clash_groups:
-                        clash_groups[clash_name] = set()
-                    clash_groups[clash_name].add(palace_str)
-                
-                # 打印摘要行
-                for clash_name in sorted(clash_groups.keys()):
-                    # 合并同一组冲的所有宫位（去重并排序）
-                    all_palaces = set()
-                    for palace_str in clash_groups[clash_name]:
-                        all_palaces.update(palace_str.split("/"))
-                    palace_order = {"婚姻宫": 0, "夫妻宫": 1, "事业家庭宫": 2}
-                    sorted_palaces = sorted(all_palaces, key=lambda p: palace_order.get(p, 99))
-                    palace_str = "/".join(sorted_palaces)
-                    print(f"        冲：{clash_name}（{palace_str}）")
-            
-            # 检查是否命中时柱天克地冲（用于打印事件行）
-            has_hour_tkdc = False
-            hour_tkdc_info = None  # 存储时柱天克地冲信息，用于后续打印
-            for ev_clash in ln.get("clashes_natal", []) or []:
-                if not ev_clash:
-                    continue
-                tkdc_targets = ev_clash.get("tkdc_targets", [])
-                if tkdc_targets:
-                    flow_branch = ev_clash.get("flow_branch", "")
-                    flow_gan = ev_clash.get("flow_gan", "")
-                    for target in tkdc_targets:
-                        if target.get("pillar") == "hour":
-                            has_hour_tkdc = True
-                            target_gan = target.get("target_gan", "")
-                            target_branch = ev_clash.get("target_branch", "")
-                            hour_tkdc_info = {
-                                "liunian_ganzhi": f"{flow_gan}{flow_branch}",
-                                "hour_ganzhi": f"{target_gan}{target_branch}"
-                            }
-                            break
-                if has_hour_tkdc:
-                    break
-            
-            # ===== 运年天克地冲摘要 =====
-            # 检查运年相冲中的天克地冲（只打印事件行，提示从 hints 读取）
-            for ev_clash in ln.get("clashes_dayun", []) or []:
-                if not ev_clash:
-                    continue
-                if ev_clash.get("is_tian_ke_di_chong", False):
-                    dayun_gan = ev_clash.get("dayun_gan", "")
-                    liunian_gan = ev_clash.get("liunian_gan", "")
-                    dayun_branch = ev_clash.get("dayun_branch", "")
-                    liunian_branch = ev_clash.get("liunian_branch", "")
-                    dayun_ganzhi = f"{dayun_gan}{dayun_branch}"
-                    liunian_ganzhi = f"{liunian_gan}{liunian_branch}"
-                    print(f"        天克地冲：大运 {dayun_ganzhi} ↔ 流年 {liunian_ganzhi}")
-                    break  # 每年只打印一次
-            
-            # ===== 时柱天克地冲摘要 =====
-            # 如果命中时柱天克地冲，打印事件行（提示从 hints 读取）
-            if has_hour_tkdc and hour_tkdc_info:
-                print(f"        天克地冲：流年 {hour_tkdc_info['liunian_ganzhi']} ↔ 时柱 {hour_tkdc_info['hour_ganzhi']}")
-            
-            # 事件区结束后固定只留 1 个空行
-            print()
-            
-            # ===== 提示汇总区（从 hints 读取，唯一真相源） =====
-            liunian_hints = ln.get("hints", [])
+            _print_liunian_v2(ln, bazi, day_gan, yongshen_elements)
 
-            # 收集模式提示（伤官见官/枭神夺食）
-            all_events_for_hints = ln.get("all_events", [])
-            static_events_for_hints = [ev for ev in all_events_for_hints if ev.get("type") in (
-                "static_clash_activation", "static_punish_activation", "pattern_static_activation", "static_tkdc_activation"
-            )]
-            clashes_natal_for_hints = ln.get("clashes_natal", []) or []
-            pattern_hints = _generate_pattern_hints(all_events_for_hints, static_events_for_hints, clashes_natal_for_hints)
+        # 旧版流年代码已移除，使用新版 _print_liunian_v2
 
-            # 收集天克地冲提示（排除年柱、时柱）
-            clashes_dayun_for_hints = ln.get("clashes_dayun", []) or []
-            tkdc_hint = _generate_tkdc_hint(clashes_natal_for_hints, clashes_dayun_for_hints, static_events_for_hints)
+    # 这里不再需要额外的 print，因为 _print_liunian_v2 已处理
 
-            # 收集时柱天克地冲提示
-            hour_tkdc_hint = _generate_hour_tkdc_hint(clashes_natal_for_hints)
-
-            # 收集时支冲提示
-            liunian_zhi_for_hints = ln.get("zhi", "")
-            hour_clash_hint = _generate_hour_clash_hint(bazi, liunian_zhi_for_hints)
-
-            # 互斥规则：时柱天克地冲 > 时支被冲
-            # 如果有时柱天克地冲，则不输出时支被冲
-            if hour_tkdc_hint:
-                hour_clash_hint = ""  # 抑制时支被冲
-
-            # 合并所有提示（顺序：伤官见官、枭神夺食、天克地冲、时柱天克地冲、时支被流年冲）
-            all_hints = list(liunian_hints)
-            all_hints.extend(pattern_hints)
-            if tkdc_hint:
-                all_hints.append(tkdc_hint)
-            if hour_tkdc_hint:
-                all_hints.append(hour_tkdc_hint)
-            if hour_clash_hint:
-                all_hints.append(hour_clash_hint)
-
-            if all_hints:
-                print("        提示汇总：")
-                for hint in all_hints:
-                    print(f"        - {hint}")
-                print()
-
-            # ===== 危险系数块（新格式） =====
-            total_risk = ln.get("total_risk_percent", 0.0)
-            risk_from_gan = ln.get("risk_from_gan", 0.0)
-            risk_from_zhi = ln.get("risk_from_zhi", 0.0)
-            tkdc_risk = ln.get("tkdc_risk_percent", 0.0)
-            
-            # 获取标签（已在上面计算过）
-            gan_label = get_shishen_label(gan_shishen, is_gan_yongshen) if gan_shishen else ""
-            zhi_label = get_shishen_label(zhi_shishen, is_zhi_yongshen) if zhi_shishen else ""
-            
-            # 打印总危险系数（带分隔线）
-            print(f"        --- 总危险系数：{total_risk:.1f}% ---")
-            
-            # 风险管理选项已从 hints 中读取，不再单独打印
-            
-            # 打印天干十神行（移除感情字段）
-            gan_yongshen_str = "是" if is_gan_yongshen else "否"
-            if gan_shishen:
-                label_str = f"｜标签：{gan_label}" if gan_label else ""
-                print(f"        天干 {liunian_gan}｜十神 {gan_shishen}｜用神 {gan_yongshen_str}{label_str}")
-            else:
-                print(f"        天干 {liunian_gan}｜十神 -｜用神 {gan_yongshen_str}")
-            
-            # 打印开始危险系数
-            print(f"        - 开始危险系数（天干引起）：{risk_from_gan:.1f}%")
-
-            # 打印地支十神行（移除感情字段）
-            zhi_yongshen_str = "是" if is_zhi_yongshen else "否"
-            if zhi_shishen:
-                label_str = f"｜标签：{zhi_label}" if zhi_label else ""
-                print(f"        地支 {liunian_zhi}｜十神 {zhi_shishen}｜用神 {zhi_yongshen_str}{label_str}")
-            else:
-                print(f"        地支 {liunian_zhi}｜十神 -｜用神 {zhi_yongshen_str}")
-
-            # 打印后来危险系数
-            print(f"        - 后来危险系数（地支引起）：{risk_from_zhi:.1f}%")
-            
-            # 打印天克地冲危险系数
-            print(f"        - 天克地冲危险系数：{tkdc_risk:.1f}%")
-            print("")
-            
-            # 组织所有事件
-            all_events = ln.get("all_events", [])
-            gan_events = []
-            zhi_events = []
-            static_events = []
-            
-            for ev in all_events:
-                ev_type = ev.get("type", "")
-                if ev_type in ("static_clash_activation", "static_punish_activation", "pattern_static_activation", "static_tkdc_activation"):
-                    static_events.append(ev)
-                elif ev_type == "pattern":
-                    kind = ev.get("kind", "")
-                    if kind == "gan":
-                        gan_events.append(ev)
-                    elif kind == "zhi":
-                        zhi_events.append(ev)
-                elif ev_type == "lineyun_bonus":
-                    lineyun_bonus_gan = ev.get("lineyun_bonus_gan", 0.0)
-                    lineyun_bonus_zhi = ev.get("lineyun_bonus_zhi", 0.0)
-                    if lineyun_bonus_gan > 0.0:
-                        gan_events.append(ev)
-                    if lineyun_bonus_zhi > 0.0:
-                        zhi_events.append(ev)
-                elif ev_type in ("branch_clash", "dayun_liunian_branch_clash", "punishment"):
-                    zhi_events.append(ev)
-            
-            # 打印开始事件（天干相关）
-            has_gan_events = gan_events or any(ev.get("type") == "pattern_static_activation" and (ev.get("risk_from_gan", 0.0) > 0.0) for ev in static_events)
-
-            if has_gan_events:
-                print("        开始事件（天干引起）：")
-                
-                # 收集所有动态天干模式，按类型分组
-                pattern_gan_dynamic = {}  # {pattern_type: [events]}
-                for ev in gan_events:
-                    ev_type = ev.get("type", "")
-                    if ev_type == "pattern":
-                        pattern_type = ev.get("pattern_type", "")
-                        if pattern_type not in pattern_gan_dynamic:
-                            pattern_gan_dynamic[pattern_type] = []
-                        pattern_gan_dynamic[pattern_type].append(ev)
-                
-                # 打印所有动态天干模式
-                for pattern_type, events in pattern_gan_dynamic.items():
-                    pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
-                    total_dynamic_risk = 0.0
-                    for ev in events:
-                        risk = ev.get("risk_percent", 0.0)
-                        total_dynamic_risk += risk
-                        print(f"          模式（天干层）：{pattern_name}，风险 {risk:.1f}%")
-                    
-                    # 打印对应的静态模式激活（如果有）
-                    static_risk_gan = 0.0
-                    for static_ev in static_events:
-                        if static_ev.get("type") == "pattern_static_activation":
-                            static_pattern_type = static_ev.get("pattern_type", "")
-                            if static_pattern_type == pattern_type:
-                                static_risk_gan = static_ev.get("risk_from_gan", 0.0)
-                                if static_risk_gan > 0.0:
-                                    print(f"          静态模式激活（天干）：{pattern_name}，风险 {static_risk_gan:.1f}%")
-                                    break
-                    
-                    # 打印总和
-                    total_pattern_risk = total_dynamic_risk + static_risk_gan
-                    if total_pattern_risk > 0.0:
-                        print(f"          {pattern_name}总影响：动态 {total_dynamic_risk:.1f}% + 静态 {static_risk_gan:.1f}% = {total_pattern_risk:.1f}%")
-                
-                # 打印天干线运加成
-                for ev in gan_events:
-                    ev_type = ev.get("type", "")
-                    if ev_type == "lineyun_bonus":
-                        lineyun_bonus_gan = ev.get("lineyun_bonus_gan", 0.0)
-                        if lineyun_bonus_gan > 0.0:
-                            print(f"          线运加成（天干）：{lineyun_bonus_gan:.1f}%")
-                
-                print("")
-            
-            # 打印后来事件（地支相关）
-            has_zhi_events = zhi_events or any(ev.get("type") in ("static_clash_activation", "static_punish_activation") or (ev.get("type") == "pattern_static_activation" and ev.get("risk_from_zhi", 0.0) > 0.0) for ev in static_events)
-            # 检查是否有冲或刑
-            if ln.get("clashes_natal") or ln.get("clashes_dayun"):
-                has_zhi_events = True
-
-            if has_zhi_events:
-                print("        后来事件（地支引起）：")
-                
-                # 先打印所有动态冲
-                total_clash_dynamic = 0.0
-                from .config import PILLAR_PALACE
-                sanhe_sanhui_bonus_printed = False  # 标记是否已打印三合/三会逢冲额外加分
-                
-                # 流年与命局的冲
-                for ev in ln.get("clashes_natal", []):
-                    if not ev:
-                        continue
-                    flow_branch = ev.get("flow_branch", "")
-                    target_branch = ev.get("target_branch", "")
-                    base_power = ev.get("base_power_percent", 0.0)
-                    grave_bonus = ev.get("grave_bonus_percent", 0.0)
-                    clash_risk_zhi = base_power + grave_bonus
-                    if clash_risk_zhi > 0.0:
-                        total_clash_dynamic += clash_risk_zhi
-                        targets = ev.get("targets", [])
-                        target_info = []
-                        for target in targets:
-                            target_pillar = target.get("pillar", "")
-                            palace = PILLAR_PALACE.get(target_pillar, target_pillar)
-                            pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
-                            target_info.append(f"{pillar_name}（{palace}）")
-                        target_str = "、".join(target_info)
-                        print(f"          冲：流年 {flow_branch} 冲 命局{target_str} {target_branch}，风险 {clash_risk_zhi:.1f}%")
-                        
-                        # 检查这个冲是否触发三合/三会逢冲额外加分（只打印一次）
-                        if not sanhe_sanhui_bonus_printed:
-                            sanhe_sanhui_bonus_ev = ln.get("sanhe_sanhui_clash_bonus_event")
-                            if sanhe_sanhui_bonus_ev:
-                                bonus_flow = sanhe_sanhui_bonus_ev.get("flow_branch", "")
-                                bonus_target = sanhe_sanhui_bonus_ev.get("target_branch", "")
-                                # 检查是否匹配当前冲
-                                if (bonus_flow == flow_branch and bonus_target == target_branch) or \
-                                   (bonus_flow == target_branch and bonus_target == flow_branch):
-                                    _print_sanhe_sanhui_clash_bonus(sanhe_sanhui_bonus_ev)
-                                    sanhe_sanhui_bonus_printed = True
-
-                        # 检查这个冲是否与模式重叠（伤官见官/枭神夺食）
-                        if ev.get("is_pattern_overlap"):
-                            overlap_pattern = ev.get("overlap_pattern_type", "")
-                            pattern_bonus = ev.get("pattern_bonus_percent", 0.0)
-                            if overlap_pattern == "hurt_officer":
-                                print(f"          伤官见官（地支层）：与冲同时出现，风险 {pattern_bonus:.1f}%")
-                            elif overlap_pattern == "pianyin_eatgod":
-                                print(f"          枭神夺食（地支层）：与冲同时出现，风险 {pattern_bonus:.1f}%")
-
-                # 运年相冲
-                for ev in ln.get("clashes_dayun", []):
-                    if not ev:
-                        continue
-                    dayun_branch = ev.get("dayun_branch", "")
-                    liunian_branch = ev.get("liunian_branch", "")
-                    base_risk = ev.get("base_risk_percent", 0.0)
-                    grave_bonus = ev.get("grave_bonus_percent", 0.0)
-                    clash_risk_zhi = base_risk + grave_bonus
-                    if clash_risk_zhi > 0.0:
-                        total_clash_dynamic += clash_risk_zhi
-                        dg = ev.get("dayun_shishen") or {}
-                        lg = ev.get("liunian_shishen") or {}
-                        dg_ss = dg.get("shishen") or "-"
-                        lg_ss = lg.get("shishen") or "-"
-                        print(f"          运年相冲：大运支 {dayun_branch}（{dg_ss}） 与 流年支 {liunian_branch}（{lg_ss}） 相冲，风险 {clash_risk_zhi:.1f}%")
-                        
-                        # 检查这个冲是否触发三合/三会逢冲额外加分（只打印一次）
-                        if not sanhe_sanhui_bonus_printed:
-                            sanhe_sanhui_bonus_ev = ln.get("sanhe_sanhui_clash_bonus_event")
-                            if sanhe_sanhui_bonus_ev:
-                                bonus_flow = sanhe_sanhui_bonus_ev.get("flow_branch", "")
-                                bonus_target = sanhe_sanhui_bonus_ev.get("target_branch", "")
-                                # 检查是否匹配当前冲（运年相冲中，flow_branch可能是dayun_branch，target_branch可能是liunian_branch）
-                                if (bonus_flow == dayun_branch and bonus_target == liunian_branch) or \
-                                   (bonus_flow == liunian_branch and bonus_target == dayun_branch):
-                                    _print_sanhe_sanhui_clash_bonus(sanhe_sanhui_bonus_ev)
-                                    sanhe_sanhui_bonus_printed = True
-                
-                # 打印静态冲激活（如果有）
-                static_clash_risk = 0.0
-                for static_ev in static_events:
-                    if static_ev.get("type") == "static_clash_activation":
-                        static_clash_risk = static_ev.get("risk_percent", 0.0)
-                        if static_clash_risk > 0.0:
-                            print(f"          静态冲激活：风险 {static_clash_risk:.1f}%")
-                            break
-                
-                # 打印冲的总和（包含三合/三会逢冲额外加分）
-                sanhe_sanhui_bonus_for_clash = ln.get("sanhe_sanhui_clash_bonus", 0.0)
-                if total_clash_dynamic > 0.0 or static_clash_risk > 0.0 or sanhe_sanhui_bonus_for_clash > 0.0:
-                    total_clash = total_clash_dynamic + static_clash_risk + sanhe_sanhui_bonus_for_clash
-                    parts = []
-                    if total_clash_dynamic > 0.0:
-                        parts.append(f"动态 {total_clash_dynamic:.1f}%")
-                    if static_clash_risk > 0.0:
-                        parts.append(f"静态 {static_clash_risk:.1f}%")
-                    if sanhe_sanhui_bonus_for_clash > 0.0:
-                        parts.append(f"三合/三会逢冲 {sanhe_sanhui_bonus_for_clash:.1f}%")
-                    parts_str = " + ".join(parts)
-                    print(f"          冲总影响：{parts_str} = {total_clash:.1f}%")
-                
-                # 先打印所有动态刑
-                total_punish_dynamic = 0.0
-                for ev in zhi_events:
-                    ev_type = ev.get("type", "")
-                    if ev_type == "punishment":
-                        risk = ev.get("risk_percent", 0.0)
-                        total_punish_dynamic += risk
-                        flow_branch = ev.get("flow_branch", "")
-                        target_branch = ev.get("target_branch", "")
-                        targets = ev.get("targets", [])
-                        target_info = []
-                        for target in targets:
-                            target_pillar = target.get("pillar", "")
-                            palace = PILLAR_PALACE.get(target_pillar, target_pillar)
-                            pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
-                            target_info.append(f"{pillar_name}（{palace}）")
-                        target_str = "、".join(target_info)
-                        print(f"          刑：{flow_branch} 刑 {target_str} {target_branch}，风险 {risk:.1f}%")
-                
-                # 打印静态刑激活（如果有）
-                static_punish_risk = 0.0
-                for static_ev in static_events:
-                    if static_ev.get("type") == "static_punish_activation":
-                        static_punish_risk = static_ev.get("risk_percent", 0.0)
-                        if static_punish_risk > 0.0:
-                            print(f"          静态刑激活：风险 {static_punish_risk:.1f}%")
-                            break
-                
-                # 打印刑的总和
-                if total_punish_dynamic > 0.0 or static_punish_risk > 0.0:
-                    total_punish = total_punish_dynamic + static_punish_risk
-                    print(f"          刑总影响：动态 {total_punish_dynamic:.1f}% + 静态 {static_punish_risk:.1f}% = {total_punish:.1f}%")
-                
-                # 收集所有动态地支模式，按类型分组
-                pattern_zhi_dynamic = {}  # {pattern_type: [events]}
-                for ev in zhi_events:
-                    ev_type = ev.get("type", "")
-                    if ev_type == "pattern":
-                        pattern_type = ev.get("pattern_type", "")
-                        if pattern_type not in pattern_zhi_dynamic:
-                            pattern_zhi_dynamic[pattern_type] = []
-                        pattern_zhi_dynamic[pattern_type].append(ev)
-                
-                # 打印所有动态地支模式
-                for pattern_type, events in pattern_zhi_dynamic.items():
-                    pattern_name = "伤官见官" if pattern_type == "hurt_officer" else "枭神夺食" if pattern_type == "pianyin_eatgod" else pattern_type
-                    total_dynamic_risk = 0.0
-                    for ev in events:
-                        risk = ev.get("risk_percent", 0.0)
-                        total_dynamic_risk += risk
-                        print(f"          模式（地支层）：{pattern_name}，风险 {risk:.1f}%")
-                    
-                    # 打印对应的静态模式激活（如果有）
-                    static_risk_zhi = 0.0
-                    for static_ev in static_events:
-                        if static_ev.get("type") == "pattern_static_activation":
-                            static_pattern_type = static_ev.get("pattern_type", "")
-                            if static_pattern_type == pattern_type:
-                                static_risk_zhi = static_ev.get("risk_from_zhi", 0.0)
-                                if static_risk_zhi > 0.0:
-                                    print(f"          静态模式激活（地支）：{pattern_name}，风险 {static_risk_zhi:.1f}%")
-                                    break
-                    
-                    # 打印总和
-                    total_pattern_risk = total_dynamic_risk + static_risk_zhi
-                    if total_pattern_risk > 0.0:
-                        print(f"          {pattern_name}总影响：动态 {total_dynamic_risk:.1f}% + 静态 {static_risk_zhi:.1f}% = {total_pattern_risk:.1f}%")
-                
-                # 打印地支线运加成
-                for ev in zhi_events:
-                    ev_type = ev.get("type", "")
-                    if ev_type == "lineyun_bonus":
-                        lineyun_bonus_zhi = ev.get("lineyun_bonus_zhi", 0.0)
-                        if lineyun_bonus_zhi > 0.0:
-                            print(f"          线运加成（地支）：{lineyun_bonus_zhi:.1f}%")
-                
-                print("")
-            
-            # 打印天克地冲事件（单独列出）
-            if tkdc_risk > 0.0:
-                print("        天克地冲事件：")
-                
-                # 检查流年与命局的冲中的天克地冲
-                for ev_clash in ln.get("clashes_natal", []):
-                    if not ev_clash:
-                        continue
-                    tkdc_targets = ev_clash.get("tkdc_targets", [])
-                    if tkdc_targets:
-                        from .config import PILLAR_PALACE
-                        flow_branch = ev_clash.get("flow_branch", "")
-                        flow_gan = ev_clash.get("flow_gan", "")
-                        for target in tkdc_targets:
-                            target_pillar = target.get("pillar", "")
-                            target_gan = target.get("target_gan", "")
-                            palace = PILLAR_PALACE.get(target_pillar, target_pillar)
-                            pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
-                            # 计算该柱的天克地冲加成
-                            if target_pillar == "year":
-                                tkdc_per_pillar = 0.0  # 年柱不加成
-                            elif target_pillar == "day":
-                                tkdc_per_pillar = 20.0  # 日柱20%
-                            else:
-                                tkdc_per_pillar = 10.0  # 其他柱10%
-                            if tkdc_per_pillar > 0.0:
-                                print(f"          天克地冲：流年 {flow_gan}{flow_branch} 与 命局{pillar_name}（{palace}）{target_gan}{ev_clash.get('target_branch', '')} 天克地冲，风险 {tkdc_per_pillar:.1f}%")
-                
-                # 检查运年相冲中的天克地冲
-                for ev_clash in ln.get("clashes_dayun", []):
-                    if not ev_clash:
-                        continue
-                    if ev_clash.get("is_tian_ke_di_chong", False):
-                        dayun_gan = ev_clash.get("dayun_gan", "")
-                        liunian_gan = ev_clash.get("liunian_gan", "")
-                        dayun_branch = ev_clash.get("dayun_branch", "")
-                        liunian_branch = ev_clash.get("liunian_branch", "")
-                        # 运年天克地冲总共20%（基础10% + 运年额外10%）
-                        print(f"          天克地冲：大运 {dayun_gan}{dayun_branch} 与 流年 {liunian_gan}{liunian_branch} 天克地冲，风险 20.0%")
-                
-                # 打印静态天克地冲激活
-                for ev in static_events:
-                    if ev.get("type") == "static_tkdc_activation":
-                        risk_tkdc_static = ev.get("risk_from_gan", 0.0)  # 静态天克地冲全部计入tkdc_risk
-                        if risk_tkdc_static > 0.0:
-                            print(f"          静态天克地冲激活：风险 {risk_tkdc_static:.1f}%")
-                
-                print("")
-
-
-        print("")  # 每个大运分隔一行
+# ===== 以下是备份的旧版流年打印代码（不会执行） =====
+def _legacy_liunian_printing_backup():
+    """旧版流年打印逻辑备份（仅供参考，不会被调用）。"""
+    pass  # 为了保持简洁，旧版代码已移除
