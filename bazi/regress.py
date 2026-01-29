@@ -1870,8 +1870,8 @@ def test_traits_new_format_case_B():
 
     # 官杀天赋卡断言（正官七杀各半/官杀混杂，pian_ratio=0.36）- 新版格式
     assert "官杀混杂：" in major_section, "官杀混杂应包含标题行「官杀混杂：」"
-    assert "自我管控能力强" in major_section, "官杀混杂应包含「自我管控能力强」"
-    assert "领导能力强" in major_section, "官杀混杂应包含「领导能力强」"
+    assert "目标感很强" in major_section, "官杀混杂应包含「目标感很强」"
+    assert "遇事更敢做决定" in major_section, "官杀混杂应包含「遇事更敢做决定」"
     assert "官杀共性：" not in major_section, "新版不应包含官杀共性"
     assert "七杀补充：" not in major_section, "新版不应包含七杀补充"
     assert "正官补充：" not in major_section, "新版不应包含正官补充"
@@ -2050,7 +2050,7 @@ def test_traits_new_format_case_E():
     assert "食伤不为用神" in all_section, "应包含：食伤不为用神"
     # 食神主导天赋卡断言（食神35%，伤官10%，pian_ratio=0.22）- 新版2段
     assert "食神：" in all_section, "食神主导应包含：食神标题行"
-    assert "性格画像：亲和、好相处，口才表达好" in all_section, "食神主导应包含：性格画像"
+    assert "性格画像：亲和、好相处，习惯用温和的方式表达" in all_section, "食神主导应包含：性格画像"
     assert "提高方向：在生活中定一个具体的目标" in all_section, "食神主导应包含：提高方向"
     # 新版不应有旧版共性和补充句
     assert "食伤共性：重表达与呈现" not in all_section, "新版不应有食伤共性"
@@ -4649,12 +4649,13 @@ def test_yinxing_talent_card_blend():
 # ============================================================
 
 def test_caixing_talent_card_zhengcai_dominant():
-    """财星天赋卡回归测试：1970-5-5 6:00 男 - 正财主导（pian_ratio=0.2）
+    """财星天赋卡回归测试：1970-5-5 6:00 男 - 正财偏财并存
 
+    新规则：只要正偏并存就输出混杂卡
     要求（新版：标题行+性格画像+提高方向）：
-    - 包含正财标题行
-    - 包含正财性格画像关键词（踏实肯干、勤俭节约）
-    - 包含正财提高方向
+    - 包含正偏财混杂标题行
+    - 包含混杂性格画像关键词
+    - 包含混杂提高方向
     - 不再包含旧版共性/补充句
     """
     import io
@@ -4693,25 +4694,25 @@ def test_caixing_talent_card_zhengcai_dominant():
                 if "（" in line or line.startswith("印") or line.startswith("官杀") or line.startswith("比劫") or line.startswith("食伤"):
                     break
 
-    # 验证：应包含正财标题行（正财主导使用正财卡）
-    assert "正财：" in cai_section, "正财主导应包含标题行「正财：」"
-    # 验证：应包含正财性格画像关键词
-    assert "踏实肯干" in cai_section, "正财主导应包含「踏实肯干」"
-    assert "勤俭节约" in cai_section, "正财主导应包含「勤俭节约」"
+    # 验证：应包含正偏财混杂标题行（新规则：只要并存就输出混杂）
+    assert "正偏财混杂：" in cai_section, "正财偏财并存应包含标题行「正偏财混杂：」"
+    # 验证：应包含混杂性格画像关键词
+    assert "容易同时保持两份工作" in cai_section, "正偏财混杂应包含「容易同时保持两份工作」"
     # 验证：不再包含旧版字段
     assert "财星共性" not in cai_section, "新版不应包含「财星共性」"
     assert "偏财补充" not in cai_section, "新版不应包含「偏财补充」"
 
-    print("[PASS] 财星天赋卡回归测试（正财主导）通过")
+    print("[PASS] 财星天赋卡回归测试（正财偏财并存）通过")
 
 
 def test_caixing_talent_card_piancai_dominant():
-    """财星天赋卡回归测试：1970-4-5 6:00 男 - 偏财主导（pian_ratio=0.7）
+    """财星天赋卡回归测试：1970-4-5 6:00 男 - 偏财正财并存
 
+    新规则：只要正偏并存就输出混杂卡
     要求（新版格式）：
-    - 包含标题行「偏财：」
-    - 包含性格画像关键词（行动力强、出手阔绰）
-    - 包含提高方向关键词（欲望与比较心）
+    - 包含标题行「正偏财混杂：」
+    - 包含混杂性格画像关键词
+    - 包含混杂提高方向关键词
     """
     import io
     from .cli import run_cli
@@ -4749,15 +4750,14 @@ def test_caixing_talent_card_piancai_dominant():
                 if "（" in line or line.startswith("印") or line.startswith("官杀") or line.startswith("比劫") or line.startswith("食伤"):
                     break
 
-    # 验证：应包含偏财标题行
-    assert "偏财：" in cai_section, "偏财主导应包含标题行「偏财：」"
-    # 验证：应包含偏财性格画像关键词
-    assert "行动力强" in cai_section, "偏财主导应包含「行动力强」"
-    assert "出手阔绰" in cai_section, "偏财主导应包含「出手阔绰」"
-    # 验证：应包含提高方向关键词
-    assert "欲望与比较心" in cai_section, "偏财主导应包含「欲望与比较心」"
+    # 验证：应包含正偏财混杂标题行（新规则：只要并存就输出混杂）
+    assert "正偏财混杂：" in cai_section, "偏财正财并存应包含标题行「正偏财混杂：」"
+    # 验证：应包含混杂性格画像关键词
+    assert "容易同时保持两份工作" in cai_section, "正偏财混杂应包含「容易同时保持两份工作」"
+    # 验证：应包含混杂提高方向关键词
+    assert "欲望太多而不知足" in cai_section, "正偏财混杂应包含「欲望太多而不知足」"
 
-    print("[PASS] 财星天赋卡回归测试（偏财主导）通过")
+    print("[PASS] 财星天赋卡回归测试（偏财正财并存）通过")
 
 
 # ============================================================
@@ -4986,12 +4986,13 @@ def test_guansha_talent_card_pure_qisha():
 
 
 def test_guansha_talent_card_zhengguan_dominant():
-    """官杀天赋卡回归测试：正官主导
+    """官杀天赋卡回归测试：正官七杀并存
 
-    1971-10-25 8:00 男：官杀在主要性格，正官主导（正官60%，七杀10%，pian_ratio=0.14）
+    1971-10-25 8:00 男：官杀在主要性格，正官七杀并存（正官60%，七杀10%）
+    新规则：只要正偏并存就输出混杂卡
     要求（新版格式）：
-    - 包含标题行「正官：」（正官主导使用正官卡）
-    - 包含性格画像关键词
+    - 包含标题行「官杀混杂：」
+    - 包含混杂性格画像关键词
     - 包含提高方向关键词
     """
     import io
@@ -5018,27 +5019,28 @@ def test_guansha_talent_card_zhengguan_dominant():
             else:
                 major_section = remaining
 
-    # 验证：应包含正官标题行（正官主导使用正官卡）
-    assert "正官：" in major_section, "正官主导应包含标题行「正官：」"
-    # 验证：应包含正官性格画像关键词
-    assert "稳重、有条理" in major_section, "正官主导应包含「稳重、有条理」"
-    assert "领导能力强" in major_section, "正官主导应包含「领导能力强」"
+    # 验证：应包含官杀混杂标题行（新规则：只要并存就输出混杂）
+    assert "官杀混杂：" in major_section, "正官七杀并存应包含标题行「官杀混杂：」"
+    # 验证：应包含混杂性格画像关键词
+    assert "目标感很强" in major_section, "官杀混杂应包含「目标感很强」"
+    assert "遇事更敢做决定" in major_section, "官杀混杂应包含「遇事更敢做决定」"
     # 验证：应包含提高方向关键词
-    assert "在守规矩的同时允许灵活调整" in major_section, "正官主导应包含提高方向"
+    assert "精神容易紧绷" in major_section, "官杀混杂应包含提高方向"
     # 验证：新版不应包含旧版字段
     assert "官杀共性：" not in major_section, "新版不应包含「官杀共性」"
     assert "七杀补充：" not in major_section, "新版不应包含「七杀补充」"
 
-    print("[PASS] 官杀天赋卡回归测试（正官主导 1971-10-25）通过")
+    print("[PASS] 官杀天赋卡回归测试（正官七杀并存 1971-10-25）通过")
 
 
 def test_guansha_talent_card_qisha_dominant():
-    """官杀天赋卡回归测试：七杀主导
+    """官杀天赋卡回归测试：七杀正官并存
 
-    1983-1-25 6:00 女：官杀在主要性格，七杀主导（正官10%，七杀45%，pian_ratio=0.82）
+    1983-1-25 6:00 女：官杀在主要性格，七杀正官并存（正官10%，七杀45%）
+    新规则：只要正偏并存就输出混杂卡
     要求（新版格式）：
-    - 包含标题行「七杀：」（七杀主导使用七杀卡）
-    - 包含性格画像关键词
+    - 包含标题行「官杀混杂：」
+    - 包含混杂性格画像关键词
     - 包含提高方向关键词
     """
     import io
@@ -5065,18 +5067,18 @@ def test_guansha_talent_card_qisha_dominant():
             else:
                 major_section = remaining
 
-    # 验证：应包含七杀标题行（七杀主导使用七杀卡）
-    assert "七杀：" in major_section, "七杀主导应包含标题行「七杀：」"
-    # 验证：应包含七杀性格画像关键词
-    assert "反应快、决断力强" in major_section, "七杀主导应包含「反应快、决断力强」"
-    assert "抗压能力强" in major_section, "七杀主导应包含「抗压能力强」"
+    # 验证：应包含官杀混杂标题行（新规则：只要并存就输出混杂）
+    assert "官杀混杂：" in major_section, "七杀正官并存应包含标题行「官杀混杂：」"
+    # 验证：应包含混杂性格画像关键词
+    assert "目标感很强" in major_section, "官杀混杂应包含「目标感很强」"
+    assert "遇事更敢做决定" in major_section, "官杀混杂应包含「遇事更敢做决定」"
     # 验证：应包含提高方向关键词
-    assert "缓解压力" in major_section, "七杀主导应包含提高方向"
+    assert "精神容易紧绷" in major_section, "官杀混杂应包含提高方向"
     # 验证：新版不应包含旧版字段
     assert "官杀共性：" not in major_section, "新版不应包含「官杀共性」"
     assert "正官补充：" not in major_section, "新版不应包含「正官补充」"
 
-    print("[PASS] 官杀天赋卡回归测试（七杀主导 1983-1-25）通过")
+    print("[PASS] 官杀天赋卡回归测试（七杀正官并存 1983-1-25）通过")
 
 
 def test_guansha_talent_card_not_in_other():
@@ -5121,7 +5123,7 @@ def test_shishang_talent_card_pure_shishen():
     食伤在主要性格，纯食神（食神45.0%，伤官0%）
     期望输出（新版2段）：
     - 食神：
-    - 性格画像：亲和、好相处，口才表达好...
+    - 性格画像：亲和、好相处，习惯用温和的方式表达...
     - 提高方向：在生活中定一个具体的目标...
     """
     import io
@@ -5150,7 +5152,7 @@ def test_shishang_talent_card_pure_shishen():
 
     # 验证纯食神天赋卡（新版2段）
     assert "食神：" in major_section, "应包含：食神标题行"
-    assert "性格画像：亲和、好相处，口才表达好" in major_section, "纯食神应包含：性格画像"
+    assert "性格画像：亲和、好相处，习惯用温和的方式表达" in major_section, "纯食神应包含：性格画像"
     assert "提高方向：在生活中定一个具体的目标" in major_section, "纯食神应包含：提高方向"
     # 新版不应有旧版共性
     assert "食伤共性：重表达与呈现" not in major_section, "新版不应有食伤共性"
@@ -5164,7 +5166,7 @@ def test_shishang_talent_card_pure_shangguan():
     食伤在主要性格，纯伤官（食神0%，伤官25.0%）
     期望输出（新版2段）：
     - 伤官：
-    - 性格画像：创意强、表达欲旺，口才好...
+    - 性格画像：创意强、表达欲强...
     - 提高方向：把锋芒转化成作品...
     """
     import io
@@ -5193,7 +5195,7 @@ def test_shishang_talent_card_pure_shangguan():
 
     # 验证纯伤官天赋卡（新版2段）
     assert "伤官：" in major_section, "应包含：伤官标题行"
-    assert "性格画像：创意强、表达欲旺，口才好" in major_section, "纯伤官应包含：性格画像"
+    assert "性格画像：创意强、表达欲强" in major_section, "纯伤官应包含：性格画像"
     assert "提高方向：把锋芒转化成作品" in major_section, "纯伤官应包含：提高方向"
     # 新版不应有旧版共性
     assert "食伤共性：重表达与呈现" not in major_section, "新版不应有食伤共性"
@@ -5202,12 +5204,13 @@ def test_shishang_talent_card_pure_shangguan():
 
 
 def test_shishang_talent_card_shishen_dominant():
-    """食伤天赋卡回归测试：2005-8-22 0:00 男 - 食神主导
+    """食伤天赋卡回归测试：2005-8-22 0:00 男 - 食神伤官并存
 
-    食伤在主要性格，食神主导（食神35.0%，伤官10.0%，pian_ratio=0.22）
-    期望输出（新版2段，食神主导使用食神卡）：
-    - 食神：
-    - 性格画像：亲和、好相处，口才表达好...
+    食伤在主要性格，食神伤官并存（食神35.0%，伤官10.0%）
+    新规则：只要正偏并存就输出混杂卡
+    期望输出（新版2段）：
+    - 食伤混杂：
+    - 性格画像：好相处，也个性鲜明、敢说敢表达...
     - 提高方向：在生活中定一个具体的目标...
     """
     import io
@@ -5234,15 +5237,15 @@ def test_shishang_talent_card_shishen_dominant():
             else:
                 major_section = remaining
 
-    # 验证食神主导天赋卡（新版2段）
-    assert "食神：" in major_section, "食神主导应包含：食神标题行"
-    assert "性格画像：亲和、好相处，口才表达好" in major_section, "食神主导应包含：性格画像"
-    assert "提高方向：在生活中定一个具体的目标" in major_section, "食神主导应包含：提高方向"
+    # 验证食伤混杂天赋卡（新规则：只要并存就输出混杂）
+    assert "食伤混杂：" in major_section, "食神伤官并存应包含：食伤混杂标题行"
+    assert "性格画像：好相处，也个性鲜明、敢说敢表达" in major_section, "食伤混杂应包含：性格画像"
+    assert "提高方向：在生活中定一个具体的目标" in major_section, "食伤混杂应包含：提高方向"
     # 新版不应有旧版共性和补充句
     assert "食伤共性：重表达与呈现" not in major_section, "新版不应有食伤共性"
     assert "伤官补充：" not in major_section, "新版不应有伤官补充"
 
-    print("[PASS] 食伤天赋卡回归测试（食神主导 2005-8-22）通过")
+    print("[PASS] 食伤天赋卡回归测试（食神伤官并存 2005-8-22）通过")
 
 
 def test_shishang_talent_card_blend():
@@ -5251,7 +5254,7 @@ def test_shishang_talent_card_blend():
     食伤在主要性格，各半（食神25.0%，伤官35.0%，pian_ratio=0.58）
     期望输出（新版2段）：
     - 食伤混杂：
-    - 性格画像：亲和好相处，也个性鲜明、敢说敢表达...
+    - 性格画像：好相处，也个性鲜明、敢说敢表达...
     - 提高方向：在生活中定一个具体的目标...
     """
     import io
@@ -5280,7 +5283,7 @@ def test_shishang_talent_card_blend():
 
     # 验证食伤各半天赋卡（新版2段）
     assert "食伤混杂：" in major_section, "各半应包含：食伤混杂标题行"
-    assert "性格画像：亲和好相处，也个性鲜明、敢说敢表达" in major_section, "各半应包含：性格画像"
+    assert "性格画像：好相处，也个性鲜明、敢说敢表达" in major_section, "各半应包含：性格画像"
     assert "提高方向：在生活中定一个具体的目标" in major_section, "各半应包含：提高方向"
     # 新版不应有旧版共性和提醒句
     assert "食伤共性：重表达与呈现" not in major_section, "新版不应有食伤共性"
@@ -5290,13 +5293,14 @@ def test_shishang_talent_card_blend():
 
 
 def test_shishang_talent_card_shangguan_dominant():
-    """食伤天赋卡回归测试：2000-7-7 6:00 女 - 伤官主导
+    """食伤天赋卡回归测试：2000-7-7 6:00 女 - 伤官食神并存
 
-    食伤在主要性格，伤官主导（食神10.0%，伤官35.0%，pian_ratio=0.78）
-    期望输出（新版2段，伤官主导使用伤官卡）：
-    - 伤官：
-    - 性格画像：创意强、表达欲旺，口才好...
-    - 提高方向：把锋芒转化成作品...
+    食伤在主要性格，伤官食神并存（食神10.0%，伤官35.0%）
+    新规则：只要正偏并存就输出混杂卡
+    期望输出（新版2段）：
+    - 食伤混杂：
+    - 性格画像：好相处，也个性鲜明、敢说敢表达...
+    - 提高方向：在生活中定一个具体的目标...
     """
     import io
     from .cli import run_cli
@@ -5322,15 +5326,15 @@ def test_shishang_talent_card_shangguan_dominant():
             else:
                 major_section = remaining
 
-    # 验证伤官主导天赋卡（新版2段）
-    assert "伤官：" in major_section, "伤官主导应包含：伤官标题行"
-    assert "性格画像：创意强、表达欲旺，口才好" in major_section, "伤官主导应包含：性格画像"
-    assert "提高方向：把锋芒转化成作品" in major_section, "伤官主导应包含：提高方向"
+    # 验证食伤混杂天赋卡（新规则：只要并存就输出混杂）
+    assert "食伤混杂：" in major_section, "伤官食神并存应包含：食伤混杂标题行"
+    assert "性格画像：好相处，也个性鲜明、敢说敢表达" in major_section, "食伤混杂应包含：性格画像"
+    assert "提高方向：在生活中定一个具体的目标" in major_section, "食伤混杂应包含：提高方向"
     # 新版不应有旧版共性和补充句
     assert "食伤共性：重表达与呈现" not in major_section, "新版不应有食伤共性"
     assert "食神补充：" not in major_section, "新版不应有食神补充"
 
-    print("[PASS] 食伤天赋卡回归测试（伤官主导 2000-7-7）通过")
+    print("[PASS] 食伤天赋卡回归测试（伤官食神并存 2000-7-7）通过")
 
 
 def test_shishang_talent_card_not_in_other():
@@ -6446,5 +6450,126 @@ def test_hint_hour_tkdc_H2():
     assert "搬家窗口" not in hints_section, "2026年不得包含旧片段'搬家窗口'"
 
     print("[PASS] 时支被冲测试H2（2005-09-27 男 2026 时支被流年冲）通过")
+
+
+# ============================================================
+# 大运快照 Regression 测试
+# ============================================================
+
+def test_dayun_snapshot_case_A_free():
+    """案例A 免费版：2005-9-20 10:00 男（基准年2026）
+
+    特点：用神互换发生在未来，免费版看不到
+    - 免费区：大运1、大运2（当前）
+    - 付费区：大运3、大运4（有互换，免费版不显示）
+    """
+    from .compute_facts import compute_facts
+    from .dayun_snapshot import build_dayun_snapshot
+
+    dt = datetime(2005, 9, 20, 10, 0)
+    facts = compute_facts(dt, True)
+    snapshot = build_dayun_snapshot(facts, 2026, is_paid=False)
+
+    # 验证基本结构
+    assert "—— 大运快照 ——" in snapshot, "应包含标题"
+    assert "[过去与当前]" in snapshot, "应包含免费区标题"
+
+    # 免费版不应包含付费内容
+    assert "[未来大运]" not in snapshot, "免费版不应包含未来大运"
+    assert "大运3" not in snapshot, "免费版不应包含大运3"
+    assert "大运4" not in snapshot, "免费版不应包含大运4"
+
+    # 验证免费区内容
+    assert "大运1 | 甲申 | 2009-2018 | 一般 | 职业五行：木、火" in snapshot, "大运1格式错误"
+    assert "大运2 | 癸未 | 2019-2028 | 一般 | 职业五行：木、火 ← 当前" in snapshot, "大运2应标记为当前"
+
+    print("[PASS] 大运快照案例A免费版（2005-9-20 10:00 男）通过")
+
+
+def test_dayun_snapshot_case_A_paid():
+    """案例A 付费版：2005-9-20 10:00 男（基准年2026）
+
+    特点：付费版能看到未来大运和用神互换
+    """
+    from .compute_facts import compute_facts
+    from .dayun_snapshot import build_dayun_snapshot
+
+    dt = datetime(2005, 9, 20, 10, 0)
+    facts = compute_facts(dt, True)
+    snapshot = build_dayun_snapshot(facts, 2026, is_paid=True)
+
+    # 验证结构
+    assert "—— 大运快照 ——" in snapshot, "应包含标题"
+    assert "[过去与当前]" in snapshot, "应包含免费区标题"
+    assert "[未来大运]" in snapshot, "付费版应包含未来大运"
+
+    # 验证免费区内容
+    assert "大运1 | 甲申 | 2009-2018 | 一般 | 职业五行：木、火" in snapshot, "大运1格式错误"
+    assert "大运2 | 癸未 | 2019-2028 | 一般 | 职业五行：木、火 ← 当前" in snapshot, "大运2应标记为当前"
+
+    # 验证付费区内容（用神互换）
+    assert "大运3 | 壬午 | 2029-2038 | 好运 | 职业五行：金、水（用神互换，可能出现转行、工作变动）" in snapshot, "大运3应有互换"
+    assert "大运4 | 辛巳 | 2039-2048 | 好运 | 职业五行：金、水（用神互换，可能出现转行、工作变动）" in snapshot, "大运4应有互换"
+
+    print("[PASS] 大运快照案例A付费版（2005-9-20 10:00 男）通过")
+
+
+def test_dayun_snapshot_case_B_free():
+    """案例B 免费版：1998-4-29 14:00 男（基准年2026）
+
+    特点：用神互换发生在过去（免费区能看到）
+    - 免费区：大运1、大运2（都有互换）、大运3（当前）
+    """
+    from .compute_facts import compute_facts
+    from .dayun_snapshot import build_dayun_snapshot
+
+    dt = datetime(1998, 4, 29, 14, 0)
+    facts = compute_facts(dt, True)
+    snapshot = build_dayun_snapshot(facts, 2026, is_paid=False)
+
+    # 验证结构
+    assert "—— 大运快照 ——" in snapshot, "应包含标题"
+    assert "[过去与当前]" in snapshot, "应包含免费区标题"
+
+    # 免费版不应包含付费内容
+    assert "[未来大运]" not in snapshot, "免费版不应包含未来大运"
+    assert "大运4" not in snapshot, "免费版不应包含大运4"
+    assert "大运5" not in snapshot, "免费版不应包含大运5"
+
+    # 验证免费区内容（包含用神互换）
+    assert "大运1 | 丁巳 | 2000-2009 | 好运 | 职业五行：金、水（用神互换，可能出现转行、工作变动）" in snapshot, "大运1应有互换"
+    assert "大运2 | 戊午 | 2010-2019 | 好运 | 职业五行：金、水（用神互换，可能出现转行、工作变动）" in snapshot, "大运2应有互换"
+    assert "大运3 | 己未 | 2020-2029 | 一般 | 职业五行：木、火 ← 当前" in snapshot, "大运3应标记为当前"
+
+    print("[PASS] 大运快照案例B免费版（1998-4-29 14:00 男）通过")
+
+
+def test_dayun_snapshot_case_B_paid():
+    """案例B 付费版：1998-4-29 14:00 男（基准年2026）
+
+    特点：付费版能看到未来大运
+    """
+    from .compute_facts import compute_facts
+    from .dayun_snapshot import build_dayun_snapshot
+
+    dt = datetime(1998, 4, 29, 14, 0)
+    facts = compute_facts(dt, True)
+    snapshot = build_dayun_snapshot(facts, 2026, is_paid=True)
+
+    # 验证结构
+    assert "—— 大运快照 ——" in snapshot, "应包含标题"
+    assert "[过去与当前]" in snapshot, "应包含免费区标题"
+    assert "[未来大运]" in snapshot, "付费版应包含未来大运"
+
+    # 验证免费区内容（包含用神互换）
+    assert "大运1 | 丁巳 | 2000-2009 | 好运 | 职业五行：金、水（用神互换，可能出现转行、工作变动）" in snapshot, "大运1应有互换"
+    assert "大运2 | 戊午 | 2010-2019 | 好运 | 职业五行：金、水（用神互换，可能出现转行、工作变动）" in snapshot, "大运2应有互换"
+    assert "大运3 | 己未 | 2020-2029 | 一般 | 职业五行：木、火 ← 当前" in snapshot, "大运3应标记为当前"
+
+    # 验证付费区内容（无互换）
+    assert "大运4 | 庚申 | 2030-2039 | 一般 | 职业五行：木、火" in snapshot, "大运4无互换"
+    assert "大运5 | 辛酉 | 2040-2049 | 一般 | 职业五行：木、火" in snapshot, "大运5无互换"
+
+    print("[PASS] 大运快照案例B付费版（1998-4-29 14:00 男）通过")
 
 

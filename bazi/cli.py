@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from .compute_facts import compute_facts
 from .config import ZHI_WUXING
+from .dayun_snapshot import build_dayun_snapshot
 
 
 # ============================================================
@@ -140,7 +141,7 @@ _QISHA_CARD_V2 = [
 
 # 官杀混杂（新版2行）
 _GUANSHA_BLEND_CARD_V2 = [
-    "- 性格画像：自我管控能力强，领导能力强，目标感很强，不达目标不轻易停下。遇事更敢做决定，也更敢承担后果，强调效率。",
+    "- 性格画像：目标感很强，不达目标不轻易停下。遇事更敢做决定，也更敢承担后果，强调效率。",
     "- 提高方向：精神容易紧绷，适当学会放松，控制脾气；允许犯错与调整，一次失误不代表全盘失败。",
 ]
 
@@ -159,19 +160,19 @@ _GUANSHA_QUICK_SUMMARY_V2 = {
 
 # 食神（新版2段）
 _SHISHEN_CARD_V2 = [
-    "- 性格画像：亲和、好相处，口才表达好，习惯用温和的方式表达，不爱冲突也不爱争论，临场表现、发挥好。遇到压力时不太容易被压垮，更容易保持状态。更偏享受当下，喜欢轻松舒服的生活，不喜欢把自己逼太紧。容易满足，但也容易懒散。",
+    "- 性格画像：亲和、好相处，习惯用温和的方式表达，表达能力强，临场表现有意外的好。遇到压力时不太容易被压垮，更容易保持状态。容易享受当下，",
     "- 提高方向：在生活中定一个具体的目标，学习一份具体的技能，少沉浸在文艺幻想里。",
 ]
 
 # 伤官（新版2段）
 _SHANGGUAN_CARD_V2 = [
-    "- 性格画像：创意强、表达欲旺，口才好，临场表现能力强。遇到压力时不太容易被压垮，更容易保持状态。喜欢打破常规、追求与众不同；习惯质疑权威与既有规则。不服管、不服输，强调自我表达与存在感。",
+    "- 性格画像：创意强、表达欲强。遇到压力时不太容易被压垮，喜欢打破常规、追求与众不同；习惯质疑权威与既有规则。不服管、不服输，强调自我表达与存在感。",
     "- 提高方向：把锋芒转化成作品；学会在表达观点时兼顾对方感受，把「叛逆」变成「创造」。",
 ]
 
 # 食伤混杂（新版2段）
 _SHISHANG_BLEND_CARD_V2 = [
-    "- 性格画像：亲和好相处，也个性鲜明、敢说敢表达，口才非常好。临场表现能力强，追求轻松愉快，也追求现实成功。遇到压力时不太容易被压垮，更容易保持状态。",
+    "- 性格画像：好相处，也个性鲜明、敢说敢表达。临场表现能力强，追求轻松愉快，也追求现实成功。遇到压力时不太容易被压垮，更容易保持状态。",
     "- 提高方向：在生活中定一个具体的目标，学习一份具体的技能，不要三分钟热度。",
 ]
 
@@ -238,15 +239,10 @@ def _get_bijie_talent_card() -> List[str]:
 def _get_caixing_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ratio: Optional[float]) -> List[str]:
     """根据财星档位返回对应的天赋卡行列表（新版：标题行+性格画像+提高方向）。
 
-    新版规则（不再区分5档，简化为3种情况）：
-    - 纯正财 / 正财主导（pian_ratio <= 0.30）：正财卡
-    - 纯偏财 / 偏财主导（pian_ratio > 0.60）：偏财卡
-    - 正偏财混杂（0.30 < pian_ratio <= 0.60）：混杂卡
-
-    输出格式：
-    - 标题行（十神名字 + 冒号）
-    - 性格画像
-    - 提高方向
+    新版规则（只要正偏并存就输出混杂）：
+    - 纯正财（偏财%=0）：正财卡
+    - 纯偏财（正财%=0）：偏财卡
+    - 正偏财混杂（正财与偏财都存在）：混杂卡
     """
     lines = []
 
@@ -258,18 +254,9 @@ def _get_caixing_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ra
             lines.append("偏财：")
             lines.extend(_PIANCAI_CARD_V2)
     elif pian_ratio is not None:
-        if pian_ratio <= 0.30:
-            # 正财主导：用正财卡
-            lines.append("正财：")
-            lines.extend(_ZHENGCAI_CARD_V2)
-        elif pian_ratio <= 0.60:
-            # 正偏财混杂：用混杂卡
-            lines.append("正偏财混杂：")
-            lines.extend(_CAIXING_BLEND_CARD_V2)
-        else:
-            # 偏财主导：用偏财卡
-            lines.append("偏财：")
-            lines.extend(_PIANCAI_CARD_V2)
+        # 只要正偏并存（pian_ratio 有值），就输出混杂卡
+        lines.append("正偏财混杂：")
+        lines.extend(_CAIXING_BLEND_CARD_V2)
 
     if lines:
         lines.append("")  # 空行，方便阅读
@@ -279,15 +266,10 @@ def _get_caixing_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ra
 def _get_yinxing_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ratio: Optional[float]) -> List[str]:
     """根据印星档位返回对应的天赋卡行列表（新版：标题行+性格画像+提高方向）。
 
-    新版规则（不再区分5档，简化为3种情况）：
-    - 纯正印 / 正印主导（pian_ratio <= 0.30）：正印卡
-    - 纯偏印 / 偏印主导（pian_ratio > 0.60）：偏印卡
-    - 正偏印混杂（0.30 < pian_ratio <= 0.60）：混杂卡
-
-    输出格式：
-    - 标题行（十神名字 + 冒号）
-    - 性格画像
-    - 提高方向
+    新版规则（只要正偏并存就输出混杂）：
+    - 纯正印（偏印%=0）：正印卡
+    - 纯偏印（正印%=0）：偏印卡
+    - 正偏印混杂（正印与偏印都存在）：混杂卡
     """
     lines = []
 
@@ -299,18 +281,9 @@ def _get_yinxing_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ra
             lines.append("偏印：")
             lines.extend(_PIANYIN_CARD_V2)
     elif pian_ratio is not None:
-        if pian_ratio <= 0.30:
-            # 正印主导：用正印卡
-            lines.append("正印：")
-            lines.extend(_ZHENGYIN_CARD_V2)
-        elif pian_ratio <= 0.60:
-            # 正偏印混杂：用混杂卡
-            lines.append("正偏印混杂：")
-            lines.extend(_YINXING_BLEND_CARD_V2)
-        else:
-            # 偏印主导：用偏印卡
-            lines.append("偏印：")
-            lines.extend(_PIANYIN_CARD_V2)
+        # 只要正偏并存（pian_ratio 有值），就输出混杂卡
+        lines.append("正偏印混杂：")
+        lines.extend(_YINXING_BLEND_CARD_V2)
 
     if lines:
         lines.append("")  # 空行，方便阅读
@@ -320,10 +293,10 @@ def _get_yinxing_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ra
 def _get_guansha_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ratio: Optional[float]) -> List[str]:
     """根据官杀档位返回对应的天赋卡行列表（新版：标题行+性格画像+提高方向）。
 
-    新版规则（简化为3种情况）：
-    - 纯正官 / 正官主导（pian_ratio <= 0.30）：正官卡
-    - 纯七杀 / 七杀主导（pian_ratio > 0.60）：七杀卡
-    - 官杀混杂（0.30 < pian_ratio <= 0.60）：混杂卡
+    新版规则（只要正偏并存就输出混杂）：
+    - 纯正官（七杀%=0）：正官卡
+    - 纯七杀（正官%=0）：七杀卡
+    - 官杀混杂（正官与七杀都存在）：混杂卡
     """
     lines = []
 
@@ -335,15 +308,9 @@ def _get_guansha_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ra
             lines.append("七杀：")
             lines.extend(_QISHA_CARD_V2)
     elif pian_ratio is not None:
-        if pian_ratio <= 0.30:
-            lines.append("正官：")
-            lines.extend(_ZHENGGUAN_CARD_V2)
-        elif pian_ratio <= 0.60:
-            lines.append("官杀混杂：")
-            lines.extend(_GUANSHA_BLEND_CARD_V2)
-        else:
-            lines.append("七杀：")
-            lines.extend(_QISHA_CARD_V2)
+        # 只要正偏并存（pian_ratio 有值），就输出混杂卡
+        lines.append("官杀混杂：")
+        lines.extend(_GUANSHA_BLEND_CARD_V2)
 
     if lines:
         lines.append("")  # 空行，方便阅读
@@ -353,10 +320,10 @@ def _get_guansha_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ra
 def _get_shishang_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_ratio: Optional[float]) -> List[str]:
     """根据食伤档位返回对应的天赋卡行列表（新版：标题行+性格画像+提高方向）。
 
-    3 档规则（注：食伤组中食神="正"，伤官="偏"）：
-    - 纯食神/食神主导（pian_ratio ≤ 0.30 或 伤官%=0）：食神 2 段卡
-    - 食伤混杂（0.30 < pian_ratio ≤ 0.60）：混杂 2 段卡
-    - 纯伤官/伤官主导（pian_ratio > 0.60 或 食神%=0）：伤官 2 段卡
+    新版规则（只要正偏并存就输出混杂）：
+    - 纯食神（伤官%=0）：食神卡
+    - 纯伤官（食神%=0）：伤官卡
+    - 食伤混杂（食神与伤官都存在）：混杂卡
     """
     lines = []
 
@@ -368,15 +335,9 @@ def _get_shishang_talent_card(is_pure: bool, pure_shishen: Optional[str], pian_r
             lines.append("伤官：")
             lines.extend(_SHANGGUAN_CARD_V2)
     elif pian_ratio is not None:
-        if pian_ratio <= 0.30:
-            lines.append("食神：")
-            lines.extend(_SHISHEN_CARD_V2)
-        elif pian_ratio <= 0.60:
-            lines.append("食伤混杂：")
-            lines.extend(_SHISHANG_BLEND_CARD_V2)
-        else:
-            lines.append("伤官：")
-            lines.extend(_SHANGGUAN_CARD_V2)
+        # 只要正偏并存（pian_ratio 有值），就输出混杂卡
+        lines.append("食伤混杂：")
+        lines.extend(_SHISHANG_BLEND_CARD_V2)
 
     if lines:
         lines.append("")  # 空行，方便阅读
@@ -1429,6 +1390,241 @@ def _print_liunian_v2(
         is_gan_yongshen, is_zhi_yongshen,
         day_gan, bazi, yongshen_elements
     )
+
+
+def _print_dayun_v2(
+    dy: dict,
+    bazi: dict,
+    day_gan: str,
+    yongshen_elements: list,
+    end_year: int,
+    prev_dayun_zhi_good: Optional[bool],
+) -> None:
+    """打印大运块（协议版 v2）。
+
+    新格式：
+    ========================================
+    【大运 N】{干}{支} | {起始年}-{结束年}年 | 虚龄{起始岁}-{结束岁}岁
+    ========================================
+    运势: {好运/一般}
+
+    地支 {支} | {十神} | {用神/非用神}
+    → {标签}
+
+    天干 {干} | {十神} | {(随运好)/用神/非用神}
+    → {标签}
+
+    - HINTS -
+    [感情] 婚姻宫被冲/夫妻宫被冲/天干五合
+
+    - DEBUG -
+    ...
+
+    @
+    """
+    from .shishen import get_shishen, get_branch_main_gan, get_shishen_label
+
+    # 基础数据
+    dayun_index = dy.get("index", 0)
+    dayun_gan = dy.get("gan", "")
+    dayun_zhi = dy.get("zhi", "")
+    start_year = dy.get("start_year", 0)
+    start_age = dy.get("start_age", 0)
+    end_age = start_age + 9  # 大运10年
+
+    zhi_good = dy.get("zhi_good", False)
+    gan_good = dy.get("gan_good", False)
+
+    # 计算十神和标签
+    dayun_gan_shishen = get_shishen(day_gan, dayun_gan) if dayun_gan else None
+    dayun_gan_element = dy.get("gan_element", "")
+    is_gan_yongshen = dayun_gan_element in yongshen_elements if dayun_gan_element else False
+
+    dayun_zhi_main_gan = get_branch_main_gan(dayun_zhi) if dayun_zhi else None
+    dayun_zhi_shishen = get_shishen(day_gan, dayun_zhi_main_gan) if dayun_zhi_main_gan else None
+    dayun_zhi_element = dy.get("zhi_element", "")
+    is_zhi_yongshen = dayun_zhi_element in yongshen_elements if dayun_zhi_element else False
+
+    # 地支标签
+    zhi_marker = "用神" if zhi_good else "非用神"
+    zhi_label = get_shishen_label(dayun_zhi_shishen, zhi_good) if dayun_zhi_shishen else ""
+
+    # 天干标签（关键规则：地支好运时，天干也用好运版本标签）
+    if zhi_good:
+        gan_marker = "(随运好)"
+        gan_label = get_shishen_label(dayun_gan_shishen, True) if dayun_gan_shishen else ""
+    else:
+        gan_marker = "用神" if is_gan_yongshen else "非用神"
+        gan_label = get_shishen_label(dayun_gan_shishen, is_gan_yongshen) if dayun_gan_shishen else ""
+
+    # 运势判词（只看地支）
+    yunshi = "好运" if zhi_good else "一般"
+
+    # ========== HEADER ==========
+    print("=" * 60)
+    print(f"【大运 {dayun_index + 1}】{dayun_gan}{dayun_zhi} | {start_year}-{end_year}年 | 虚龄{start_age}-{end_age}岁")
+    print(f"运势: {yunshi}")
+    print()
+
+    # ========== 地支块 ==========
+    zhi_shishen_str = dayun_zhi_shishen if dayun_zhi_shishen else "-"
+    print(f"地支 {dayun_zhi} | {zhi_shishen_str} | {zhi_marker}")
+    if zhi_label:
+        print(f"→ {zhi_label}")
+    print()
+
+    # ========== 天干块 ==========
+    gan_shishen_str = dayun_gan_shishen if dayun_gan_shishen else "-"
+    print(f"天干 {dayun_gan} | {gan_shishen_str} | {gan_marker}")
+    if gan_label:
+        print(f"→ {gan_label}")
+
+    # ========== HINTS（主区域：只有感情冲和五合） ==========
+    hint_lines = []
+
+    # 1. 婚姻宫/夫妻宫被冲
+    for ev in dy.get("clashes_natal", []) or []:
+        if not ev:
+            continue
+        flow_branch = ev.get("flow_branch", "")
+        target_branch = ev.get("target_branch", "")
+        for t in ev.get("targets", []):
+            palace = t.get("palace", "")
+            if palace in ("婚姻宫",):
+                clash_name = f"{flow_branch}{target_branch}冲"
+                hint_lines.append(f"[感情] 婚姻宫被冲: {clash_name} → 单身更易暧昧/受阻；有伴侣争执起伏")
+            elif palace in ("夫妻宫",):
+                clash_name = f"{flow_branch}{target_branch}冲"
+                hint_lines.append(f"[感情] 夫妻宫被冲: {clash_name} → 单身更易暧昧/受阻；有伴侣争执起伏")
+
+    # 2. 天干五合婚恋提醒（从hints读取）
+    dayun_hints = dy.get("hints", []) or []
+    for hint in dayun_hints:
+        if "婚恋变化提醒" in hint:
+            # 提取关键信息
+            hint_lines.append(f"[感情] 天干五合: 官杀星被合 → 婚恋变化提醒")
+
+    print()
+    print("- HINTS -")
+    if hint_lines:
+        for line in hint_lines:
+            print(line)
+    else:
+        print("（无）")
+
+    # ========== DEBUG（开发者信息） ==========
+    debug_lines = []
+
+    # 六合/半合
+    for ev in dy.get("harmonies_natal", []) or []:
+        if ev.get("type") != "branch_harmony":
+            continue
+        subtype = ev.get("subtype")
+        flow_branch = ev.get("flow_branch", dayun_zhi)
+        if subtype not in ("liuhe", "banhe"):
+            continue
+        for t in ev.get("targets", []):
+            palace = t.get("palace", "")
+            target_branch = t.get("target_branch", "")
+            if not palace or not target_branch:
+                continue
+            if subtype == "liuhe":
+                debug_lines.append(f"六合: 大运和{palace}合（{flow_branch}{target_branch}合）")
+            elif subtype == "banhe":
+                debug_lines.append(f"半合: 大运与{palace}半合（{flow_branch}{target_branch}半合）")
+
+    # 三合局
+    for ev in dy.get("sanhe_complete", []) or []:
+        if ev.get("subtype") != "sanhe":
+            continue
+        sources = ev.get("sources", [])
+        matched_branches = ev.get("matched_branches", [])
+        group = ev.get("group", "")
+        if matched_branches:
+            debug_lines.append(f"三合: {''.join(matched_branches)}三合{group}")
+
+    # 三会局
+    for ev in dy.get("sanhui_complete", []) or []:
+        if ev.get("subtype") != "sanhui":
+            continue
+        matched_branches = ev.get("matched_branches", [])
+        group = ev.get("group", "")
+        if matched_branches:
+            debug_lines.append(f"三会: {''.join(matched_branches)}三会{group.replace('会', '局')}")
+
+    # 非感情宫位的冲
+    for ev in dy.get("clashes_natal", []) or []:
+        if not ev:
+            continue
+        flow_branch = ev.get("flow_branch", "")
+        target_branch = ev.get("target_branch", "")
+        for t in ev.get("targets", []):
+            palace = t.get("palace", "")
+            if palace not in ("婚姻宫", "夫妻宫"):
+                debug_lines.append(f"冲: 大运{flow_branch}冲{palace}{target_branch}")
+
+    # 天克地冲
+    for ev in dy.get("clashes_natal", []) or []:
+        if not ev:
+            continue
+        tkdc_targets = ev.get("tkdc_targets", [])
+        for target in tkdc_targets:
+            target_pillar = target.get("pillar", "")
+            target_gan = target.get("target_gan", "")
+            flow_gan = ev.get("flow_gan", "")
+            flow_branch = ev.get("flow_branch", "")
+            pillar_map = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}
+            pillar_cn = pillar_map.get(target_pillar, target_pillar)
+            debug_lines.append(f"天克地冲: 大运{flow_gan}{flow_branch}与{pillar_cn}{target_gan}{ev.get('target_branch', '')}")
+
+    # 天干五合详情
+    if dayun_gan:
+        from .gan_wuhe import GanPosition, detect_gan_wuhe, format_gan_wuhe_event
+        dayun_shishen = get_shishen(day_gan, dayun_gan) or "-"
+        dayun_gan_positions = []
+        pillar_labels_dayun = {"year": "年干", "month": "月干", "day": "日干", "hour": "时干"}
+        for pillar in ["year", "month", "day", "hour"]:
+            gan = bazi[pillar]["gan"]
+            shishen = get_shishen(day_gan, gan) or "-"
+            dayun_gan_positions.append(GanPosition(
+                source="natal",
+                label=pillar_labels_dayun[pillar],
+                gan=gan,
+                shishen=shishen
+            ))
+        dayun_gan_positions.append(GanPosition(
+            source="dayun",
+            label="大运天干",
+            gan=dayun_gan,
+            shishen=dayun_shishen
+        ))
+        dayun_wuhe_events = detect_gan_wuhe(dayun_gan_positions)
+        for wuhe_ev in dayun_wuhe_events:
+            dayun_involved = any(pos.source == "dayun" for pos in wuhe_ev["many_side"] + wuhe_ev["few_side"])
+            if dayun_involved:
+                line = format_gan_wuhe_event(wuhe_ev, incoming_shishen=dayun_shishen)
+                debug_lines.append(f"五合: {line}")
+
+    # 转折点
+    current_zhi_good = dy.get("zhi_good", False)
+    if prev_dayun_zhi_good is not None and prev_dayun_zhi_good != current_zhi_good:
+        if prev_dayun_zhi_good and not current_zhi_good:
+            from_state, to_state, change_type = "好运", "一般", "转弱"
+        else:
+            from_state, to_state, change_type = "一般", "好运", "转好"
+        debug_lines.append(f"转折点: {start_year}年：{from_state} → {to_state}（{change_type}）")
+
+    # 用神互换提示
+    for hint in dayun_hints:
+        if "【用神互换提示】" in hint:
+            debug_lines.append(f"用神互换: {hint.replace('【用神互换提示】', '')}")
+
+    # DEBUG区已移除（简化版v2只保留核心信息）
+    # 如需DEBUG信息，请使用旧版打印或开启DEBUG模式
+
+    print()
+    print("@")
+    print("=" * 60 + "@" * 20)
 
 
 def _print_liunian_v3(
@@ -2527,34 +2723,6 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
     # 性格快速汇总
     # ============================================================
 
-    # 一句版常量定义（印星/财星使用新版汇总，其他十神保持原有思维/社交分开）
-    # 注意：印星使用 _YINXING_QUICK_SUMMARY_V2，财星使用 _CAIXING_QUICK_SUMMARY_V2
-    QUICK_SUMMARY_MIND = {
-        # 官杀一句版（思维）
-        "正官": "规则感强，重秩序与标准，做决策更看合规与稳定性，倾向把事情流程化、长期化地跑稳。",
-        "七杀": "反应快、决断力强，遇事敢拍板、敢承压；行动导向明显，更习惯用结果说话。",
-        "正官七杀": "既讲章法与规矩，也有决断力与行动力；「稳」和「狠」的两种处事方式并存。",
-        # 比劫一句版（思维）- 比肩/劫财统一使用
-        "比肩劫财": "不服输、自我驱动强，认准方向就能长期坚持、扛压力推进；立场很稳，但有时也会更坚持己见。",
-        # 食伤一句版（思维）
-        "食神": "想到就做、顺势而为；即使在压力里也能把状态稳住，反而更容易进入发挥区，能说会道、口才好，临场表现感往往更强。",
-        "伤官": "创意强、表达欲旺，喜欢打破常规追求新意；更敢试错走差异化路线，擅长把点子与观点做成可被看见的成果，从而打开机会与资源。",
-        "食神伤官": "更偏伤官：创意与表达驱动，敢突破常规、走差异化换机会；同时带点食神的随性与松弛感，想到就做，临场更容易发挥。",
-    }
-
-    QUICK_SUMMARY_SOCIAL = {
-        # 官杀一句版（社交）
-        "正官": "端正、有分寸、重礼节；给人靠谱、守信、有底线的印象，擅长用可预期的方式建立信任。",
-        "七杀": "存在感强，做事直接、效率优先；更容易让人相信「你能扛事/能解决问题」，但不爱反复解释。",
-        "正官七杀": "既端正有分寸，也气场硬、边界感强；能靠靠谱建立信任，也能靠果断赢得尊重。",
-        # 比劫一句版（社交）- 比肩/劫财统一使用
-        "比肩劫财": "社交覆盖面广，擅长在不同圈层建立连接并把关系落到合作与行动上；对深度关系更谨慎投入，更看重尊重、边界与长期的互相成就，深交偏少而精。",
-        # 食伤一句版（社交）
-        "食神": "亲和、好相处，给人放松、没压力的感觉；习惯用温和的方式表达，不爱冲突也不爱争论。",
-        "伤官": "逻辑表达直接且清晰，容易给人「有想法有态度」的印象；有号召力与领导能力，能团结很多人、推动行动。",
-        "食神伤官": "更偏伤官：表达直接清晰、观点鲜明，容易让人信服并形成号召力；同时有食神的亲和与不压迫感，更容易把人聚拢起来、推动行动。",
-    }
-
     def _get_shishen_summary_name(trait: dict) -> Optional[str]:
         """根据trait获取快速汇总中使用的十神名称
 
@@ -3482,6 +3650,11 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         for line in marriage_structure_list:
             print(line)
 
+    # ===== 大运快照 =====
+    base_year = datetime.now().year
+    dayun_snapshot = build_dayun_snapshot(complete_result, base_year)
+    print("\n" + dayun_snapshot)
+
     # ===== 大运 / 流年 运势 + 冲信息 =====
     # 使用 analyze_complete 返回的 luck 数据（已结构化）
 
@@ -3496,17 +3669,12 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
     prev_dayun_zhi_good: Optional[bool] = None
 
     # ===== 打印所有大运信息 =====
-    for group in luck["groups"]:
+    groups = luck["groups"]
+    for group_idx, group in enumerate(groups):
         dy = group.get("dayun")
         lns = group.get("liunian", [])
 
-        # 初始化缓冲区
-        header_lines: List[str] = []
-        fact_lines: List[str] = []
-        axis_lines: List[str] = []  # 主轴/天干区（原tone_lines）
-        tip_lines: List[str] = []
-
-        # ===== 处理大运开始之前的流年（使用新版模板 v2） =====
+        # ===== 处理大运开始之前的流年（使用新版模板 v3） =====
         if dy is None:
             # 大运开始之前，只打印流年，不打印大运信息
             print("    —— 大运开始之前的流年 ——")
@@ -3515,277 +3683,31 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             # 跳过大运相关打印，继续下一个 group
             continue
 
-        # ===== Header =====
-        # 确保 dy 不为 None（防御性检查，虽然理论上不应该到达这里）
-        if dy is None:
-            continue
-        
-        # 大运判词：用神=好运，非用神=一般
-        if dy.get("zhi_good", False):
-            label = "好运"
-        else:
-            label = "一般"
-        gan_flag = "✓" if dy["gan_good"] else "×"
-        zhi_flag = "✓" if dy["zhi_good"] else "×"
+        # 计算 end_year（下一个大运的 start_year - 1，或者 start_year + 9）
+        end_year = dy["start_year"] + 9
+        for next_idx in range(group_idx + 1, len(groups)):
+            next_dy = groups[next_idx].get("dayun")
+            if next_dy is not None:
+                end_year = next_dy["start_year"] - 1
+                break
 
-        header_lines.append(
-            f"【大运 {dy['index'] + 1}】 {dy['gan']}{dy['zhi']} "
-            f"(起运年份 {dy['start_year']}, 虚龄 {dy['start_age']} 岁) → {label}  "
-            f"[干 {dy['gan_element'] or '-'} {gan_flag} / "
-            f"支 {dy['zhi_element'] or '-'} {zhi_flag}]"
+        # 使用新版大运打印函数
+        _print_dayun_v2(
+            dy=dy,
+            bazi=bazi,
+            day_gan=day_gan,
+            yongshen_elements=yongshen_elements,
+            end_year=end_year,
+            prev_dayun_zhi_good=prev_dayun_zhi_good,
         )
-        
-        # ===== 大运十神打印（方案A结构层级） =====
-        dayun_gan = dy.get("gan", "")
-        dayun_zhi = dy.get("zhi", "")
-        
-        # 计算大运天干十神和用神
-        dayun_gan_shishen = get_shishen(day_gan, dayun_gan) if dayun_gan else None
-        dayun_gan_element = dy.get("gan_element", "")
-        dayun_gan_yongshen = dayun_gan_element in yongshen_elements if dayun_gan_element else False
-        dayun_gan_label = get_shishen_label(dayun_gan_shishen, dayun_gan_yongshen) if dayun_gan_shishen else ""
-        
-        # 计算大运地支主气十神和用神
-        dayun_zhi_main_gan = get_branch_main_gan(dayun_zhi) if dayun_zhi else None
-        dayun_zhi_shishen = get_shishen(day_gan, dayun_zhi_main_gan) if dayun_zhi_main_gan else None
-        dayun_zhi_element = dy.get("zhi_element", "")
-        dayun_zhi_yongshen = dayun_zhi_element in yongshen_elements if dayun_zhi_element else False
-        dayun_zhi_label = get_shishen_label(dayun_zhi_shishen, dayun_zhi_yongshen) if dayun_zhi_shishen else ""
-        
-        # ===== 事实区：大运六合（只解释，不计分） =====
-        dayun_liuhe_lines = []
-        dayun_banhe_lines = []
-        for ev in dy.get("harmonies_natal", []) or []:
-            if ev.get("type") != "branch_harmony":
-                continue
-            subtype = ev.get("subtype")
-            flow_branch = ev.get("flow_branch", dy.get("zhi", ""))
-            if subtype not in ("liuhe", "banhe"):
-                continue
-            for t in ev.get("targets", []):
-                palace = t.get("palace", "")
-                target_branch = t.get("target_branch", "")
-                if not palace or not target_branch:
-                    continue
-                if subtype == "liuhe":
-                    # 例如：大运和夫妻宫合（午未合）
-                    line = f"    大运和{palace}合（{flow_branch}{target_branch}合）"
-                    dayun_liuhe_lines.append(line)
-                elif subtype == "banhe":
-                    # 例如：大运 与 夫妻宫 半合（巳酉半合）
-                    line = f"    大运 与 {palace} 半合（{flow_branch}{target_branch}半合）"
-                    dayun_banhe_lines.append(line)
-        if dayun_liuhe_lines:
-            for line in sorted(set(dayun_liuhe_lines)):
-                fact_lines.append(line)
-        if dayun_banhe_lines:
-            for line in sorted(set(dayun_banhe_lines)):
-                fact_lines.append(line)
-        
-        # ===== 事实区：大运完整三合局 =====
-        for ev in dy.get("sanhe_complete", []) or []:
-            if ev.get("subtype") != "sanhe":
-                continue
-            sources = ev.get("sources", [])
-            if not sources:
-                continue
-            
-            # 构建输出句子
-            parts = []
-            
-            # 按三合局的顺序列出每个字的来源
-            matched_branches = ev.get("matched_branches", [])
-            for zhi in matched_branches:
-                zhi_sources = [s for s in sources if s.get("zhi") == zhi]
-                zhi_parts = []
-                for src in zhi_sources:
-                    src_type = src.get("source_type")
-                    if src_type == "dayun":
-                        zhi_parts.append(f"大运 {zhi}")
-                    elif src_type == "liunian":
-                        zhi_parts.append(f"流年 {zhi}")
-                    elif src_type == "natal":
-                        pillar_name = src.get("pillar_name", "")
-                        palace = src.get("palace", "")
-                        if pillar_name and palace:
-                            zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
-                        elif pillar_name:
-                            zhi_parts.append(f"{pillar_name}{zhi}")
-                
-                if zhi_parts:
-                    # 如果同一字在多个位置出现，用"和"连接
-                    if len(zhi_parts) > 1:
-                        parts.append("和".join(zhi_parts))
-                    else:
-                        parts.append(zhi_parts[0])
-            
-            # 结尾：三合局名称
-            group = ev.get("group", "")
-            matched_str = "".join(matched_branches)
-            parts.append(f"{matched_str}三合{group}")
-            
-            # 用逗号连接各部分
-            result = "，".join(parts)
-            fact_lines.append(f"    {result}。")
-        
-        # ===== 事实区：大运完整三会局 =====
-        for ev in dy.get("sanhui_complete", []) or []:
-            if ev.get("subtype") != "sanhui":
-                continue
-            sources = ev.get("sources", [])
-            if not sources:
-                continue
-            
-            # 构建输出句子
-            parts = []
-            
-            # 按三会局的顺序列出每个字的来源
-            matched_branches = ev.get("matched_branches", [])
-            for zhi in matched_branches:
-                zhi_sources = [s for s in sources if s.get("zhi") == zhi]
-                zhi_parts = []
-                for src in zhi_sources:
-                    src_type = src.get("source_type")
-                    if src_type == "dayun":
-                        zhi_parts.append(f"大运 {zhi}")
-                    elif src_type == "liunian":
-                        zhi_parts.append(f"流年 {zhi}")
-                    elif src_type == "natal":
-                        pillar_name = src.get("pillar_name", "")
-                        palace = src.get("palace", "")
-                        if pillar_name and palace:
-                            zhi_parts.append(f"{pillar_name}（{palace}）{zhi}")
-                        elif pillar_name:
-                            zhi_parts.append(f"{pillar_name}{zhi}")
-                
-                if zhi_parts:
-                    # 如果同一字在多个位置出现，分别列出（不合并）
-                    for zp in zhi_parts:
-                        parts.append(zp)
-            
-            # 结尾：三会局名称
-            group = ev.get("group", "")
-            matched_str = "".join(matched_branches)
-            parts.append(f"{matched_str}三会{group.replace('会', '局')}")
-            
-            # 用空格连接各部分（按regression格式）
-            result = " ".join(parts)
-            fact_lines.append(f"    {result}。")
-        
-        # ===== 事实区：大运天干五合（只识别+打印，不影响风险） =====
-        dayun_gan = dy.get("gan", "")
-        if dayun_gan:
-            from .gan_wuhe import GanPosition, detect_gan_wuhe, format_gan_wuhe_event
-            dayun_shishen = get_shishen(day_gan, dayun_gan) or "-"
-            # 大运入口使用"年干"格式（不是"年柱天干"），且本行不再重复打印"大运6，庚辰大运"
-            dayun_gan_positions = []
-            pillar_labels_dayun = {"year": "年干", "month": "月干", "day": "日干", "hour": "时干"}
-            for pillar in ["year", "month", "day", "hour"]:
-                gan = bazi[pillar]["gan"]
-                shishen = get_shishen(day_gan, gan) or "-"
-                dayun_gan_positions.append(GanPosition(
-                    source="natal",
-                    label=pillar_labels_dayun[pillar],
-                    gan=gan,
-                    shishen=shishen
-                ))
-            dayun_gan_positions.append(GanPosition(
-                source="dayun",
-                label="大运天干",
-                gan=dayun_gan,
-                shishen=dayun_shishen
-            ))
-            dayun_wuhe_events = detect_gan_wuhe(dayun_gan_positions)
-            if dayun_wuhe_events:
-                for ev in dayun_wuhe_events:
-                    # 只打印涉及大运天干的五合
-                    dayun_involved = any(pos.source == "dayun" for pos in ev["many_side"] + ev["few_side"])
-                    if dayun_involved:
-                        # 行内只保留"年干，月干，时干 乙 争合 大运天干 庚 ..."
-                        line = format_gan_wuhe_event(ev, incoming_shishen=dayun_shishen)
-                        fact_lines.append(f"    {line}")
-        
-        # ===== 事实区：大运本身与命局的冲 =====
-        for ev in dy.get("clashes_natal", []):
-            if not ev:
-                continue
-            fact_lines.append("    命局冲（大运）：" + _format_clash_natal(ev))
-            
-            # 打印大运与命局天克地冲详细信息
-            tkdc_targets = ev.get("tkdc_targets", [])
-            if tkdc_targets:
-                from .config import PILLAR_PALACE
-                flow_branch = ev.get("flow_branch", "")
-                flow_gan = ev.get("flow_gan", "")
-                for target in tkdc_targets:
-                    target_pillar = target.get("pillar", "")
-                    target_gan = target.get("target_gan", "")
-                    palace = PILLAR_PALACE.get(target_pillar, target_pillar)
-                    pillar_name = {"year": "年柱", "month": "月柱", "day": "日柱", "hour": "时柱"}.get(target_pillar, target_pillar)
-                    fact_lines.append(f"    天克地冲：大运 {flow_gan}{flow_branch} 与 命局{pillar_name}（{palace}）{target_gan}{ev.get('target_branch', '')} 天克地冲")
-        
-        # ===== 主轴区：大运主轴（地支定调） =====
-        axis_lines.append("    大运主轴（地支定调）：")
-        dayun_zhi_yongshen_str = "是" if dayun_zhi_yongshen else "否"
-        if dayun_zhi_shishen:
-            dayun_zhi_label_str = f"｜标签：{dayun_zhi_label}" if dayun_zhi_label else ""
-            axis_lines.append(f"    地支 {dayun_zhi}｜十神 {dayun_zhi_shishen}｜用神 {dayun_zhi_yongshen_str}{dayun_zhi_label_str}")
-        else:
-            axis_lines.append(f"    地支 {dayun_zhi}｜十神 -｜用神 {dayun_zhi_yongshen_str}")
-        
-        # ===== 主轴区：天干补充（不翻盘） =====
-        axis_lines.append("    天干补充（不翻盘）：")
-        dayun_gan_yongshen_str = "是" if dayun_gan_yongshen else "否"
-        if dayun_gan_shishen:
-            dayun_gan_label_str = f"｜标签：{dayun_gan_label}" if dayun_gan_label else ""
-            axis_lines.append(f"    天干 {dayun_gan}｜十神 {dayun_gan_shishen}｜用神 {dayun_gan_yongshen_str}{dayun_gan_label_str}")
-        else:
-            axis_lines.append(f"    天干 {dayun_gan}｜十神 -｜用神 {dayun_gan_yongshen_str}")
 
-        # ===== 提示汇总区：转折点 =====
-        current_zhi_good = dy.get("zhi_good", False)
-        if prev_dayun_zhi_good is not None and prev_dayun_zhi_good != current_zhi_good:
-            start_year = dy.get("start_year")
-            if prev_dayun_zhi_good and not current_zhi_good:
-                from_state, to_state, change_type = "好运", "一般", "转弱"
-            else:
-                from_state, to_state, change_type = "一般", "好运", "转好"
-            tip_lines.append(f"    这是大运转折点：{start_year} 年：{from_state} → {to_state}（{change_type}）")
-        prev_dayun_zhi_good = current_zhi_good
-        
-        # ===== 提示汇总区：用神互换提示（从 hints 读取，唯一真相源） =====
-        dayun_hints = dy.get("hints", [])
-        for hint in dayun_hints:
-            if "【用神互换提示】" in hint:
-                tip_lines.append(f"    {hint}")
-        
-        # ===== 提示汇总区：天干五合争合/双合婚恋提醒（大运层，从 hints 读取） =====
-        dayun_hints = dy.get("hints", [])
-        for hint in dayun_hints:
-            if "婚恋变化提醒" in hint:
-                tip_lines.append(f"    {hint}")
-        
-        # ===== 按顺序打印所有内容 =====
-        for line in header_lines:
-            print(line)
-        for line in fact_lines:
-            print(line)
-        # 分隔线（在事实区之后、主轴区之前）
-        if fact_lines:  # 如果事实区有内容，打印分隔线
-            print("    ——————————")
-        for line in axis_lines:
-            print(line)
-        for line in tip_lines:
-            print(line)
+        # 更新 prev_dayun_zhi_good
+        prev_dayun_zhi_good = dy.get("zhi_good", False)
 
         # 该大运下面的十个流年（使用新版协议格式 v3）
         print("    —— 该大运对应的流年 ——")
         for ln in lns:
             _print_liunian_v3(ln, bazi, day_gan, yongshen_elements)
-
-        # 旧版流年代码已移除，使用新版 _print_liunian_v3
-
-    # 这里不再需要额外的 print，因为 _print_liunian_v2 已处理
 
 # ===== 以下是备份的旧版流年打印代码（不会执行） =====
 def _legacy_liunian_printing_backup():
