@@ -684,6 +684,29 @@ Findings 的生成依赖于以下 facts 原子信息（均在 luck 数据中）�
 
 ---
 
+## §1.9 打印层架构规范（Print Layer Architecture）
+
+**设计原则：单一真理源**
+
+所有 CLI 输出格式必须集中定义在 `bazi/presenter/` 模块中：
+
+| 组件 | 位置 | 职责 |
+|-----|------|-----|
+| 格式字符串 | `presenter/templates/constants.py` | 所有模板、标签、分隔符 |
+| 格式化函数 | `presenter/formatters/*.py` | 纯函数：`(facts) -> str` |
+| 渲染入口 | `presenter/render.py` | 编排所有 section |
+
+**规则：**
+
+1. 所有格式字符串必须定义在 `bazi/presenter/templates/constants.py`
+2. 打印函数必须是纯函数：`(facts: Dict) -> str`
+3. 禁止在打印函数中执行计算逻辑
+4. CLI 输出修改必须同步更新 regression snapshots
+
+**详细架构设计：** 见 `docs/architecture.md` §10
+
+---
+
 ## §2. 位置权重与宫位定义
 
 ### §2.1 位置权重表

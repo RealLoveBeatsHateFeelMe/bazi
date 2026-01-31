@@ -169,9 +169,10 @@ def generate_request_index(
 
 def _build_dayun_index(facts: Dict[str, Any], base_year: int, future_allowed: bool) -> Dict[str, Any]:
     """构建 dayun 索引。
-    
+
     必须字段：
-    - current_dayun: 当前大运摘要（至少包含起止年 + 好运/一般/坏运标签）
+    - current_dayun_ref: 当前大运摘要（至少包含起止年 + 好运/一般/坏运标签）
+    - future_dayuns: 未来两步大运（v1.1新增，受 future_allowed 门控）
     - yongshen_swap: 用神互换信息
     """
     luck = facts.get("luck", {})
@@ -289,9 +290,68 @@ def _build_dayun_index(facts: Dict[str, Any], base_year: int, future_allowed: bo
     
     # has_swap 按过滤后的 items 结果决定
     has_swap = len(items) > 0
-    
+
+    # ===== 新增：future_dayuns（未来两步大运）=====
+    # 定义：不包括当前大运，从当前之后的两步
+    # 门控：受 future_allowed 控制（Free用户 = []）
+    future_dayuns: List[Dict[str, Any]] = []
+    if future_allowed and current_dayun_index is not None:
+        # 找到当前大运在 groups 中的位置
+        current_group_idx = None
+        for idx, group in enumerate(groups):
+            dayun = group.get("dayun")
+            if dayun and dayun.get("index") == current_dayun_index:
+                current_group_idx = idx
+                break
+
+        if current_group_idx is not None:
+            # 获取未来两步大运（当前大运之后的两个）
+            for offset in [1, 2]:
+                next_idx = current_group_idx + offset
+                if next_idx < len(groups):
+                    next_group = groups[next_idx]
+                    next_dayun = next_group.get("dayun")
+                    if next_dayun:
+                        next_start_year = next_dayun.get("start_year")
+                        if next_start_year is None:
+                            continue
+
+                        # 计算结束年份
+                        next_end_year = next_start_year + 9
+                        if next_idx + 1 < len(groups):
+                            following_group = groups[next_idx + 1]
+                            following_dayun = following_group.get("dayun")
+                            if following_dayun:
+                                following_start = following_dayun.get("start_year")
+                                if following_start:
+                                    next_end_year = following_start - 1
+
+                        # 确定 fortune_label
+                        next_dayun_label = next_dayun.get("dayun_label", "一般")
+                        next_is_good = next_dayun.get("is_good", False)
+                        next_is_very_good = next_dayun.get("is_very_good", False)
+
+                        if next_is_very_good or (next_is_good and "好运" in next_dayun_label):
+                            next_fortune_label = "好运"
+                        elif "坏运" in next_dayun_label or "变动过大" in next_dayun_label:
+                            next_fortune_label = "坏运"
+                        else:
+                            next_fortune_label = "一般"
+
+                        next_gan = next_dayun.get("gan", "")
+                        next_zhi = next_dayun.get("zhi", "")
+                        next_label = f"{next_gan}{next_zhi}" if next_gan and next_zhi else ""
+
+                        future_dayuns.append({
+                            "label": next_label,
+                            "start_year": next_start_year,
+                            "end_year": next_end_year,
+                            "fortune_label": next_fortune_label,
+                        })
+
     return {
         "current_dayun_ref": current_dayun_ref,  # 改为 current_dayun_ref（简洁结构）
+        "future_dayuns": future_dayuns,  # v1.1新增：未来两步大运（Free用户 = []）
         "fortune_label": fortune_label,  # 新增：顶层字段（与 current_dayun_ref.fortune_label 等值）
         "yongshen_swap": {
             "has_swap": has_swap,
@@ -303,37 +363,59 @@ def _build_dayun_index(facts: Dict[str, Any], base_year: int, future_allowed: bo
 
 def _build_turning_points_index(facts: Dict[str, Any], base_year: int, future_allowed: bool) -> Dict[str, Any]:
     """构建 turning_points 索引。
-    
+
     必须字段：
     - all: list（可空，但字段必须存在；免费用户只保留 year <= base_year 的条目）
-    - nearby: list（all 裁剪到窗口；免费用户窗口为 [base_year-3, base_year]，付费用户为 [base_year-3, base_year+3]）
+    - nearby: list（all 裁剪到窗口；v1.1更新：过去5年+未来10年）
+    - past5_turning_points: list（v1.1新增：过去5年内的转折点，用于Q1）
     - should_mention: bool（nearby 非空即 true）
-    
+
+    v1.1更新：
+    - nearby 窗口调整为：过去5年 + 未来10年（[base_year-5, base_year+10]）
+    - 新增 past5_turning_points：过去5年内的转折点
+
     参数:
         future_allowed: 是否允许未来相关计算（免费用户为 False）
     """
     turning_points = facts.get("turning_points", [])
-    
+
     # 免费用户：all 只保留 year <= base_year 的条目
     if not future_allowed:
         turning_points = [tp for tp in turning_points if tp.get("year", 0) <= base_year]
-    
-    # nearby 窗口：免费用户为 [base_year-3, base_year]，付费用户为 [base_year-3, base_year+3]
-    nearby_window_start = base_year - 3
-    nearby_window_end = base_year + 3 if future_allowed else base_year
-    
+
+    # v1.1更新：nearby 窗口调整为过去5年+未来10年
+    # 免费用户：[base_year-5, base_year]
+    # 付费用户：[base_year-5, base_year+10]
+    nearby_window_start = base_year - 5
+    nearby_window_end = base_year + 10 if future_allowed else base_year
+
     nearby_list: List[Dict[str, Any]] = []
     for tp in turning_points:
         year = tp.get("year")
         if year is not None and nearby_window_start <= year <= nearby_window_end:
             nearby_list.append(tp)
-    
+
     # 按年份排序（升序）
     nearby_list.sort(key=lambda x: x.get("year", 0))
-    
+
+    # v1.1新增：past5_turning_points（过去5年内的转折点）
+    # 窗口：[base_year-5, base_year]（含两端）
+    past5_window_start = base_year - 5
+    past5_window_end = base_year
+
+    past5_turning_points: List[Dict[str, Any]] = []
+    for tp in turning_points:
+        year = tp.get("year")
+        if year is not None and past5_window_start <= year <= past5_window_end:
+            past5_turning_points.append(tp)
+
+    # 按年份排序（升序）
+    past5_turning_points.sort(key=lambda x: x.get("year", 0))
+
     return {
         "all": turning_points,  # 可空，但字段必须存在（免费用户已过滤未来条目）
-        "nearby": nearby_list,   # all 裁剪到窗口
+        "nearby": nearby_list,   # all 裁剪到窗口（v1.1: 过去5年+未来10年）
+        "past5_turning_points": past5_turning_points,  # v1.1新增：过去5年内的转折点
         "should_mention": len(nearby_list) > 0,  # nearby 非空即 true
     }
 
@@ -408,18 +490,29 @@ def _build_year_grade_index(
 
 
 def _build_year_grade_item(year: int, liunian_map: Dict[int, Dict[str, Any]]) -> Dict[str, Any]:
-    """构建单个 YearGrade 项。"""
+    """构建单个 YearGrade 项。
+
+    v1.1新增：is_bad_year 和 is_change_year 字段
+    - is_bad_year: total_risk_percent >= 40（凶年）
+    - is_change_year: 25 <= total_risk_percent < 40（变动年）
+    """
     if year not in liunian_map:
         # 该年份不存在流年数据，使用保守默认
         return {
             "year": year,
             "Y": 0.0,
             "year_label": "一般",
+            "is_bad_year": False,      # v1.1新增
+            "is_change_year": False,   # v1.1新增
         }
-    
+
     ln = liunian_map[year]
     Y = ln.get("total_risk_percent", 0.0)
-    
+
+    # v1.1新增：计算 is_bad_year 和 is_change_year
+    is_bad_year = Y >= 40.0
+    is_change_year = 25.0 <= Y < 40.0
+
     # 计算 year_label（按用户最新口径）
     if Y >= 40.0:
         year_label = "全年 凶（棘手/意外）"
@@ -443,6 +536,8 @@ def _build_year_grade_item(year: int, liunian_map: Dict[int, Dict[str, Any]]) ->
         "year": year,
         "Y": Y,
         "year_label": year_label,
+        "is_bad_year": is_bad_year,        # v1.1新增
+        "is_change_year": is_change_year,  # v1.1新增
     }
 
     # 当 Y < 25.0 时，必须额外输出 start/later（从流年数据中获取）
@@ -461,7 +556,7 @@ def _build_year_grade_item(year: int, liunian_map: Dict[int, Dict[str, Any]]) ->
             "H": risk_from_zhi,
             "label": _calc_half_year_label(risk_from_zhi, is_zhi_yongshen),
         }
-    
+
     return year_obj
 
 

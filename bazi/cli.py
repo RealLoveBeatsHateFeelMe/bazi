@@ -2906,9 +2906,21 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
     # 从结构化结果读取 liuqin_zhuli
     liuqin_traits = result.get("liuqin_zhuli", [])
     
-    def _get_liuqin_source(group: str, detail: List[Dict[str, Any]], total_percent: float, is_male: bool) -> str:
-        """获取六亲助力的来源清单"""
+    def _get_liuqin_source(group: str, detail: List[Dict[str, Any]], total_percent: float, is_male: bool, should_output_father: bool = False) -> str:
+        """获取六亲助力的来源清单
+
+        Args:
+            group: 六亲大类（财、印、官杀、食伤、比劫）
+            detail: 详细信息列表
+            total_percent: 总占比
+            is_male: 是否男性
+            should_output_father: 是否输出父亲（仅财星使用）
+                条件：财星是用神 AND 天干有财星透出 AND 年月天干都不是比劫
+        """
         present_subs = [d for d in detail if d.get("percent", 0.0) > 0.0]
+
+        # 父亲前缀（仅财星且满足条件时使用）
+        father_prefix = "父亲/爸爸，" if should_output_father else ""
         
         if group == "印":
             if total_percent == 0:
@@ -2959,31 +2971,31 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             if total_percent == 0:
                 # 原局没有财星
                 if is_male:
-                    return "父亲/爸爸，妻子/老婆/伴侣，钱与资源/收入/项目机会/交换"
+                    return f"{father_prefix}妻子/老婆/伴侣，钱与资源/收入/项目机会/交换"
                 else:
-                    return "父亲/爸爸，钱与资源/收入/项目机会/交换"
+                    return f"{father_prefix}钱与资源/收入/项目机会/交换"
             else:
                 zhengcai_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "正财"), 0.0)
                 piancai_percent = next((d.get("percent", 0.0) for d in detail if d.get("name") == "偏财"), 0.0)
-                
+
                 if zhengcai_percent > 0 and piancai_percent == 0:
                     # 纯正财
                     if is_male:
-                        return "父亲/爸爸，妻子/老婆/伴侣，稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报"
+                        return f"{father_prefix}妻子/老婆/伴侣，稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报"
                     else:
-                        return "父亲/爸爸，稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报"
+                        return f"{father_prefix}稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报"
                 elif piancai_percent > 0 and zhengcai_percent == 0:
                     # 纯偏财
                     if is_male:
-                        return "父亲/爸爸，妻子/老婆/伴侣，外财/机会财/项目/做生意/社交资源/流动性/投机"
+                        return f"{father_prefix}妻子/老婆/伴侣，外财/机会财/项目/做生意/社交资源/流动性/投机"
                     else:
-                        return "父亲/爸爸，外财/机会财/项目/做生意/社交资源/流动性/投机"
+                        return f"{father_prefix}外财/机会财/项目/做生意/社交资源/流动性/投机"
                 else:
                     # 混杂（合并输出）
                     if is_male:
-                        return "父亲/爸爸，妻子/老婆/伴侣，稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报，外财/机会财/项目/做生意/社交资源/流动性/投机"
+                        return f"{father_prefix}妻子/老婆/伴侣，稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报，外财/机会财/项目/做生意/社交资源/流动性/投机"
                     else:
-                        return "父亲/爸爸，稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报，外财/机会财/项目/做生意/社交资源/流动性/投机"
+                        return f"{father_prefix}稳定收入/打工/正规渠道获得的钱/可控资源与交换/长期投入回报，外财/机会财/项目/做生意/社交资源/流动性/投机"
         
         elif group == "官杀":
             if total_percent == 0:
@@ -3125,6 +3137,48 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
             # 该大类是用神，加入六亲助力
             liuqin_traits.append(trait)
     
+    # 判断财星六亲助力是否输出父亲/爸爸
+    # 条件：财星是用神 AND 天干有财星透出 AND 年月天干都不是比劫
+    def _should_output_father_in_cai() -> bool:
+        """判断财星六亲助力是否输出父亲/爸爸"""
+        from .shishen import get_shishen
+
+        bazi = result.get("bazi", {})
+        day_gan = bazi.get("day", {}).get("gan", "")
+        year_gan = bazi.get("year", {}).get("gan", "")
+        month_gan = bazi.get("month", {}).get("gan", "")
+        hour_gan = bazi.get("hour", {}).get("gan", "")
+
+        if not day_gan:
+            return False
+
+        # 1. 检查年月天干是否有比劫（年OR月有比劫就不输出）
+        year_shishen = get_shishen(day_gan, year_gan) if year_gan else None
+        month_shishen = get_shishen(day_gan, month_gan) if month_gan else None
+
+        if year_shishen in ["比肩", "劫财"] or month_shishen in ["比肩", "劫财"]:
+            return False  # 年或月天干有比劫 → 不输出
+
+        # 2. 检查财星是否是用神
+        yongshen_shishens_list = []
+        for entry in (result.get("yongshen_shishen") or []):
+            yongshen_shishens_list.extend(entry.get("shishens") or [])
+
+        if "正财" not in yongshen_shishens_list and "偏财" not in yongshen_shishens_list:
+            return False  # 财星不是用神 → 不输出
+
+        # 3. 检查天干是否有财星透出（年/月/时柱天干，不含日干）
+        for gan in [year_gan, month_gan, hour_gan]:
+            if not gan:
+                continue
+            gan_shishen = get_shishen(day_gan, gan)
+            if gan_shishen in ["正财", "偏财"]:
+                return True  # 天干有财星透出 → 输出
+
+        return False  # 财星没透 → 不输出
+
+    should_output_father = _should_output_father_in_cai()
+
     # 打印六亲助力
     for trait in liuqin_traits:
         group = trait.get("group", "")
@@ -3147,7 +3201,8 @@ def run_cli(birth_dt: datetime = None, is_male: bool = None) -> None:
         print(f"{display_name}{status}：{strength_text}")
         
         # 第2行（缩进两个空格）
-        source = _get_liuqin_source(group, detail, total_percent, is_male)
+        # 财星时传入 should_output_father，其他传入 False
+        source = _get_liuqin_source(group, detail, total_percent, is_male, should_output_father if group == "财" else False)
         print(f"  来源：{source}")
 
     print("\n—— 全局五行占比（八个字）——")

@@ -339,10 +339,91 @@ The "性格快速汇总" section is printed immediately after "其他性格" sec
 
 ---
 
+## 10. Print Layer Architecture (Unified Presenter)
+
+### 10.1 Design Principle: Single Source of Truth
+
+The print layer follows a strict "Single Source of Truth" design pattern. All format strings, templates, and rendering logic are centralized in the `bazi/presenter/` module.
+
+| Component | Location | Responsibility |
+|-----------|----------|----------------|
+| **Format Strings** | `presenter/templates/constants.py` | ALL format templates, labels, markers, section titles |
+| **Formatters** | `presenter/formatters/*.py` | Pure functions: `(facts) -> str` |
+| **Render Entry** | `presenter/render.py` | Orchestrates all sections, main entry point |
+| **CLI Entry** | `cli.py` | Calls render, handles I/O |
+
+### 10.2 Module Structure
+
+```
+bazi/presenter/
+├── __init__.py              # Exports render_full_output()
+├── render.py                # Main entry: render_full_output(facts) -> str
+├── templates/
+│   ├── __init__.py
+│   └── constants.py         # ALL format strings, labels, markers
+└── formatters/
+    ├── __init__.py
+    ├── natal.py             # format_natal_section(facts) -> str
+    ├── dayun.py             # format_dayun_block(dayun, facts) -> str
+    ├── liunian.py           # format_liunian_block(liunian, facts) -> str
+    ├── hints.py             # format_hint_line(hint) -> str
+    └── debug.py             # format_debug_section(events) -> str
+```
+
+### 10.3 Prohibitions
+
+- ❌ **No format strings outside `presenter/templates/`** - All templates must be in constants.py
+- ❌ **No business logic in formatters** - Only facts reading + string building
+- ❌ **No direct `print()` outside `cli.py:run_cli()`** - Use presenter functions
+- ❌ **No duplicate format definitions** - Each format defined exactly once
+
+### 10.4 Block Format Contract
+
+| Block Type | Start Marker | End Marker | Example |
+|------------|--------------|------------|---------|
+| Liunian | `----------------------------------------` (40 dashes) | `@` | `year_2059.txt` |
+| Dayun | `============================================================` (60 equals) | `@\n====...====@@...` | `dayun_A4.txt` |
+| Section | `—— {name} ——` | Next section or EOF | `—— 四柱八字 ——` |
+| Hints | `- HINTS -` | `- DEBUG -` or `@` | - |
+| Debug | `- DEBUG -` | `@` | - |
+
+### 10.5 Regression Test Contract
+
+All print output changes **MUST**:
+
+1. **Update snapshots**: Regenerate `tests/regression/snapshots/full_output_v1/*.txt`
+2. **Pass golden tests**: `python -m unittest tests.regression.test_full_output_golden -v`
+3. **Document changes**: Update this file's Version History
+
+### 10.6 Snapshot Coverage
+
+| Case ID | Birth | Gender | Description |
+|---------|-------|--------|-------------|
+| case1_2005_male | 2005-09-20 10:00 | Male | Golden Case A |
+| case2_2007_male | 2007-01-28 12:00 | Male | Golden Case B |
+| case3_2006_male | 2006-12-17 12:00 | Male | 五合男性案例 |
+| case4_2006_female | 2006-03-22 14:00 | Female | 五合女性案例 |
+| case5_2007_male | 2007-01-11 02:00 | Male | 新增案例 |
+
+### 10.7 Migration Status
+
+| Section | Status | Source → Target |
+|---------|--------|-----------------|
+| Natal Info | 🔲 Pending | `cli.py` → `presenter/formatters/natal.py` |
+| Yongshen | 🔲 Pending | `cli.py` → `presenter/formatters/natal.py` |
+| Dayun Snapshot | ✅ Separate | `dayun_snapshot.py` (already isolated) |
+| Dayun Block | 🔲 Pending | `cli.py:_print_dayun_v2()` → `presenter/formatters/dayun.py` |
+| Liunian Block | 🔲 Pending | `cli.py:_print_liunian_v3()` → `presenter/formatters/liunian.py` |
+
+> **Migration Note**: Current cli.py print functions remain active. Presenter module is prepared for gradual migration. Regression snapshots lock current output format.
+
+---
+
 ## Version History
 
 | Date | Change |
 |------|--------|
+| 2026-01-31 | **§10 Print Layer Architecture**: 新增统一打印层架构（presenter模块）；5案例完整regression snapshots；格式常量集中定义 |
 | 2026-01-26 | **打印层协议化进行中**：year detail 已完成协议化（`- HINTS -` / `- DEBUG -` / `@` 结束符），LLM 信息与 Debug 信息分离；下一步：yun detail 和原局 detail；还需函数显示用神行业+大运期间职业变化 |
 | 2026-01-25 | Year detail report rendering complete; fixed hour TKDC/clash hints; about to build payload |
 | 2026-01-18 | Add §9 性格快速汇总; complete 食伤天赋卡; remove 财星关系倾向句 |
